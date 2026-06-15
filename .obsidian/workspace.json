@@ -1,0 +1,224 @@
+{
+  "main": {
+    "id": "f7fb375a31b9b9b4",
+    "type": "split",
+    "children": [
+      {
+        "id": "504dfed2b5a31da0",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "b8acf3f3438b753a",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "Khái niệm/x86 Segmentation.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "x86 Segmentation"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "vertical"
+  },
+  "left": {
+    "id": "3f305380d681e6bc",
+    "type": "split",
+    "children": [
+      {
+        "id": "68ce3ebd5cf7e235",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2a31da016d2b1109",
+            "type": "leaf",
+            "state": {
+              "type": "file-explorer",
+              "state": {
+                "sortOrder": "alphabetical",
+                "autoReveal": false
+              },
+              "icon": "lucide-folder-closed",
+              "title": "Files"
+            }
+          },
+          {
+            "id": "deba7eaaa024abb6",
+            "type": "leaf",
+            "state": {
+              "type": "search",
+              "state": {
+                "query": "phil-opp",
+                "matchingCase": false,
+                "explainSearch": false,
+                "collapseAll": false,
+                "extraContext": false,
+                "sortOrder": "alphabetical"
+              },
+              "icon": "lucide-search",
+              "title": "Search"
+            }
+          },
+          {
+            "id": "d5c1397b3c6b0933",
+            "type": "leaf",
+            "state": {
+              "type": "bookmarks",
+              "state": {},
+              "icon": "lucide-bookmark",
+              "title": "Bookmarks"
+            }
+          }
+        ]
+      }
+    ],
+    "direction": "horizontal",
+    "width": 300
+  },
+  "right": {
+    "id": "423bb2b3395ce438",
+    "type": "split",
+    "children": [
+      {
+        "id": "7666b74db4132e83",
+        "type": "tabs",
+        "children": [
+          {
+            "id": "2fb73bef9d23fee2",
+            "type": "leaf",
+            "state": {
+              "type": "backlink",
+              "state": {
+                "file": "Limine Protocol.md",
+                "collapseAll": true,
+                "extraContext": false,
+                "sortOrder": "alphabetical",
+                "showSearch": false,
+                "searchQuery": "",
+                "backlinkCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-coming-in",
+              "title": "Backlinks for Limine Protocol"
+            }
+          },
+          {
+            "id": "49604067d7d774d8",
+            "type": "leaf",
+            "state": {
+              "type": "outgoing-link",
+              "state": {
+                "file": "Limine Protocol.md",
+                "linksCollapsed": false,
+                "unlinkedCollapsed": true
+              },
+              "icon": "links-going-out",
+              "title": "Outgoing links from Limine Protocol"
+            }
+          },
+          {
+            "id": "9c8d04080c1cc4b9",
+            "type": "leaf",
+            "state": {
+              "type": "tag",
+              "state": {
+                "sortOrder": "frequency",
+                "useHierarchy": true,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-tags",
+              "title": "Tags"
+            }
+          },
+          {
+            "id": "20ed9a1d1969da86",
+            "type": "leaf",
+            "state": {
+              "type": "all-properties",
+              "state": {
+                "sortOrder": "frequency",
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-archive",
+              "title": "All properties"
+            }
+          },
+          {
+            "id": "860e8dc6b285c06e",
+            "type": "leaf",
+            "state": {
+              "type": "outline",
+              "state": {
+                "file": "Khái niệm/x86 Segmentation.md",
+                "followCursor": false,
+                "showSearch": false,
+                "searchQuery": ""
+              },
+              "icon": "lucide-list",
+              "title": "Outline of x86 Segmentation"
+            }
+          }
+        ],
+        "currentTab": 4
+      }
+    ],
+    "direction": "horizontal",
+    "width": 357.5
+  },
+  "left-ribbon": {
+    "hiddenItems": {
+      "switcher:Open quick switcher": false,
+      "graph:Open graph view": false,
+      "canvas:Create new canvas": false,
+      "daily-notes:Open today's daily note": false,
+      "templates:Insert template": false,
+      "command-palette:Open command palette": false,
+      "bases:Create new base": false
+    }
+  },
+  "active": "b8acf3f3438b753a",
+  "lastOpenFiles": [
+    "Khái niệm/Paging.md",
+    "Khái niệm/x86 Segmentation.md",
+    "Khái niệm/GDT.md",
+    "Khái niệm/Long Mode.md.tmp.18088.6d81ba81356a",
+    "Khái niệm/GDT.md.tmp.18088.18763a2f4e54",
+    "Home.md.tmp.18088.2d5558559c93",
+    "Khái niệm/x86 Segmentation.md.tmp.18088.c71ca1097725",
+    "Khái niệm/GDT.md.tmp.18088.9073c07b2f7b",
+    "Steps/Step 06 - GDT & TSS.md",
+    "Steps/Step 06 - GDT & TSS.md.tmp.18088.eaee2cac4510",
+    "Home.md.tmp.18088.4ef7bf2803df",
+    "Khái niệm/GDT.md.tmp.18088.320c5ff598d6",
+    "Home.md",
+    "Steps/Step 08 - IDT & Interrupts.md",
+    "CLAUDE.md.tmp.15852.c63d5440739b",
+    "Home.md.tmp.15852.e2c4c0726c49",
+    "Khái niệm/Request-Response Mechanism.md",
+    "Labs/Lab 0x03 - PMM & VMM.md",
+    "Khái niệm/HHDM.md",
+    "Steps/Step 05 - Virtual Memory & Paging.md",
+    "Labs/Lab 0x02 - Framebuffer.md",
+    "Labs/Lab 0x01 - Bootloader Parser.md",
+    "Labs/Lab 0x00 - Hello Serial.md",
+    "Khái niệm/Higher-Half Kernel.md",
+    "Khái niệm/KASLR & PIE Kernel.md",
+    "Khái niệm/Limine Protocol.md",
+    "Khái niệm/Long Mode.md",
+    "Steps/Step 04 - Physical Memory Manager.md",
+    "Meta/Build & Debug Cheatsheet.md",
+    "Steps/Step 02 - Bootloader Parser.md",
+    "Steps/Step 13 - PCI & NIC.md",
+    "Steps/Step 00 - Boot & Limine.md",
+    "Steps/Step 03 - Framebuffer & Console.md",
+    "Steps/Step 01 - Serial UART.md",
+    "Spec/UART 16550.md"
+  ]
+}
