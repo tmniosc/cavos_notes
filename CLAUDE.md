@@ -112,8 +112,8 @@ Kiến thức trong vault còn nguyên (Step 00 đến 06 vẫn xong), nhưng **
 
 - [x] Source lab viết lại từ note → `Thực hành/src/oskernel-lab/` (39 file)
 - [x] WSL `Ubuntu-26.04` / `tmniosc`; apt xong; Limine 8.7.0 ở `~/opt/limine`; cavOS ở `~/cavOS`
-- [x] **Build + boot thật cả 4 lab** (gcc hệ thống) — output thật đã chép vào note
-- [ ] `make tools` (đang chạy) → `sudo -v && make disk` → `make qemu`
+- [x] **Build + boot thật cả 4 lab** (gcc hệ thống, rồi chạy lại bằng cross gcc) — output đã chép vào note
+- [x] cavOS: `make tools` (GCC 11.4.0) → `make disk` (1.88 GB) → boot tới `REACHED SYSTEM`
 - [ ] Push `Thực hành/src/` lên GitHub
 
 Chi tiết đầy đủ: [[Khôi phục source (2026-09-03)]].

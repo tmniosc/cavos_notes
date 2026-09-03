@@ -186,8 +186,8 @@ cp -r /mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab ~/oskernel-lab
 - [x] Cài gói hệ thống + Limine `v8.x-binary` (Limine 8.7.0) → `~/opt/limine`
 - [x] **Build + boot thật cả 4 lab**, chép output thật vào note (Lab 0x03 xác nhận đã vá bug bitmap)
 - [x] Commit `Thực hành/src/` + note vào repo vault (`f8159d4`)
-- [ ] `make tools` (đang chạy) → `sudo -v && make disk` → `make qemu`
-- [ ] Sửa `/home/tmnvi/...` còn sót trong vault theo user mới
+- [x] `make tools` → `make disk` → boot QEMU: cavOS chạm `====== REACHED SYSTEM ======`
+- [x] Sửa `/home/tmnvi/...` còn sót trong vault theo user mới
 - [ ] Push lên GitHub
 
 ## Bước cuối: DỌN SẠCH DẤU VẾT

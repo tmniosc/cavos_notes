@@ -68,6 +68,11 @@ cd ~/cavOS && make tools
 Sinh ra `~/opt/cross/bin/x86_64-cavos-gcc` (kèm `objdump/readelf/nm/ld` cùng tiền tố).
 Script tự tải nguồn binutils + GCC rồi build → **rất lâu**, phụ thuộc tốc độ mạng.
 
+> Đo thật trên máy này: **GCC 11.4.0**, log build ~170k dòng. Thứ tự nó làm:
+> binutils → GMP → MPFR → MPC → ISL → GCC. Đáng chú ý là nó **tự build GMP/MPFR/MPC/ISL từ source**
+> chứ không dùng `libgmp3-dev`... đã cài qua apt — nên phần lớn gói `-dev` ở mục 1 gần như không được
+> đụng tới, và thời gian lâu hơn mình tưởng.
+
 `make disk` gọi target `verifytools` để kiểm tra file này tồn tại; thiếu là dừng ngay với dòng đỏ
 *"x86_64-cavos-gcc was not found!"*. `Makefile` còn so **ngày sửa** của file với mốc `GCC_CHECK_DATE`
 nên toolchain quá cũ cũng bị bắt build lại.
@@ -103,6 +108,8 @@ Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[
 | Triệu chứng | Nguyên nhân | Cách tránh |
 | --- | --- | --- |
 | `x86_64-cavos-gcc was not found!` | chưa `make tools` | chạy `make tools` (1 lần) |
+| `Could not access KVM kernel module: Permission denied` | user chưa ở group `kvm` (WSL có sẵn `/dev/kvm` nhưng quyền `root:kvm`) | `sudo usermod -aG kvm $USER` rồi `wsl --shutdown` bên Windows. Chưa muốn sửa thì chạy tay lệnh qemu **bỏ `-enable-kvm`** (chậm hơn nhưng boot được) |
+| `sudo -v` gõ ở terminal khác vẫn bị hỏi lại mật khẩu | Ubuntu đặt `timestamp_type=tty`, cache gắn với đúng terminal đó | gõ `sudo -v` và `make disk` **trong cùng một terminal** |
 | `sudo: timed out` giữa `make disk` | bước `ports` hỏi mật khẩu muộn | `sudo -v` ngay trước |
 | `tar` thiếu file (vd `opcode/i386.h`) | giải nén trên `/mnt` (9p) | build trong `~`, xem [[Dựng môi trường chung]] |
 | `env: bash\r` | script `.sh` bị CRLF do nằm ổ Windows | build trong `~` |
@@ -112,5 +119,25 @@ Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[
 
 - [x] Gói riêng đã cài
 - [x] `git clone cavOS` → `~/cavOS`
-- [ ] `make tools` → cross-compiler (đang chạy)
-- [ ] `make disk` + `make qemu`
+- [x] `make tools` → `x86_64-cavos-gcc (GCC) 11.4.0`
+- [x] `make disk` → `disk.img` 1.88 GB
+- [x] Boot QEMU: chạm `====== REACHED SYSTEM ======` (chạy không KVM, xem bảng bẫy)
+
+Lần boot đầu tiên trên máy mới in ra (rút gọn):
+
+```
+[serial]   Installing serial...
+[graphics] Resolution fixed: fb{ffff8000fd000000} dim(xy){1024x768} bpp{32}
+[console]  Initiated with font: dim(xy){8x14}
+[pmm]      Bitmap initiated: bitmapStartPhys{0x60000} size{20050}
+[acpi::info] starting uACPI, version 3.1.0   ... 54 devices, 0 thermal zones
+[apic]     Detection completed: lapic{fee00000} ioapic{fec00000}
+====== REACHED SYSTEM ======
+[pci::e1000] Intel E1000 NIC detected! dev{100e}
+[pci::ahci]  Detected controller! name{Intel ICH9} ... SATA drive found at port 0
+[syscalls] System calls are ready to fire: 99/450
+```
+
+> Dòng `fb{ffff8000fd000000}` chính là framebuffer nhìn qua HHDM — **cùng địa chỉ** mà
+> [[Lab 0x02 - Framebuffer]] in ra. Còn `[pmm] bitmapStartPhys{0x60000}` là bitmap PMM của cavOS thật,
+> đúng kiểu [[Lab 0x03 - PMM & VMM]] dựng lại. Lý thuyết và thực hành khớp nhau ở đây.
