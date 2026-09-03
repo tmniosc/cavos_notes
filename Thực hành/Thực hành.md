@@ -50,8 +50,8 @@ make run       # QEMU headless, serial ra stdout
 make run-gfx   # có cửa sổ (dùng cho Lab 0x02)
 ```
 
-Dựng môi trường: [[Dựng môi trường oskernel-lab]] · lệnh chi tiết + cấu trúc `os.img`:
-[[Cẩm nang build & debug]].
+Dựng môi trường: [[Dựng môi trường oskernel-lab]] · lệnh chi tiết: [[Cẩm nang build & debug]] ·
+bố cục ảnh đĩa: [[Cấu trúc os.img]].
 
 > **Sửa code xong nhớ chép ngược** về `Thực hành/src/oskernel-lab/` rồi commit — vault là thứ duy nhất
 > được backup lên GitHub.

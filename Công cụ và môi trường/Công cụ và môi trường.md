@@ -23,4 +23,4 @@ Về trang chủ: [[Home]] · hai nửa nội dung: [[Lý thuyết]] · [[Thực
 ## Dùng hằng ngày
 
 - [[Cẩm nang build & debug]] — lệnh build/QEMU/GDB, 4 file phân tích build (`.map/.dis/.sym/.elf.txt`),
-  cấu trúc `os.img`, `compile_commands.json` cho clangd, và bảng lỗi thường gặp.
+  `compile_commands.json` cho clangd, và bảng lỗi thường gặp.

@@ -106,7 +106,7 @@ make run QEMU_FLAGS="-M q35 -m 512M -serial stdio"
 make CROSS_PREFIX=$HOME/opt/cross/bin/x86_64-cavos-
 ```
 
-Chi tiết 4 artifact phân tích build và cấu trúc `os.img`: [[Cẩm nang build & debug]].
+Chi tiết 4 artifact phân tích build: [[Cẩm nang build & debug]] · bố cục ảnh đĩa: [[Cấu trúc os.img]].
 
 ## 5. Sửa code thì nhớ chép ngược
 

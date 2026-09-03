@@ -24,7 +24,7 @@ Vị trí: `~/oskernel-lab/00-hello-serial/` · source lưu ở `Thực hành/sr
 - `.limine_requests` gói trong `KEEP(*(.limine_requests))` (nằm trong `:rodata`) để Limine quét magic,
   `KEEP` chống linker GC bỏ section (chưa ai tham chiếu trực tiếp) — xem [[Request-Response Mechanism]].
 - `limine.conf` + `limine bios-install` → đóng gói vào `os.img` (ảnh đĩa MBR + FAT32 + Limine,
-  dựng bằng `scripts/mkimage.sh`) — **cấu trúc os.img**: xem [[Cẩm nang build & debug]].
+  dựng bằng `scripts/mkimage.sh`) — bố cục ảnh đĩa: [[Cấu trúc os.img]].
 - `serial.c`: `outb/inb`, init COM1, `serial_putc` chờ LSR bit5 (THRE).
 
 ## Kết quả

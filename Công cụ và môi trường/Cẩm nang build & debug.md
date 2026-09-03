@@ -95,49 +95,10 @@ Mỗi lần build kernel tự sinh kèm (tên dẫn xuất từ `KERNEL`, vd `ke
 > 💡 Soi section/flag của **`.o`** (trước link): `readelf -S kernel.o` / `objdump -h kernel.o`
 > → thấy `.text`=AX, `.rodata`=A, `.data`/`.bss`=WA (gốc của W^X — xem [[Step 00 - Boot & Limine]] §0.1.2).
 
-## Cấu trúc `os.img` (ảnh đĩa boot — MBR + FAT32 + Limine)
-`os.img` **không phải** kernel — nó là **ảnh nguyên ổ đĩa** (lab: 64 MiB), QEMU coi như HDD.
-Dựng bằng `scripts/mkimage.sh` (mtools, **không cần sudo/mount** — hợp WSL2).
-
-```
-os.img  (64 MiB = 131072 sector × 512B)
-┌───────────────────────────────────────────────────────────┐
-│ sector 0       : MBR — bảng phân vùng + chữ ký 55 AA      │
-│ sector 1..2047 : trống 1 MiB — Limine BIOS stage chen vào │
-├───────────────────────────────────────────────────────────┤
-│ sector 2048..  : PHÂN VÙNG 1 = FAT32, cờ boot ✔ (63 MiB)  │  ← bắt đầu @1 MiB
-│   ::/boot/kernel.bin            ← KERNEL của bạn          │
-│   ::/boot/limine/limine.conf    ← menu boot (kernel_path) │
-│   ::/boot/limine/limine-bios.sys← Limine khi boot BIOS    │
-│   ::/EFI/BOOT/BOOTX64.EFI       ← Limine khi boot UEFI64  │
-│   ::/EFI/BOOT/BOOTIA32.EFI      ← Limine khi boot UEFI32  │
-└───────────────────────────────────────────────────────────┘
-```
-
-- **Phân vùng bắt đầu @1 MiB (sector 2048)**: chừa chỗ cho Limine BIOS stage → mtools thao tác tại
-  `os.img@@1M`. `limine bios-install` ghi MBR + vùng trống này.
-- **Hỗ trợ cả 2 đường boot**: BIOS (MBR → `limine-bios.sys`) **và** UEFI (firmware tự tìm
-  `/EFI/BOOT/BOOTX64.EFI`). Cả hai → đọc `limine.conf` → nạp `kernel.bin` → `kmain`.
-- `limine.conf` (lab): `timeout: 0` (boot ngay), `kernel_path: boot():/boot/kernel.bin`,
-  `protocol: limine` → nối [[Step 00 - Boot & Limine]] §0.1.1 (Limine ELF loader đọc `kernel.bin`).
-
-### Mạch source → chạy
-```
-kernel.c ─gcc─► kernel.o ─ld(-T linker.ld)─► kernel.bin ─┐
-limine.conf + limine-bios.sys + BOOTX64.EFI ─────────────┤
-                                                          ▼
-              mkimage.sh: dd → parted(MBR) → limine bios-install
-                        → mformat FAT32 → mcopy file vào
-                                                          ▼
-                                       os.img ─qemu─► Limine ─► kmain
-```
-
-### Soi nhanh os.img
-```bash
-fdisk -l os.img                 # bảng phân vùng
-mdir -i "os.img@@1M" -b -/ ::   # cây file trong FAT32
-xxd -s 510 -l 2 os.img          # chữ ký boot 55 AA
-```
+## Ảnh đĩa `os.img`
+`os.img` không phải kernel mà là **ảnh nguyên ổ đĩa** (lab: 64 MiB): MBR + FAT32 @1 MiB + Limine.
+Bố cục từng vùng, hai đường boot BIOS/UEFI, mạch từ `kernel.c` tới lúc `kmain` chạy, và mấy lệnh soi
+ảnh đĩa: xem [[Cấu trúc os.img]].
 
 ## Dựng lab từ bản lưu trong vault
 > _Source lab giờ được cất trong chính vault (`Thực hành/src/`). Máy mới chỉ cần chép sang WSL + cài vài gói._

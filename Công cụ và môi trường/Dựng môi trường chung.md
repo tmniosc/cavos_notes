@@ -91,14 +91,6 @@ ls ~/cavOS ~/oskernel-lab ~/opt 2>/dev/null    # đã dựng tới đâu
 
 ## Rẽ nhánh
 
-```
-môi trường chung (note này)
-        │
-        ├─► cavOS  : + gói build cross-compiler ─► make tools ─► make disk ─► make qemu
-        │            [[Dựng môi trường cavOS]]
-        │
-        └─► lab    : + mtools + Limine v8.x ────► cp Thực hành/src ─► make run
-                     [[Dựng môi trường oskernel-lab]]
-```
+![[env-branches.svg]]
 
 Hai nhánh **độc lập**: lab chạy được ngay cả khi cavOS chưa `make tools` xong, và ngược lại.

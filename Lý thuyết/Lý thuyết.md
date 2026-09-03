@@ -50,6 +50,7 @@ Về trang chủ: [[Home]]
 - [[Long Mode]] — chế độ 64-bit, nơi kernel thực sự chạy
 - [[Higher-Half Kernel]] — vì sao kernel nằm ở nửa cao không gian ảo
 - [[HHDM]] — cửa sổ nhìn toàn bộ RAM vật lý, và chuyện hai địa chỉ ảo trỏ một chỗ
+- [[Cấu trúc os.img]] — ảnh đĩa boot: MBR + FAT32 + Limine, hai đường BIOS/UEFI
 - [[Limine Protocol]] · [[Request-Response Mechanism]] — cách kernel hỏi bootloader
 - [[KASLR & PIE Kernel]] — vì sao địa chỉ vật lý đổi mỗi lần boot
 - [[x86 Segmentation]] — segment + 3 chế độ (real/protected/long)

@@ -94,13 +94,7 @@ make qemu          # boot disk.img  (máy này KHÔNG chạy được, xem mục
 
 Chuỗi phụ thuộc trong `Makefile` gốc:
 
-```
-disk ─► disk_prepare ─► verifytools ─► limine ─► uacpi ─► musl ─► ports
-                                                                    │
-                                        src/software/{test,badtest,drawimg}
-                                                                    │
-                                                    ─► make -C src/kernel disk ─► disk.img
-```
+![[cavos-disk-chain.svg]]
 
 Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[Cẩm nang build & debug]] cho
 `make kernel`, `make qemu_dbg`, GDB và `compile_commands.json`.
