@@ -9,7 +9,7 @@ status: đang làm
 > Nhẹ hơn cavOS nhiều — **không cần** cross-compiler._
 
 Nền chung (WSL, quy tắc build ở đâu, gói dùng chung): [[Dựng môi trường chung]] — làm trước note này.
-Liên quan: [[Dựng môi trường cavOS]] · [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]]
+Liên quan: [[Dựng môi trường cavOS]] · [[Cẩm nang build & debug]]
 
 ## Nói thật đơn giản
 
@@ -110,7 +110,7 @@ Chi tiết 4 artifact phân tích build và cấu trúc `os.img`: [[Cẩm nang b
 
 ## 5. Sửa code thì nhớ chép ngược
 
-> _Đây là bài học đắt nhất: lần mất máy vừa rồi chỉ vault sống sót vì nó nằm trên D: và đã push GitHub._
+> _Chỉ vault mới được đẩy lên GitHub. Code nằm trong WSL mà không chép ngược thì không có bản sao nào._
 
 ```bash
 cp -r ~/oskernel-lab/. /mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab/

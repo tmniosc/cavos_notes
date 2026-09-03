@@ -9,7 +9,7 @@ status: đang làm
 > Đây là repo đọc để học, không phải code mình viết._
 
 Nền chung (WSL, quy tắc build ở đâu, gói dùng chung): [[Dựng môi trường chung]] — làm trước note này.
-Liên quan: [[Dựng môi trường oskernel-lab]] · [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]]
+Liên quan: [[Dựng môi trường oskernel-lab]] · [[Cẩm nang build & debug]]
 
 ## Nói thật đơn giản
 
@@ -123,7 +123,7 @@ Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[
 - [x] `make disk` → `disk.img` 1.88 GB
 - [x] Boot QEMU: chạm `====== REACHED SYSTEM ======` (chạy không KVM, xem bảng bẫy)
 
-Lần boot đầu tiên trên máy mới in ra (rút gọn):
+Boot in ra (rút gọn):
 
 ```
 [serial]   Installing serial...
@@ -140,4 +140,4 @@ Lần boot đầu tiên trên máy mới in ra (rút gọn):
 
 > Dòng `fb{ffff8000fd000000}` chính là framebuffer nhìn qua HHDM — **cùng địa chỉ** mà
 > [[Lab 0x02 - Framebuffer]] in ra. Còn `[pmm] bitmapStartPhys{0x60000}` là bitmap PMM của cavOS thật,
-> đúng kiểu [[Lab 0x03 - PMM & VMM]] dựng lại. Lý thuyết và thực hành khớp nhau ở đây.
+> đúng cơ chế [[Lab 0x03 - PMM & VMM]] tự dựng. Lý thuyết và thực hành khớp nhau ở đây.

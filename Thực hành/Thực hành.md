@@ -50,7 +50,7 @@ make run       # QEMU headless, serial ra stdout
 make run-gfx   # có cửa sổ (dùng cho Lab 0x02)
 ```
 
-Dựng từ máy trắng: [[Dựng môi trường oskernel-lab]] · lệnh chi tiết + cấu trúc `os.img`:
+Dựng môi trường: [[Dựng môi trường oskernel-lab]] · lệnh chi tiết + cấu trúc `os.img`:
 [[Cẩm nang build & debug]].
 
 > **Sửa code xong nhớ chép ngược** về `Thực hành/src/oskernel-lab/` rồi commit — vault là thứ duy nhất
@@ -59,4 +59,5 @@ Dựng từ máy trắng: [[Dựng môi trường oskernel-lab]] · lệnh chi t
 ## Output thật đã lưu
 
 - `outputs/lab-0x03-run.txt` — bản đầy đủ bảng `pmm_dump_map` (rộng ~176 cột, markdown không vừa)
-- `outputs/lab-0x03-run-2026-09-03.txt` — lần chạy trên máy mới, để đối chiếu
+- `outputs/lab-0x03-run-2026-09-03.txt` — lần chạy 2026-09-03, sau khi vá bug bitmap
+- `outputs/cavos-boot-2026-09-03.txt` — boot log của **cavOS thật**, để đối chiếu với lab

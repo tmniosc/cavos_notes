@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Thực hành/Thực hành.md",
+                "file": "Home.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Thực hành"
+              "title": "Home"
             }
           }
         ]
@@ -158,7 +158,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Thực hành/Thực hành.md",
+                "file": "Home.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -187,15 +187,17 @@
   },
   "active": "b8acf3f3438b753a",
   "lastOpenFiles": [
+    "Thực hành/src/oskernel-lab/README.md.tmp.7216.3c078bbdc35b",
+    "Công cụ và môi trường/Dựng môi trường chung.md",
+    "Công cụ và môi trường/Cẩm nang build & debug.md",
+    "Công cụ và môi trường/Công cụ và môi trường.md",
+    "Thực hành/Thực hành.md",
     "Thực hành/outputs/cavos-boot-2026-09-03.txt",
     "Lý thuyết/Lý thuyết.md",
-    "Thực hành/Thực hành.md",
     "Lý thuyết/Steps/Boot Flow (_start).md",
     "Lý thuyết/Khái niệm/sedPgBTf4",
     "Lý thuyết/Boot Flow (_start).md",
     "Lý thuyết/Khái niệm/GDT.md",
-    "Công cụ và môi trường/Cẩm nang build & debug.md",
-    "Công cụ và môi trường/Công cụ và môi trường.md",
     "Home.md",
     "CLAUDE.md.tmp.7216.c0cc45be55a6",
     "Công cụ và môi trường/Công cụ và môi trường.md.tmp.7216.901160dcf5d9",
@@ -206,7 +208,6 @@
     "Công cụ và môi trường/Khôi phục source (2026-09-03).md",
     "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
     "Công cụ và môi trường/Dựng môi trường cavOS.md",
-    "Công cụ và môi trường/Dựng môi trường chung.md",
     "Công cụ và môi trường",
     "CLAUDE.md.tmp.7216.df44a6bbfb0f",
     "Công cụ & môi trường/Cẩm nang build & debug.md",
@@ -220,7 +221,6 @@
     "Công cụ & môi trường/Dựng môi trường chung.md",
     "Công cụ & môi trường",
     "Thực hành/src/oskernel-lab/03-pmm-vmm/boot.h",
-    "Thực hành/src/oskernel-lab/03-pmm-vmm/pmm.c",
     "Thực hành/src/oskernel-lab/README.md",
     "Thực hành/Lab 0x03 - PMM & VMM.md"
   ]

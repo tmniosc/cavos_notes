@@ -1,42 +1,53 @@
-# oskernel-lab — source dựng lại (2026-09-03)
+# oskernel-lab — source lab kernel x86_64
 
-Lab kernel x86_64 học theo vault [[Home]] / các note `Labs/Lab 0x0*`.
-Bản gốc trong WSL đã mất; cây source này **dựng lại từ note**, chưa build lại lần nào
-tại thời điểm ghi dòng này → xem "Trạng thái" bên dưới.
+Kernel tự viết từ số 0, học song song với việc đọc cavOS. Note tương ứng nằm trong vault:
+`Thực hành/Lab 0x00` → `Lab 0x03`.
+
+Đây là **bản lưu** trong vault để backup + push GitHub. **Build thì làm trong WSL** (`~/oskernel-lab`),
+không build trực tiếp ở đây (ổ Windows qua 9p làm hỏng build, và CRLF làm chết script `.sh`).
 
 ```
 oskernel-lab/
-├─ common.mk          build chung (tự chọn cross x86_64-cavos-gcc, không có thì dùng gcc hệ thống)
-├─ linker.ld          bản gốc; mỗi project có 1 bản copy
+├─ common.mk          build chung: tự dò cross x86_64-cavos-gcc, không có thì dùng gcc hệ thống
+├─ linker.ld          bản gốc; mỗi project giữ 1 copy
 ├─ limine.conf        timeout 0, protocol limine, kernel_path boot():/boot/kernel.bin
 ├─ limine.h           lấy từ cavOS (src/kernel/include/limine.h) — base revision 2
-├─ .clangd            gỡ flag GCC-only cho clangd
+├─ .clangd            gỡ vài flag GCC-only cho clangd
+├─ .gitattributes     ép toàn bộ file về LF
 ├─ scripts/mkimage.sh dựng os.img: MBR + FAT32@1MiB + limine bios-install (mtools, không cần sudo)
-├─ 00-hello-serial/   Lab 0x00 — Step 00 + 01
-├─ 01-bootloader-parser/ Lab 0x01 — Step 02
-├─ 02-framebuffer/    Lab 0x02 — Step 03
-└─ 03-pmm-vmm/        Lab 0x03 — Step 04 + 05
+├─ 00-hello-serial/      boot Limine + UART 16550
+├─ 01-bootloader-parser/ đọc 4 Limine request: paging/HHDM/kernel address/memmap
+├─ 02-framebuffer/       vẽ pixel + chữ, font 8x8 nhúng
+└─ 03-pmm-vmm/           bitmap PMM + tự dựng PML4, mov cr3, vmap/vresolve
 ```
 
 ## Chạy
+
 ```bash
 cd ~/oskernel-lab/03-pmm-vmm
-make            # kernel.bin + kernel.map/.dis/.sym/.elf.txt
-make image      # os.img
-make run        # QEMU headless, -serial stdio
-make run-gfx    # có cửa sổ (Lab 0x02)
+make info      # đang dùng cross gcc hay gcc hệ thống
+make           # kernel.bin + kernel.map/.dis/.sym/.elf.txt
+make image     # os.img
+make run       # QEMU headless, serial ra stdout
+make run-gfx   # có cửa sổ (dùng cho Lab 0x02)
 ```
-Cần: `qemu-system-x86_64`, `mtools`, `parted`, và Limine binary ở `~/opt/limine`
-(`git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine && make -C ~/opt/limine`).
 
-## Khác biệt đã biết so với lần chạy cũ ghi trong note
-- `pmm_init` đánh dấu **toàn bộ** frame của bitmap (làm tròn LÊN). Lần chạy cũ (note Lab 0x03)
-  cho `alloc #1 = 0x62000` và `free = 65196`, tức bản cũ chỉ đánh dấu 2 frame và để hở frame đuôi
-  (`0x62000..0x6206d` vẫn chồng lên bitmap). Bản này vá chỗ đó — đã xác nhận bằng lần chạy thật.
-- Font 8x8 của Lab 0x02 phủ đủ A-Z + 0-9 (bản cũ chỉ vài ký tự).
+Cần `qemu-system-x86`, `mtools`, `parted`, và Limine ở `~/opt/limine`:
 
-## Trạng thái (2026-09-03)
-- [x] build thật — gcc hệ thống, Ubuntu 26.04, không warning
-- [x] boot QEMU thật — cả 4 lab chạy đúng
-- [x] chép output thật vào note (`Labs/outputs/lab-0x03-run-2026-09-03.txt`)
-- [ ] chạy lại bằng cross `x86_64-cavos-gcc` sau khi `make tools` xong
+```bash
+git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
+make -C ~/opt/limine CC=gcc
+```
+
+**Phải là Limine v8.x** — từ v9, `kernel_path` đổi tên và `LIMINE_KERNEL_ADDRESS_REQUEST` bị thay bằng
+`EXECUTABLE_ADDRESS`, lệch với `limine.h` đang dùng (base revision 2).
+
+Biến chỉnh được từ dòng lệnh, không cần sửa file:
+
+```bash
+make run LIMINE_DIR=/duong/dan/khac
+make run QEMU_FLAGS="-M q35 -m 512M -serial stdio"
+make CROSS_PREFIX=$HOME/opt/cross/bin/x86_64-cavos-
+```
+
+Chi tiết dựng máy: note `Dựng môi trường oskernel-lab` trong vault.

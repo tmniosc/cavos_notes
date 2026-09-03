@@ -10,14 +10,14 @@ status: done
 
 **Vị trí:** `~/oskernel-lab/03-pmm-vmm/` · base revision **2**. **Chạy:** `make run`.
 
-> [!note] Source viết lại & đã chạy lại (2026-09-03) — CÓ SỬA 1 BUG
-> Source hiện tại viết lại từ note → `Thực hành/src/oskernel-lab/03-pmm-vmm/`, **đã boot QEMU thật lại**.
-> Bản cũ đánh dấu **thiếu 1 frame** của bitmap: bitmap 8301 B tại `0x60000` trải 3 frame
+Source: `Thực hành/src/oskernel-lab/03-pmm-vmm/`.
+
+> [!warning] Đã vá một bug đánh dấu bitmap
+> Phiên bản đầu mark **thiếu 1 frame**: bitmap 8301 B tại `0x60000` trải 3 frame
 > (`0x60000/0x61000/0x62000`) nhưng chỉ mark 2 → `pmm_alloc` phát ra chính `0x62000` **đang chứa 109 byte
-> cuối của bitmap**. Không sập vì PML4 mới chỉ dùng entry 192/256/511 (offset từ 1536 byte trở đi) → may
-> chứ không đúng. Bản mới làm tròn **LÊN**, đã xác nhận vá đúng ở mục "Chạy lại 2026-09-03" bên dưới.
-> Số cũ + `outputs/lab-0x03-run.txt` giữ nguyên để đối chiếu; output mới ở
-> `outputs/lab-0x03-run-2026-09-03.txt`.
+> cuối của bitmap**. Không sập vì PML4 mới chỉ dùng entry 192/256/511 (offset từ 1536 byte trở đi) — may
+> chứ không đúng. Nay `bm_mark(bitmap_pa, bytes, 1)` làm tròn **LÊN**; xác nhận ở mục
+> "Chạy lại 2026-09-03" bên dưới. Output cũ giữ ở `outputs/lab-0x03-run.txt` để đối chiếu.
 
 ## 📦 Cấu trúc module
 ```
@@ -171,7 +171,7 @@ memmap 1 dòng, kèm dòng con `>` cho từng **OBJECT** nằm trong vùng đó:
 > 📐 **Sơ đồ "PA ←→ VA" trực quan** (mũi tên, aliasing): xem [[Lab 0x01 - Bootloader Parser]] — bảng
 > `pmm_dump_map` ở trên đã thể hiện đủ 3 cột PA/VA-HHDM/VA-kernel cho mọi vùng.
 
-## Chạy lại 2026-09-03 (source dựng lại, đã vá bug bitmap)
+## Chạy lại 2026-09-03 (sau khi vá bug bitmap)
 
 > _Cùng một cấu hình QEMU nhưng Limine xếp bộ nhớ khác lần trước, nên mọi địa chỉ đều dời. Cái **không**
 > dời mới là bài học: tổng số frame, cỡ bitmap, và mọi quan hệ giữa các con số._

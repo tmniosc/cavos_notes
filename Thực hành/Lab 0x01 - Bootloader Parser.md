@@ -10,9 +10,7 @@ status: done
 
 **Vị trí:** `~/oskernel-lab/01-bootloader-parser/` · build/run y hệt Lab 0x00 (`make kernel`, `make run`).
 
-> [!note] Source viết lại & đã chạy lại (2026-09-03)
-> Source hiện tại viết lại từ note → `Thực hành/src/oskernel-lab/01-bootloader-parser/`, **đã boot QEMU thật lại**.
-> Kết quả mới ở mục "Run thật 2026-09-03" bên dưới; bản 2026-05-28 giữ nguyên để đối chiếu.
+Source: `Thực hành/src/oskernel-lab/01-bootloader-parser/`.
 
 ## Làm gì
 Khai 4 request (gói trong `.limine_requests`, `used`):
@@ -73,7 +71,7 @@ Thêm 2 helper so với Lab 0x00: `serial_puthex(uint64_t)`, `serial_putdec(uint
 [done] halt.
 ```
 
-### Run thật 2026-09-03 (source dựng lại, QEMU `-M q35 -m 256M`)
+### Run thật 2026-09-03 (QEMU `-M q35 -m 256M`)
 ```
 === Lab 0x01 - Bootloader Parser (Step 02) ===
 [paging] mode = 4-level

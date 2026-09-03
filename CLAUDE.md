@@ -10,26 +10,23 @@
 Đọc source cavOS từ đầu, **ánh xạ code ↔ spec nền tảng x86_64** (Intel SDM, ACPI, PCI, AHCI, Limine,
 datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem [[Boot Flow (_start)]]).
 
-## Vị trí (RẤT QUAN TRỌNG) — cập nhật 2026-09-03, MÁY MỚI
-> Toàn bộ source đã mất cùng máy cũ; đang dựng lại. Đọc [[Khôi phục source (2026-09-03)]] trước khi
-> tin bất kỳ đường dẫn cũ nào trong vault.
-
+## Vị trí (RẤT QUAN TRỌNG)
 | Thứ                                                     | Đường dẫn                                              |
 | ------------------------------------------------------- | ------------------------------------------------------ |
 | **Vault ghi chú** (file này) — Windows ⭐ vault Claude CLI mở | `D:\tmniosc\cavos_notes` ← bản chính chủ duy nhất, là CWD khi chạy `claude` |
 | Vault trên GitHub                                       | `https://github.com/tmniosc/cavos_notes` (remote `origin`) |
 | **Bản lưu source lab** (chỉ để backup/push, KHÔNG build ở đây) | `D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab`   |
-| **Source code cavOS** — trong **WSL** (KHÔNG di chuyển) | `~/cavOS` — clone lại từ `github.com/malwarepad/cavOS` |
+| **Source code cavOS** — trong **WSL** (KHÔNG di chuyển) | `~/cavOS` — clone từ `github.com/malwarepad/cavOS` |
 | **Source lab** — trong **WSL**                          | `~/oskernel-lab` — chép từ `Thực hành/src/oskernel-lab`     |
 | Cross toolchain                                         | `~/opt/cross/bin/x86_64-cavos-gcc` (dựng bằng `make tools`) |
 | Limine binary                                           | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
 
-WSL2 **Ubuntu-26.04**, user `tmniosc` → `/home/tmniosc` (cài lại 2026-09-03). Claude chạy phía Windows →
+WSL2 **Ubuntu-26.04**, user `tmniosc` → `/home/tmniosc`. Claude chạy phía Windows →
 truy cập WSL qua `wsl.exe` hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
 `sudo` **hỏi mật khẩu** → lệnh `sudo` phải do user tự chạy.
 
 > Dựng môi trường từ số 0: [[Dựng môi trường chung]] (nền) → rồi rẽ [[Dựng môi trường cavOS]]
-> hoặc [[Dựng môi trường oskernel-lab]]. [[Khôi phục source (2026-09-03)]] là note **tạm** — xoá khi xong.
+> hoặc [[Dựng môi trường oskernel-lab]].
 
 ## Cấu trúc thư mục vault (chia 2026-05-31)
 ```
@@ -50,7 +47,7 @@ cavos_notes/
     ├─ Dựng môi trường chung / cavOS / oskernel-lab
     └─ Cẩm nang build & debug
 ```
-> Chia đôi **Lý thuyết / Thực hành** (2026-09-03): đọc hiểu ở một bên, tự viết chạy được ở bên kia.
+> Chia đôi **Lý thuyết / Thực hành**: đọc hiểu ở một bên, tự viết chạy được ở bên kia.
 > Tên thư mục + note mô tả để **tiếng Việt**; tên thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
 > `Thực hành/src/oskernel-lab/` = **bản lưu source lab**. Chỉ để backup + push GitHub, **KHÔNG build ở đó**.
 > `.gitattributes` nằm ngay trong thư mục đó, ép toàn bộ file về **LF** (CRLF → lỗi `env: bash\r`).
@@ -61,7 +58,7 @@ cavos_notes/
 - Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật note step tương ứng (`status: done`),
   cập nhật bảng Step trong [[Lý thuyết]] và mục "Tiến độ" bên dưới.
 - Dùng wikilink `[[...]]` và tags như các note hiện có.
-- **KHÔNG dùng emoji/icon trong note** (chốt 2026-09-03 — user không thích). Note mới viết thuần chữ;
+- **KHÔNG dùng emoji/icon trong note** (user không thích). Note viết thuần chữ;
   heading là `## Mục đích`, `## Nói thật đơn giản`, không gắn icon. Callout thì dùng `> [!warning]` /
   `> [!note]` trần, không thêm hình. Note cũ còn icon thì dọn dần khi nào sửa tới, đừng thêm icon mới.
   Mũi tên `→`, ký tự vẽ bảng `├─►`, dấu tick `[x]` **không phải icon** — vẫn dùng bình thường.
@@ -80,9 +77,9 @@ cavos_notes/
   + `kernel.c` (chỉ orchestrate). `GNUmakefile` khai `SRCS := kernel.c <module>.c ...` (common.mk tự build).
   **String output trong code để TIẾNG ANH**; comment giải thích tiếng Việt OK. Bám sát cách cavOS thật làm,
   KHÔNG tự chế khác (vd PMM tính `mmTotal` = cộng dồn length ≠ RESERVED, y `bootloader.c`).
-- **BACKUP SOURCE LAB (mới 2026-09-03, sau khi mất sạch source):** mỗi khi sửa code trong `~/oskernel-lab`,
-  chép ngược về `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ DUY NHẤT sống sót lần mất máy vừa
-  rồi → cái gì không nằm trong vault + GitHub thì coi như sẽ mất. Xem [[Khôi phục source (2026-09-03)]].
+- **BACKUP SOURCE LAB:** mỗi khi sửa code trong `~/oskernel-lab`, chép ngược về
+  `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ DUY NHẤT được đẩy lên GitHub →
+  cái gì không nằm trong vault thì không có bản sao nào.
 
 ## Bài học build (đừng lặp lại)
 - **CHỈ build trong `~/cavOS` (ext4 native).** TUYỆT ĐỐI không build trên `/mnt/c` `/mnt/d`:
@@ -107,19 +104,8 @@ cavos_notes/
 > Note nền tảng: [[Paging]] — 5 ý cốt lõi để đọc link.ld/memmap/HHDM (nạp trước Step 03).
 > Thực hành song song: [[Lab 0x00 - Hello Serial]] (gộp Step 00+01) tại `~/oskernel-lab`.
 
-## Trạng thái môi trường (2026-09-03) — ĐỌC TRƯỚC KHI CHẠY LỆNH
-Kiến thức trong vault còn nguyên (Step 00 đến 06 vẫn xong), nhưng **môi trường thì trắng**:
-
-- [x] Source lab viết lại từ note → `Thực hành/src/oskernel-lab/` (39 file)
-- [x] WSL `Ubuntu-26.04` / `tmniosc`; apt xong; Limine 8.7.0 ở `~/opt/limine`; cavOS ở `~/cavOS`
-- [x] **Build + boot thật cả 4 lab** (gcc hệ thống, rồi chạy lại bằng cross gcc) — output đã chép vào note
-- [x] cavOS: `make tools` (GCC 11.4.0) → `make disk` (1.88 GB) → boot tới `REACHED SYSTEM`
-- [ ] Push `Thực hành/src/` lên GitHub
-
-Chi tiết đầy đủ: [[Khôi phục source (2026-09-03)]].
-
 ## Quyết định đã chốt
 - Dùng **vault Obsidian** (nhiều note liên kết) cho nội dung học; **memory + context gộp vào CLAUDE.md này** (1 file).
 - Vault để trên **D: (Windows)**; code để trong **WSL**.
-- **Source lab backup trong vault** (`Thực hành/src/`) và push GitHub — chốt sau vụ mất source 2026-09-03.
+- **Source lab backup trong vault** (`Thực hành/src/`) và push GitHub.
 - Lab dùng **Limine v8.x-binary** + `limine.h` của cavOS (base revision 2), KHÔNG lên v9+.

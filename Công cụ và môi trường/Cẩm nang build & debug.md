@@ -6,13 +6,9 @@ tags: [reference, build]
 
 Repo: `~/cavOS` (trong WSL native fs — **không** dùng `/mnt/d`).
 
-> [!warning] 2026-09-03 — máy mới, môi trường đang dựng lại
-> Mọi lệnh dưới đây **giả định đã có** `~/cavOS`, `~/oskernel-lab`, cross toolchain, qemu, mtools, Limine.
-> Cài từ đầu: **[[Dựng môi trường chung]]** (nền) rồi rẽ [[Dựng môi trường cavOS]] /
-> [[Dựng môi trường oskernel-lab]];
-> lý do phải dựng lại: [[Khôi phục source (2026-09-03)]].
-> Các đường dẫn `/home/tmnvi/...` bên dưới là của **máy cũ** — user mới sẽ khác;
-> `common.mk` bản dựng lại dùng `$(HOME)` nên không cần sửa tay nữa.
+> [!note] Note này giả định môi trường đã dựng xong
+> Cần `~/cavOS`, `~/oskernel-lab`, cross toolchain, qemu, mtools, Limine. Máy chưa có thì xem
+> [[Dựng môi trường chung]] rồi rẽ [[Dựng môi trường cavOS]] / [[Dựng môi trường oskernel-lab]].
 
 ## Build & chạy
 ```bash
@@ -91,9 +87,9 @@ Mỗi lần build kernel tự sinh kèm (tên dẫn xuất từ `KERNEL`, vd `ke
 > nên chưa có địa chỉ cuối để "map". `kernel.bin` link từ **một mình `kernel.o`** + `linker.ld`, kiểu
 > **freestanding** (`-nostdlib -static -no-pie`): không libc, không crt0 — Limine thay crt nhảy thẳng `kmain`.
 
-> Cross tools (`objdump/readelf/nm`) không nằm trên `$PATH`. Bản `common.mk` **dựng lại 2026-09-03** dò
+> Cross tools (`objdump/readelf/nm`) không nằm trên `$PATH`. `common.mk` dò
 > `$(HOME)/opt/cross/bin/x86_64-cavos-gcc`; **chưa có thì tự lùi về `gcc` hệ thống** (kernel freestanding vẫn
-> build đúng). Xem toolchain đang dùng bằng `make info`. (Máy cũ hard-code `/home/tmnvi/opt/cross/bin/...`.)
+> build đúng). Xem toolchain đang dùng bằng `make info`.
 > ⚠️ Trong Makefile, **đừng** để comment cùng dòng với `VAR := value` — Make nuốt cả khoảng trắng trước `#` vào giá trị → tên file dính space, hỏng build.
 
 > 💡 Soi section/flag của **`.o`** (trước link): `readelf -S kernel.o` / `objdump -h kernel.o`
@@ -143,7 +139,7 @@ mdir -i "os.img@@1M" -b -/ ::   # cây file trong FAT32
 xxd -s 510 -l 2 os.img          # chữ ký boot 55 AA
 ```
 
-## Dựng lại lab trên máy trắng (từ bản lưu trong vault)
+## Dựng lab từ bản lưu trong vault
 > _Source lab giờ được cất trong chính vault (`Thực hành/src/`). Máy mới chỉ cần chép sang WSL + cài vài gói._
 
 ```bash

@@ -19,8 +19,3 @@ Mở folder này bằng **Obsidian** (Open folder as vault); các note nối nha
 
 Đọc lần đầu thì đi: [[Boot Flow (_start)]] → [[Paging]] → [[Step 00 - Boot & Limine]],
 làm song song [[Lab 0x00 - Hello Serial]].
-
-> [!warning] 2026-09-03 — mất toàn bộ source, đã dựng lại
-> Máy cũ mất kéo theo cả `~/cavOS` lẫn `~/oskernel-lab`; **chỉ vault này sống sót**.
-> cavOS clone lại nguyên bản; source lab viết lại từ note, cất tại `Thực hành/src/oskernel-lab/`
-> và đã build + boot QEMU thật lại. Chi tiết: [[Khôi phục source (2026-09-03)]].

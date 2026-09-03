@@ -6,13 +6,7 @@ status: done
 # Lab 0x00 — Hello Serial
 
 Tự viết lại phần **boot + serial** từ số 0 (gộp [[Step 00 - Boot & Limine]] + [[Step 01 - Serial UART]]).
-Vị trí: `~/oskernel-lab/00-hello-serial/` (máy cũ để ngay ở gốc `~/oskernel-lab`).
-
-> [!note] Source viết lại & đã chạy lại (2026-09-03)
-> Bản gốc mất cùng máy cũ → source hiện tại **viết lại từ chính note này**, lưu ở
-> `Thực hành/src/oskernel-lab/00-hello-serial/`. Đã **build + boot QEMU thật lại** trên máy mới:
-> serial in đúng `Hello Serial`, và `kernel.map` khớp y bài học (xem mục "4 file phân tích build").
-> Toolchain lần chạy này là **gcc hệ thống** (cross `x86_64-cavos-gcc` chưa dựng xong).
+Vị trí: `~/oskernel-lab/00-hello-serial/` · source lưu ở `Thực hành/src/oskernel-lab/00-hello-serial/`.
 
 ## Mục tiêu
 - Limine nạp kernel ELF64 vào [[Long Mode]] → nhảy vào entry `kmain` (= `ENTRY(kmain)` trong `linker.ld`).
@@ -59,7 +53,7 @@ Makefile lab tự tạo mỗi lần build — dùng để **thấy tận mắt**
 .rodata  0xffffffff80001000   0x8a            ← rodata khởi đầu ĐÚNG biên trang 0x1000
 ```
 
-**Chạy lại 2026-09-03 (source dựng lại, gcc hệ thống)** — cùng kết luận, chỉ khác kích thước:
+**Lần chạy 2026-09-03** — cùng kết luận, chỉ khác kích thước:
 ```
 .text           0xffffffff80000000      0x152
                 0xffffffff80000000                kmain     ← entry ngay đầu .text

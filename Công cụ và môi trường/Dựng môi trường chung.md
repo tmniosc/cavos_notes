@@ -9,7 +9,7 @@ status: đang làm
 > đều cần, và quy tắc vàng "build ở đâu". Làm xong note này rồi mới rẽ nhánh._
 
 Rẽ nhánh: [[Dựng môi trường cavOS]] (đọc code người ta) · [[Dựng môi trường oskernel-lab]] (code tự viết)
-Liên quan: [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]] · [[Home]]
+Liên quan: [[Cẩm nang build & debug]] · [[Home]]
 
 ## Nói thật đơn giản
 
