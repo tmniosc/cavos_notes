@@ -131,11 +131,3 @@ cd /mnt/d/tmniosc/cavos_notes && git add "Thực hành/src" && git commit -m "la
 | Lab thiếu response / lỗi `kernel_path` | dùng Limine v9+ | đổi về `v8.x-binary` |
 | Tên file dính khoảng trắng, build hỏng | comment cùng dòng với `VAR := value` trong Makefile | để comment ở dòng riêng |
 | `make image` in "Reminder: copy limine-bios.sys" | Limine in cứng mỗi lần | **không phải lỗi** — `mkimage.sh` đã chép ở bước 5/5 |
-
-## Tiến độ trên máy này
-
-- [x] `mtools` + Limine `v8.x-binary` (8.7.0) → `~/opt/limine`
-- [x] Chép source lab → `~/oskernel-lab`
-- [x] Build + boot thật **cả 4 lab** bằng gcc hệ thống, output đã chép vào note Lab
-- [ ] Chạy lại bằng cross `x86_64-cavos-gcc` sau khi cavOS `make tools` xong
-- [ ] Push `Thực hành/src/` lên GitHub

@@ -87,8 +87,10 @@ nên toolchain quá cũ cũng bị bắt build lại.
 sudo -v            # làm mới sudo TRƯỚC, kẻo giữa chừng "sudo: timed out"
 cd ~/cavOS
 make disk          # limine + uacpi + musl + ports + kernel -> disk.img
-make qemu          # boot disk.img
+make qemu          # boot disk.img  (máy này KHÔNG chạy được, xem mục 5)
 ```
+
+`disk.img` ra khoảng **1.9 GB** — nó là ảnh nguyên ổ đĩa chứa cả userland Alpine, không phải mỗi kernel.
 
 Chuỗi phụ thuộc trong `Makefile` gốc:
 
@@ -103,20 +105,7 @@ disk ─► disk_prepare ─► verifytools ─► limine ─► uacpi ─► mu
 Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[Cẩm nang build & debug]] cho
 `make kernel`, `make qemu_dbg`, GDB và `compile_commands.json`.
 
-## 5. Bẫy đã dính (đừng dính lại)
-
-| Triệu chứng | Nguyên nhân | Cách tránh |
-| --- | --- | --- |
-| `x86_64-cavos-gcc was not found!` | chưa `make tools` | chạy `make tools` (1 lần) |
-| `Could not access KVM kernel module: Permission denied` | user chưa ở group `kvm` | `sudo usermod -aG kvm $USER` rồi `wsl --shutdown` bên Windows |
-| `Could not access KVM kernel module: No such device` | **máy này không có KVM thật** — xem mục dưới | dùng `~/cavos-qemu.sh` (bỏ `-enable-kvm`) |
-| `sudo -v` gõ ở terminal khác vẫn bị hỏi lại mật khẩu | Ubuntu đặt `timestamp_type=tty`, cache gắn với đúng terminal đó | gõ `sudo -v` và `make disk` **trong cùng một terminal** |
-| `sudo: timed out` giữa `make disk` | bước `ports` hỏi mật khẩu muộn | `sudo -v` ngay trước |
-| `tar` thiếu file (vd `opcode/i386.h`) | giải nén trên `/mnt` (9p) | build trong `~`, xem [[Dựng môi trường chung]] |
-| `env: bash\r` | script `.sh` bị CRLF do nằm ổ Windows | build trong `~` |
-| `Error relocating /bin/bash` | rootfs `target/` copy qua `/mnt` nên hỏng | bootstrap sạch trong `~` |
-
-## Chạy QEMU: máy này không có KVM
+## 5. Chạy QEMU: máy này không có KVM
 
 > _`make qemu` của cavOS luôn kèm `-enable-kvm`. Trên máy này cờ đó không dùng được, và đây không phải
 > lỗi cấu hình — là giới hạn của Windows 10._
@@ -155,15 +144,12 @@ exec qemu-system-x86_64 -d guest_errors -serial stdio     -drive file=../../disk
 > Không sửa `src/kernel/Makefile` của cavOS: đó là code upstream, sửa vào sẽ vướng khi `git pull`.
 > Chậm hơn KVM khá nhiều nhưng boot tới `REACHED SYSTEM` vẫn chỉ mất vài giây.
 
-## Tiến độ trên máy này
+## 6. Boot thành công trông thế nào
 
-- [x] Gói riêng đã cài
-- [x] `git clone cavOS` → `~/cavOS`
-- [x] `make tools` → `x86_64-cavos-gcc (GCC) 11.4.0`
-- [x] `make disk` → `disk.img` 1.88 GB
-- [x] Boot QEMU bằng `~/cavos-qemu.sh`: chạm `====== REACHED SYSTEM ======`
+> _Để lần sau boot mà thiếu dòng nào thì biết ngay hỏng ở đâu. Mốc quan trọng nhất là
+> `====== REACHED SYSTEM ======` — tới được đó nghĩa là phần khởi tạo lõi đã xong._
 
-Boot in ra (rút gọn):
+Rút gọn từ một lần boot thật (`-m 4g`, không KVM):
 
 ```
 [serial]   Installing serial...
@@ -181,3 +167,16 @@ Boot in ra (rút gọn):
 > Dòng `fb{ffff8000fd000000}` chính là framebuffer nhìn qua HHDM — **cùng địa chỉ** mà
 > [[Lab 0x02 - Framebuffer]] in ra. Còn `[pmm] bitmapStartPhys{0x60000}` là bitmap PMM của cavOS thật,
 > đúng cơ chế [[Lab 0x03 - PMM & VMM]] tự dựng. Lý thuyết và thực hành khớp nhau ở đây.
+## 7. Bẫy đã dính (đừng dính lại)
+
+| Triệu chứng | Nguyên nhân | Cách tránh |
+| --- | --- | --- |
+| `x86_64-cavos-gcc was not found!` | chưa `make tools` | chạy `make tools` (1 lần) |
+| `Could not access KVM kernel module: Permission denied` | user chưa ở group `kvm` | `sudo usermod -aG kvm $USER` rồi `wsl --shutdown` bên Windows |
+| `Could not access KVM kernel module: No such device` | **máy này không có KVM thật** — xem mục dưới | dùng `~/cavos-qemu.sh` (bỏ `-enable-kvm`) |
+| `sudo -v` gõ ở terminal khác vẫn bị hỏi lại mật khẩu | Ubuntu đặt `timestamp_type=tty`, cache gắn với đúng terminal đó | gõ `sudo -v` và `make disk` **trong cùng một terminal** |
+| `sudo: timed out` giữa `make disk` | bước `ports` hỏi mật khẩu muộn | `sudo -v` ngay trước |
+| `tar` thiếu file (vd `opcode/i386.h`) | giải nén trên `/mnt` (9p) | build trong `~`, xem [[Dựng môi trường chung]] |
+| `env: bash\r` | script `.sh` bị CRLF do nằm ổ Windows | build trong `~` |
+| `Error relocating /bin/bash` | rootfs `target/` copy qua `/mnt` nên hỏng | bootstrap sạch trong `~` |
+

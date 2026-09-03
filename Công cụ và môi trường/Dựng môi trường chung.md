@@ -102,9 +102,3 @@ môi trường chung (note này)
 ```
 
 Hai nhánh **độc lập**: lab chạy được ngay cả khi cavOS chưa `make tools` xong, và ngược lại.
-
-## Tiến độ trên máy này
-
-- [x] WSL `Ubuntu-26.04`, user `tmniosc`
-- [x] Gói dùng chung đã cài
-- [x] Vault ở `D:\tmniosc\cavos_notes`, đã có remote GitHub
