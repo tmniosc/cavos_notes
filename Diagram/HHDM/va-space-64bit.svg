@@ -1,0 +1,43 @@
+<svg width="100%" viewBox="0 0 720 396" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>.lbl{fill:#5c5a52;} .mono{font-family:'SF Mono',Consolas,monospace;} .tline{stroke:#c7c4ba;} .flow{ stroke:#8C8A82; }
+  @media (prefers-color-scheme: dark){ .lbl{fill:#c2c0b6;} .tline{stroke:rgba(222,220,209,0.3);} .flow{stroke:#7d7b73;} }</style>
+</defs>
+
+<text x="380" y="24" text-anchor="middle" class="lbl" font-size="10">64-bit virtual address space — 4-level paging, 48 usable bits</text>
+
+<!-- addresses on the left -->
+<text x="188" y="58" text-anchor="end" class="lbl mono" font-size="9">0x0000000000000000</text>
+<text x="188" y="116" text-anchor="end" class="lbl mono" font-size="9">0x00007fffffffffff</text>
+<text x="188" y="186" text-anchor="end" class="lbl mono" font-size="9">0xffff800000000000</text>
+<text x="188" y="274" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80000000</text>
+<text x="188" y="336" text-anchor="end" class="lbl mono" font-size="9">0xffffffffffffffff</text>
+
+<!-- low half -->
+<rect x="198" y="44" width="420" height="76" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="214" y="70" fill="#B5D4F4" font-size="11.5" font-weight="600">Lower half — user space</text>
+<text x="214" y="90" fill="#85B7EB" font-size="9">each process gets its own mapping here</text>
+<text x="214" y="107" fill="#85B7EB" font-size="9">128 TiB</text>
+
+<!-- canonical hole -->
+<rect x="198" y="126" width="420" height="46" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="214" y="146" fill="#D3D1C7" font-size="11" font-weight="600">non-canonical hole</text>
+<text x="214" y="163" fill="#B4B2A9" font-size="9">bits 63..48 must copy bit 47 — anything else faults</text>
+
+<!-- HHDM -->
+<rect x="198" y="178" width="420" height="82" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="214" y="202" fill="#C6E7CC" font-size="11.5" font-weight="600">HHDM — every physical byte, mapped once</text>
+<text x="214" y="222" fill="#8FC79A" font-size="9" class="mono">VA = PA + hhdmOffset</text>
+<text x="214" y="240" fill="#8FC79A" font-size="9">phys 0 lands at the offset; phys N at offset + N</text>
+
+<!-- kernel -->
+<rect x="198" y="266" width="420" height="60" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="214" y="290" fill="#F0DBAE" font-size="11.5" font-weight="600">kernel image</text>
+<text x="214" y="308" fill="#D8A54A" font-size="9">top 2 GiB — its own mapping, separate from HHDM</text>
+
+<text x="380" y="356" text-anchor="middle" class="lbl" font-size="9">a kernel frame is reachable two ways: through HHDM and through the kernel mapping</text>
+<text x="380" y="372" text-anchor="middle" class="lbl" font-size="9">two virtual addresses, one physical frame — that is aliasing</text>
+</svg>

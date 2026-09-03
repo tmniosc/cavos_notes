@@ -27,19 +27,7 @@ bootloader.rsdp = (size_t)rsdp_response->address - bootloader.hhdmOffset;
 ```
 
 ## Sơ đồ
-```
-Không gian ảo 64-bit:
-  0x0000_0000_0000_0000 ┐
-        ... userspace ...│  nửa thấp
-  0x0000_7fff_ffff_ffff ┘
-        (lỗ canonical)
-  0xffff_8000_0000_0000 ┐  nửa cao
-        HHDM: phys 0 → hhdmOffset
-              phys N → hhdmOffset + N
-        ...
-  0xffffffff80000000     │  ← kernel ([[Higher-Half Kernel]])
-  0xffff_ffff_ffff_ffff ┘
-```
+![[va-space-64bit.svg]]
 
 ## CR3 vs HHDM — ai làm gì (đừng nhầm!)
 HHDM **không thay thế** paging. CR3 + paging vẫn **luôn chạy**; HHDM chỉ là **một vùng được map sẵn

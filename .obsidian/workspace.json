@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
+                "file": "Lý thuyết/Khái niệm/GDT.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Dựng môi trường oskernel-lab"
+              "title": "GDT"
             }
           }
         ]
@@ -158,7 +158,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
+                "file": "Lý thuyết/Khái niệm/GDT.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -187,10 +187,21 @@
   },
   "active": "b8acf3f3438b753a",
   "lastOpenFiles": [
-    "Công cụ và môi trường/Công cụ và môi trường.md",
-    "Công cụ và môi trường/Cẩm nang build & debug.md",
-    "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
+    "Diagram/Paging/page-walk-4-level.svg",
+    "Diagram/Paging/page-walk-4-level.svg.tmp.7216.86068fcb20d5",
+    "Diagram/Paging",
+    "Diagram/HHDM/va-space-64bit.svg",
+    "Diagram/HHDM/va-space-64bit.svg.tmp.7216.6763f08873ae",
+    "Diagram/HHDM",
+    "CLAUDE.md.tmp.7216.c574fb05e9ea",
     "Lý thuyết/Khái niệm/Cấu trúc os.img.md",
+    "CLAUDE.md",
+    "Thực hành/Thực hành.md",
+    "Thực hành/Lab 0x00 - Hello Serial.md",
+    "Công cụ và môi trường/Cẩm nang build & debug.md",
+    "Công cụ và môi trường/Công cụ và môi trường.md",
+    "Công cụ và môi trường/Dựng môi trường cavOS.md",
+    "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
     "Lý thuyết/Khái niệm/GDT.md",
     "Diagram/Cấu trúc os.img/lab-build-pipeline.svg",
     "Diagram/Cấu trúc os.img/osimg-layout.svg",
@@ -203,7 +214,6 @@
     "Lý thuyết/Steps/Step 02 - Bootloader Parser.md",
     "Lý thuyết/Steps/Step 01 - Serial UART.md",
     "Lý thuyết/Lý thuyết.md",
-    "Thực hành/Thực hành.md",
     "Thực hành/Lab 0x03 - PMM & VMM.md",
     "Thực hành/Lab 0x02 - Framebuffer.md",
     "Thực hành/Lab 0x01 - Bootloader Parser.md",
@@ -213,20 +223,12 @@
     "Diagram/Cẩm nang build & debug/osimg-layout.svg.tmp.7216.fd4518bb9619",
     "Diagram/Cẩm nang build & debug",
     "Diagram/Dựng môi trường cavOS/cavos-disk-chain.svg",
-    "Diagram/Dựng môi trường cavOS/cavos-disk-chain.svg.tmp.7216.00999ee169f4",
-    "Diagram/Dựng môi trường cavOS",
     "Diagram/Dựng môi trường chung/env-branches.svg",
-    "Diagram/Dựng môi trường chung/env-branches.svg.tmp.7216.df600fc26cf3",
-    "Diagram/Dựng môi trường chung",
-    "Diagram",
     "Thực hành/src/oskernel-lab/README.md",
-    "Công cụ và môi trường/Dựng môi trường cavOS.md",
     "Công cụ và môi trường/Dựng môi trường chung.md",
     "Home.md",
     "Lý thuyết/Steps/Boot Flow (_start).md",
     "Lý thuyết/Boot Flow (_start).md",
-    "Lý thuyết/Tài liệu gốc/Intel SDM.md",
-    "Lý thuyết/Tài liệu gốc/Danh mục tài liệu.md",
-    "Công cụ và môi trường/Khôi phục source (2026-09-03).md"
+    "Lý thuyết/Tài liệu gốc/Intel SDM.md"
   ]
 }

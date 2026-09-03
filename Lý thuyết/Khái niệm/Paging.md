@@ -114,34 +114,7 @@ VA = 0x0000_0080_8060_4A30
 
 Đi qua 4 bảng — **bảng giữa chỉ "chỉ đường tới bảng sau", riêng PT cho ra khung vật lý thật + bit quyền**:
 
-```
- CR3 = 0x1000  (trỏ gốc PML4)
-   │
-   ▼  PML4 (phys 0x1000), lấy entry số 1
- ┌──────── PML4 ────────┐
- │ ► 1 ◄ │ 0x2000 ─PDPT │   ← PML4i = 1
- └──────────────────────┘
-   │
-   ▼  PDPT (0x2000), entry số 2
- ┌──────── PDPT ────────┐
- │ ► 2 ◄ │ 0x3000 ─PD   │   ← PDPTi = 2
- └──────────────────────┘
-   │
-   ▼  PD (0x3000), entry số 3
- ┌──────── PD ──────────┐
- │ ► 3 ◄ │ 0x4000 ─PT   │   ← PDi = 3
- └──────────────────────┘
-   │
-   ▼  PT (0x4000), entry số 4  → ra KHUNG + quyền
- ┌──────────── PT ──────────────┐
- │ index │  KHUNG (PFN) │ quyền │
- │   3   │  0x0AAAA     │ R W   │
- │ ► 4 ◄ │  0x0FFB2     │ R   X │   ← PTi = 4
- │   5   │  0x0CCCC     │ R     │
- └──────────────────────────────┘
-   │
-   ▼  PFN = 0x0FFB2  (chưa có offset)
-```
+![[page-walk-4-level.svg]]
 
 Ghép khung + offset (offset **chép thẳng** từ VA, không tra bảng):
 
@@ -153,16 +126,7 @@ Ghép khung + offset (offset **chép thẳng** từ VA, không tra bảng):
 
 Toàn cảnh — cái gì đổi, cái gì giữ nguyên:
 
-```
-VA =  [001][002][003][004][ A30 ]
-        │    │    │    │     │
-        │    │    │    │     └────────────► chép thẳng ─┐
-        └────┴────┴────┴── 4 lần tra bảng              │
-                              ▼                          ▼
-                          PFN 0x0FFB2 ─────────►  PA = 0x0FFB2 A30
-                                                        └──┬──┘└─┬─┘
-                                                        đã dịch  y hệt VA
-```
+![[va-split-to-pa.svg]]
 
 - **36 bit trên của VA** (4 nhóm 9-bit) → qua 4 bảng → thành **PFN** của PA.
 - **12 bit offset** → **không tra bảng, chép nguyên** sang PA.

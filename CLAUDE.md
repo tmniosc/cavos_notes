@@ -1,7 +1,8 @@
 # CLAUDE.md — cavOS Study Vault (context + bộ nhớ)
 
 > Vault ghi chú học **cavOS** (hobby OS x86_64). File này tự nạp khi mở Claude tại thư mục này —
-> đọc đầu mỗi phiên để khôi phục context. Điều hướng: [[Home]] móc tới 3 trang chỉ mục — [[Lý thuyết]] · [[Thực hành]] · [[Công cụ và môi trường]].
+> đọc đầu mỗi phiên để khôi phục context.
+> Điều hướng: [[Home]] → [[Lý thuyết]] · [[Thực hành]] · [[Công cụ và môi trường]].
 
 ## Ngôn ngữ
 **Trả lời bằng tiếng Việt.**
@@ -11,101 +12,76 @@
 datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem [[Boot Flow (_start)]]).
 
 ## Vị trí (RẤT QUAN TRỌNG)
-| Thứ                                                     | Đường dẫn                                              |
-| ------------------------------------------------------- | ------------------------------------------------------ |
-| **Vault ghi chú** (file này) — Windows ⭐ vault Claude CLI mở | `D:\tmniosc\cavos_notes` ← bản chính chủ duy nhất, là CWD khi chạy `claude` |
-| Vault trên GitHub                                       | `https://github.com/tmniosc/cavos_notes` (remote `origin`) |
-| **Bản lưu source lab** (chỉ để backup/push, KHÔNG build ở đây) | `D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab`   |
-| **Source code cavOS** — trong **WSL** (KHÔNG di chuyển) | `~/cavOS` — clone từ `github.com/malwarepad/cavOS` |
-| **Source lab** — trong **WSL**                          | `~/oskernel-lab` — chép từ `Thực hành/src/oskernel-lab`     |
-| Cross toolchain                                         | `~/opt/cross/bin/x86_64-cavos-gcc` (dựng bằng `make tools`) |
-| Limine binary                                           | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
+| Thứ | Đường dẫn |
+| --- | --- |
+| **Vault ghi chú** (file này) — Windows | `D:\tmniosc\cavos_notes` — CWD khi chạy `claude` |
+| Vault trên GitHub | `github.com/tmniosc/cavos_notes` (remote `origin`) |
+| **Bản lưu source lab** (backup/push, KHÔNG build ở đây) | `D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab` |
+| **Source cavOS** — trong WSL | `~/cavOS` — clone từ `github.com/malwarepad/cavOS` |
+| **Source lab** — trong WSL | `~/oskernel-lab` — chép từ `Thực hành/src/oskernel-lab` |
+| Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` (GCC 11.4.0, dựng bằng `make tools`) |
+| Limine binary | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
 
-WSL2 **Ubuntu-26.04**, user `tmniosc` → `/home/tmniosc`. Claude chạy phía Windows →
-truy cập WSL qua `wsl.exe` hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
-`sudo` **hỏi mật khẩu** → lệnh `sudo` phải do user tự chạy.
+WSL2 **Ubuntu-26.04**, user `tmniosc` → `/home/tmniosc`. Claude chạy phía Windows → vào WSL qua `wsl.exe`
+hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
 
-> Dựng môi trường từ số 0: [[Dựng môi trường chung]] (nền) → rồi rẽ [[Dựng môi trường cavOS]]
-> hoặc [[Dựng môi trường oskernel-lab]].
+## Quy tắc chạy lệnh
+- **Build trong `~` (ext4), TUYỆT ĐỐI không trên `/mnt/c` `/mnt/d`** — `/mnt` là 9p nên `tar` rớt file,
+  và ổ Windows biến `.sh` thành CRLF (`env: bash\r`). Chép `/mnt` → `~` là 1 chiều, chỉ file text.
+- **`sudo` hỏi mật khẩu, cache gắn theo tty** → mọi lệnh `sudo` để user tự chạy; `sudo -v` gõ ở terminal
+  khác không dùng chung được.
+- `make tools` chạy **1 lần**. Vòng lặp thường ngày: `make disk && make qemu`.
+- **Máy này không có KVM** (Windows 10 → WSL2 không có nested virt): `make qemu` chết với `ENODEV`,
+  dùng `~/cavos-qemu.sh` thay thế.
+- Bảng lỗi đầy đủ + cách dựng từ máy trắng: [[Dựng môi trường chung]] → [[Dựng môi trường cavOS]] /
+  [[Dựng môi trường oskernel-lab]]. Lệnh hằng ngày: [[Cẩm nang build & debug]].
 
-## Cấu trúc thư mục vault (chia 2026-05-31)
-```
-cavos_notes/
-├─ CLAUDE.md · Home.md                    ← gốc; Home chỉ móc tới 3 trang chỉ mục
-├─ Lý thuyết/
-│   ├─ Lý thuyết.md                       ← CHỈ MỤC: bảng Step, khái niệm, tài liệu
-│   ├─ Steps/        Boot Flow (_start).md (bản đồ) + Step 00 → 17
-│   ├─ Khái niệm/    Paging, Limine Protocol, HHDM, Higher-Half, Long Mode, KASLR, Request-Response
-│   └─ Tài liệu gốc/ Danh mục tài liệu, Intel SDM, UART 16550
-├─ Thực hành/
-│   ├─ Thực hành.md                       ← CHỈ MỤC: bảng lab, nguyên tắc, cách chạy
-│   ├─ Lab 0x00 → 0x03
-│   ├─ outputs/      output QEMU thật
-│   └─ src/          SOURCE LAB (bản lưu; .gitattributes ép LF ngay trong đó)
-└─ Công cụ và môi trường/
-    ├─ Công cụ và môi trường.md           ← CHỈ MỤC
-    ├─ Dựng môi trường chung / cavOS / oskernel-lab
-    └─ Cẩm nang build & debug
-```
-> Chia đôi **Lý thuyết / Thực hành**: đọc hiểu ở một bên, tự viết chạy được ở bên kia.
-> Tên thư mục + note mô tả để **tiếng Việt**; tên thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
-> `Thực hành/src/oskernel-lab/` = **bản lưu source lab**. Chỉ để backup + push GitHub, **KHÔNG build ở đó**.
-> `.gitattributes` nằm ngay trong thư mục đó, ép toàn bộ file về **LF** (CRLF → lỗi `env: bash\r`).
-> Wikilink `[[...]]` phân giải theo **tên file** → chia thư mục KHÔNG làm hỏng link.
+## Quy ước vault
+- 3 khu: **Lý thuyết** (đọc hiểu) · **Thực hành** (tự viết chạy được) · **Công cụ và môi trường**.
+  Mỗi khu có 1 trang chỉ mục cùng tên nằm trong chính khu đó.
+- Tên thư mục + note mô tả để **tiếng Việt**; tên thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
+- Wikilink `[[...]]` phân giải theo **tên file** → dời thư mục KHÔNG làm hỏng link, nhưng **tên file phải
+  duy nhất toàn vault**.
+- **KHÔNG dùng emoji/icon trong note.** Heading trần (`## Mục đích`), callout `> [!warning]` không gắn hình.
+  Note cũ còn icon thì dọn khi nào sửa tới. Mũi tên `→`, ký tự vẽ bảng `├─►`, tick `[x]` không tính là icon.
+- Sơ đồ ASCII → SVG theo skill `dark-native-diagrams`, lưu ở `Diagram/<Tên note>/`, nhúng `![[tên.svg]]`.
+  **Giữ nguyên** cây thư mục và code fence — chỉ chuyển sơ đồ thật.
 
-## Quy ước làm việc
-- **Đọc code** trong WSL (`~/cavOS`, hoặc UNC từ Windows). **Ghi note** vào vault này trên D: (đường dẫn Windows).
-- Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật note step tương ứng (`status: done`),
-  cập nhật bảng Step trong [[Lý thuyết]] và mục "Tiến độ" bên dưới.
-- Dùng wikilink `[[...]]` và tags như các note hiện có.
-- **KHÔNG dùng emoji/icon trong note** (user không thích). Note viết thuần chữ;
-  heading là `## Mục đích`, `## Nói thật đơn giản`, không gắn icon. Callout thì dùng `> [!warning]` /
-  `> [!note]` trần, không thêm hình. Note cũ còn icon thì dọn dần khi nào sửa tới, đừng thêm icon mới.
-  Mũi tên `→`, ký tự vẽ bảng `├─►`, dấu tick `[x]` **không phải icon** — vẫn dùng bình thường.
+## Quy ước viết note
+- **Đọc code** trong WSL. **Ghi note** vào vault trên D:.
+- Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật note step (`status: done`), cập nhật bảng Step
+  trong [[Lý thuyết]] và mục "Tiến độ học" bên dưới.
 - **Mỗi note step có 2 mục cố định gần đầu:** `## Mục đích` (step này để làm gì, link chéo step phụ thuộc)
-  và `### Nói thật đơn giản` — **tóm tắt TOÀN BÀI** bằng ngôn ngữ đời thường (ẩn dụ, không thuật ngữ):
-  đi qua hết các ý chính của step, chỗ nào quá kỹ thuật (bit cờ, macro, asm) thì lướt/bỏ. Người đọc chỉ cần
-  đọc mục này là hiểu step làm gì & vì sao.
-- **MỌI mục con (`##`) đều mở đầu bằng 1 câu *in nghiêng* giải thích đời thường** ("> *…*" hoặc `_…_`)
-  trước khi vào code/chi tiết. User là người mới → mỗi mục phải đọc-là-hiểu, không chỉ riêng mục Nói thật đơn giản.
-  Code/bit/asm vẫn giữ, nhưng luôn có câu dẫn dễ hiểu ở trên.
-  Phần kỹ thuật chi tiết để bên dưới. Giữ đúng 2 mục này cho mọi step khi điền.
-- **Lab gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (xem bảng trong [[Thực hành]]). Lab phải
-  **build + boot QEMU thật** rồi mới chép output vào note — KHÔNG bịa output/bài học (đã từng sai, xem
-  [[Lab 0x03 - PMM & VMM]] "Ghi chú trung thực").
-- **Lab TÁCH MODULE từ Lab 0x02 trở đi**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}`...
-  + `kernel.c` (chỉ orchestrate). `GNUmakefile` khai `SRCS := kernel.c <module>.c ...` (common.mk tự build).
-  **String output trong code để TIẾNG ANH**; comment giải thích tiếng Việt OK. Bám sát cách cavOS thật làm,
-  KHÔNG tự chế khác (vd PMM tính `mmTotal` = cộng dồn length ≠ RESERVED, y `bootloader.c`).
-- **BACKUP SOURCE LAB:** mỗi khi sửa code trong `~/oskernel-lab`, chép ngược về
-  `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ DUY NHẤT được đẩy lên GitHub →
-  cái gì không nằm trong vault thì không có bản sao nào.
+  và `## Nói thật đơn giản` — tóm tắt **toàn bài** bằng ngôn ngữ đời thường, có ẩn dụ, lướt chỗ quá kỹ
+  thuật. Đọc riêng mục này là hiểu step làm gì và vì sao.
+- **Mọi mục `##` mở đầu bằng 1 câu in nghiêng đời thường** (`> _…_`) trước khi vào code/chi tiết —
+  user là người mới, mỗi mục phải đọc-là-hiểu. Chi tiết kỹ thuật để bên dưới.
 
-## Bài học build (đừng lặp lại)
-- **CHỈ build trong `~/cavOS` (ext4 native).** TUYỆT ĐỐI không build trên `/mnt/c` `/mnt/d`:
-  - `/mnt` là 9p → `tar` rớt file (vd `opcode/i386.h`), build hỏng.
-  - ổ Windows + `core.autocrlf=true` → script `.sh` thành CRLF → lỗi `env: bash\r`.
-  - copy rootfs `target/` qua `/mnt` → hỏng (lỗi `Error relocating /bin/bash` readline).
-- `make tools` chạy **1 lần** (lâu). Vòng lặp thường ngày: `make disk && make qemu`.
-- `make disk` cần **sudo** ở bước `ports` (bootstrap Alpine) → chạy `sudo -v` trước, kẻo `sudo: timed out`.
-- Chi tiết: [[Cẩm nang build & debug]].
+## Quy ước lab
+- **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (bảng trong [[Thực hành]]).
+- **Build + boot QEMU thật rồi mới chép output vào note** — KHÔNG bịa output/bài học
+  (đã từng sai, xem [[Lab 0x03 - PMM & VMM]] "Ghi chú trung thực").
+- **Tách module từ Lab 0x02 trở đi**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}` +
+  `kernel.c` chỉ orchestrate; `GNUmakefile` khai `SRCS := ...`. **String in ra để tiếng Anh**, comment
+  tiếng Việt. Bám cách cavOS thật làm, KHÔNG tự chế khác (vd `mmTotal` = cộng dồn length ≠ RESERVED).
+- **Sửa code xong chép ngược** về `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ duy nhất
+  lên GitHub → cái gì không nằm trong vault thì không có bản sao nào.
 
 ## Tiến độ học
-- [x] [[Step 00 - Boot & Limine]] — xong (link.ld, _start, Limine protocol)
-- [x] [[Step 01 - Serial UART]] — xong (16550, COM1)
-- [x] [[Step 02 - Bootloader Parser]] — xong (6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP)
-- [x] [[Step 03 - Framebuffer & Console]] — xong (Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ)
-- [x] [[Step 04 - Physical Memory Manager]] — xong (bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented)
-- [x] [[Step 05 - Virtual Memory & Paging]] — xong (TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng)
-- [x] [[Step 06 - GDT & TSS]] — xong (long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST)
-- [ ] [[Step 07 - ACPI]] ← **tiếp theo**
+- [x] [[Step 00 - Boot & Limine]] — link.ld, _start, Limine protocol
+- [x] [[Step 01 - Serial UART]] — 16550, COM1
+- [x] [[Step 02 - Bootloader Parser]] — 6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP
+- [x] [[Step 03 - Framebuffer & Console]] — Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ
+- [x] [[Step 04 - Physical Memory Manager]] — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
+- [x] [[Step 05 - Virtual Memory & Paging]] — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
+- [x] [[Step 06 - GDT & TSS]] — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
+- [ ] [[Step 07 - ACPI]] ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
 - [ ] Step 08 → 17: khung sẵn trong vault, điền dần.
 
-> Note nền tảng: [[Paging]] — 5 ý cốt lõi để đọc link.ld/memmap/HHDM (nạp trước Step 03).
-> Thực hành song song: [[Lab 0x00 - Hello Serial]] (gộp Step 00+01) tại `~/oskernel-lab`.
+> Nạp trước Step 03: [[Paging]] — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 
 ## Quyết định đã chốt
-- Dùng **vault Obsidian** (nhiều note liên kết) cho nội dung học; **memory + context gộp vào CLAUDE.md này** (1 file).
-- Vault để trên **D: (Windows)**; code để trong **WSL**.
+- Nội dung học ở **vault Obsidian**; **context + bộ nhớ gộp vào CLAUDE.md này** (1 file).
+- Vault trên **D: (Windows)**; code trong **WSL**.
 - **Source lab backup trong vault** (`Thực hành/src/`) và push GitHub.
 - Lab dùng **Limine v8.x-binary** + `limine.h` của cavOS (base revision 2), KHÔNG lên v9+.
