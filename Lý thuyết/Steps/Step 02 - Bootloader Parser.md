@@ -94,5 +94,5 @@ typedef struct Bootloader {
 - `hhdmOffset` điển hình `0xffff800000000000` — xem [[Paging]] ý #5.
 
 ## Ánh xạ spec
-- Limine protocol (struct request/response, memmap types): [[Spec Library]].
+- Limine protocol (struct request/response, memmap types): [[Danh mục tài liệu]].
 - ACPI RSDP: [[Step 07 - ACPI]], spec ACPI.

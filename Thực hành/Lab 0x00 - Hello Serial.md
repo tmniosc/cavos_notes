@@ -10,7 +10,7 @@ Vị trí: `~/oskernel-lab/00-hello-serial/` (máy cũ để ngay ở gốc `~/o
 
 > [!note] Source viết lại & đã chạy lại (2026-09-03)
 > Bản gốc mất cùng máy cũ → source hiện tại **viết lại từ chính note này**, lưu ở
-> `Labs/src/oskernel-lab/00-hello-serial/`. Đã **build + boot QEMU thật lại** trên máy mới:
+> `Thực hành/src/oskernel-lab/00-hello-serial/`. Đã **build + boot QEMU thật lại** trên máy mới:
 > serial in đúng `Hello Serial`, và `kernel.map` khớp y bài học (xem mục "4 file phân tích build").
 > Toolchain lần chạy này là **gcc hệ thống** (cross `x86_64-cavos-gcc` chưa dựng xong).
 
@@ -30,7 +30,7 @@ Vị trí: `~/oskernel-lab/00-hello-serial/` (máy cũ để ngay ở gốc `~/o
 - `.limine_requests` gói trong `KEEP(*(.limine_requests))` (nằm trong `:rodata`) để Limine quét magic,
   `KEEP` chống linker GC bỏ section (chưa ai tham chiếu trực tiếp) — xem [[Request-Response Mechanism]].
 - `limine.conf` + `limine bios-install` → đóng gói vào `os.img` (ảnh đĩa MBR + FAT32 + Limine,
-  dựng bằng `scripts/mkimage.sh`) — **cấu trúc os.img**: xem [[Build & Debug Cheatsheet]].
+  dựng bằng `scripts/mkimage.sh`) — **cấu trúc os.img**: xem [[Cẩm nang build & debug]].
 - `serial.c`: `outb/inb`, init COM1, `serial_putc` chờ LSR bit5 (THRE).
 
 ## Kết quả
@@ -78,4 +78,4 @@ LOAD 0xffffffff80002000 ... RW      ← .data/.bss: đọc + ghi, không thực 
 
 ## Liên hệ
 - Lý thuyết: [[Step 00 - Boot & Limine]], [[Step 01 - Serial UART]].
-- Build/QEMU: [[Build & Debug Cheatsheet]].
+- Build/QEMU: [[Cẩm nang build & debug]].

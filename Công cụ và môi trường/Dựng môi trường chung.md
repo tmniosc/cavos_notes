@@ -9,7 +9,7 @@ status: đang làm
 > đều cần, và quy tắc vàng "build ở đâu". Làm xong note này rồi mới rẽ nhánh._
 
 Rẽ nhánh: [[Dựng môi trường cavOS]] (đọc code người ta) · [[Dựng môi trường oskernel-lab]] (code tự viết)
-Liên quan: [[Build & Debug Cheatsheet]] · [[Khôi phục source (2026-09-03)]] · [[Home]]
+Liên quan: [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]] · [[Home]]
 
 ## Nói thật đơn giản
 
@@ -34,7 +34,7 @@ Ba thứ cần nắm:
 | Vault trên GitHub | `github.com/tmniosc/cavos_notes` | remote `origin` |
 | **Source cavOS** | `~/cavOS` | [[Dựng môi trường cavOS]] |
 | **Source lab** | `~/oskernel-lab` | [[Dựng môi trường oskernel-lab]] |
-| Bản lưu source lab | vault `Labs/src/oskernel-lab/` | chỉ để backup + push, **không build ở đó** |
+| Bản lưu source lab | vault `Thực hành/src/oskernel-lab/` | chỉ để backup + push, **không build ở đó** |
 | Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` | chỉ cavOS bắt buộc |
 | Limine binary | `~/opt/limine` | chỉ lab dùng |
 
@@ -61,7 +61,7 @@ Hệ quả cho cách làm việc:
 - **Đọc/sửa code + build**: trong WSL (`~`).
 - **Ghi note**: vault bên D:.
 - **Chép qua `/mnt` chỉ 1 chiều, chỉ file text nhỏ** (vault → WSL). Không giải nén, không build ở đó.
-- Vault có `.gitattributes` ép `Labs/src/**` luôn **LF** để lần chép ngược không dính CRLF.
+- Vault có `.gitattributes` ép `Thực hành/src/**` luôn **LF** để lần chép ngược không dính CRLF.
 
 ## Gói dùng chung
 
@@ -97,7 +97,7 @@ môi trường chung (note này)
         ├─► cavOS  : + gói build cross-compiler ─► make tools ─► make disk ─► make qemu
         │            [[Dựng môi trường cavOS]]
         │
-        └─► lab    : + mtools + Limine v8.x ────► cp Labs/src ─► make run
+        └─► lab    : + mtools + Limine v8.x ────► cp Thực hành/src ─► make run
                      [[Dựng môi trường oskernel-lab]]
 ```
 

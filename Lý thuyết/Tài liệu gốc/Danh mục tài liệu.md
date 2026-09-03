@@ -2,7 +2,9 @@
 tags: [moc, spec]
 ---
 
-# 📖 Spec Library
+# Danh mục tài liệu
+
+> _Bảng tra: học phần nào thì mở tài liệu gốc nào, và lấy ở đâu._
 
 x86 PC **không có một TRM duy nhất** như SoC ARM — nó là tổ hợp nhiều spec.
 

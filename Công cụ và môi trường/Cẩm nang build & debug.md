@@ -2,7 +2,7 @@
 tags: [reference, build]
 ---
 
-# Build & Debug Cheatsheet
+# Cẩm nang build & debug
 
 Repo: `~/cavOS` (trong WSL native fs — **không** dùng `/mnt/d`).
 
@@ -144,13 +144,13 @@ xxd -s 510 -l 2 os.img          # chữ ký boot 55 AA
 ```
 
 ## Dựng lại lab trên máy trắng (từ bản lưu trong vault)
-> _Source lab giờ được cất trong chính vault (`Labs/src/`). Máy mới chỉ cần chép sang WSL + cài vài gói._
+> _Source lab giờ được cất trong chính vault (`Thực hành/src/`). Máy mới chỉ cần chép sang WSL + cài vài gói._
 
 ```bash
 sudo apt install -y build-essential qemu-system-x86 mtools parted xorriso git
 git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
 make -C ~/opt/limine
-cp -r "/mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab" ~/oskernel-lab
+cp -r "/mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab" ~/oskernel-lab
 cd ~/oskernel-lab/00-hello-serial && make info && make run
 ```
 - **`v8.x-binary`, KHÔNG v9+**: từ Limine 9, `kernel_path` đổi tên và `LIMINE_KERNEL_ADDRESS_REQUEST` bị thay

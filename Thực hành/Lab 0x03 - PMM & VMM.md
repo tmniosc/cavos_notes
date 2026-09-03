@@ -11,7 +11,7 @@ status: done
 **Vị trí:** `~/oskernel-lab/03-pmm-vmm/` · base revision **2**. **Chạy:** `make run`.
 
 > [!note] Source viết lại & đã chạy lại (2026-09-03) — CÓ SỬA 1 BUG
-> Source hiện tại viết lại từ note → `Labs/src/oskernel-lab/03-pmm-vmm/`, **đã boot QEMU thật lại**.
+> Source hiện tại viết lại từ note → `Thực hành/src/oskernel-lab/03-pmm-vmm/`, **đã boot QEMU thật lại**.
 > Bản cũ đánh dấu **thiếu 1 frame** của bitmap: bitmap 8301 B tại `0x60000` trải 3 frame
 > (`0x60000/0x61000/0x62000`) nhưng chỉ mark 2 → `pmm_alloc` phát ra chính `0x62000` **đang chứa 109 byte
 > cuối của bitmap**. Không sập vì PML4 mới chỉ dùng entry 192/256/511 (offset từ 1536 byte trở đi) → may
@@ -253,4 +253,4 @@ Ghi `0xdeadbeefcafebabe` qua **VA mới** `0x600000000000` (map → PA `0x63000`
 
 ## Liên hệ
 - Lý thuyết: [[Step 04 - Physical Memory Manager]], [[Step 05 - Virtual Memory & Paging]] · nền [[Paging]], [[HHDM]].
-- Build/os.img: [[Build & Debug Cheatsheet]].
+- Build/os.img: [[Cẩm nang build & debug]].

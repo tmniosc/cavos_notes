@@ -11,7 +11,7 @@ status: done
 **Vị trí:** `~/oskernel-lab/02-framebuffer/` · base revision **2** (khớp cavOS).
 
 > [!note] Source viết lại & đã chạy lại (2026-09-03)
-> Source hiện tại viết lại từ note → `Labs/src/oskernel-lab/02-framebuffer/`, **đã boot QEMU thật lại**:
+> Source hiện tại viết lại từ note → `Thực hành/src/oskernel-lab/02-framebuffer/`, **đã boot QEMU thật lại**:
 > output serial **trùng từng dòng** với lần chạy 2026-06-01 bên dưới (fb `0xffff8000fd000000`,
 > 1280x800, pitch 5120). Hợp lý — framebuffer là MMIO ở địa chỉ cố định, không đổi theo KASLR như
 > `phys_base` của kernel ([[Lab 0x01 - Bootloader Parser]]).
@@ -72,4 +72,4 @@ qua HHDM ([[HHDM]] mục "dùng VA nào"). Cùng một bài học, hai lab xác 
 
 ## Liên hệ
 - Lý thuyết: [[Step 03 - Framebuffer & Console]] · nền tảng [[HHDM]].
-- Build/os.img: [[Build & Debug Cheatsheet]].
+- Build/os.img: [[Cẩm nang build & debug]].

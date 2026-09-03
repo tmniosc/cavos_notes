@@ -7,16 +7,16 @@ status: tạm - sẽ xoá
 
 > [!warning] NOTE TẠM - SẼ XOÁ
 > Note này chỉ sống trong lúc khôi phục. **Xoá khi mục "Việc còn lại" ở cuối tick hết**
-> (đã build cavOS + boot 4 lab + chép output thật + push `Labs/src/` lên GitHub).
+> (đã build cavOS + boot 4 lab + chép output thật + push `Thực hành/src/` lên GitHub).
 > Thứ cần giữ lại lâu dài đã nằm ở [[Dựng môi trường chung]] + [[Dựng môi trường cavOS]] +
 > [[Dựng môi trường oskernel-lab]] (cách dựng) và [[CLAUDE]] (quy ước backup).
-> Khi xoá nhớ gỡ luôn link trong [[Home]], [[CLAUDE]], [[Build & Debug Cheatsheet]] và 4 note Lab.
+> Khi xoá nhớ gỡ luôn link trong [[Home]], [[CLAUDE]], [[Cẩm nang build & debug]] và 4 note Lab.
 
 > _Toàn bộ source code (cavOS + lab) đã mất cùng cái máy cũ. Note này ghi lại: mất những gì,
 > tìm ở đâu, khôi phục bằng cách nào, và chỗ nào **không** khôi phục nguyên bản được._
 
 Liên quan: [[Dựng môi trường chung]] · [[Dựng môi trường cavOS]] · [[Dựng môi trường oskernel-lab]] ·
-[[Build & Debug Cheatsheet]] · [[Home]] · [[CLAUDE]] ·
+[[Cẩm nang build & debug]] · [[Home]] · [[CLAUDE]] ·
 các note [[Lab 0x00 - Hello Serial]] → [[Lab 0x03 - PMM & VMM]].
 
 ## Nói thật đơn giản
@@ -33,7 +33,7 @@ Có 2 loại "bài tập" và số phận khác nhau:
   chi tiết: nội dung đúng ý cũ, nhưng từng câu chữ chắc chắn không giống hệt bản gốc.
 
 Rút ra: **vở còn thì làm lại được, nhưng làm lại tốn công**. Từ nay bài tập cũng phải cất lên GitHub như vở —
-đó là lý do có thư mục `Labs/src/` trong vault.
+đó là lý do có thư mục `Thực hành/src/` trong vault.
 
 ## Đã tìm ở đâu (bằng chứng là thật sự không còn backup)
 
@@ -60,7 +60,7 @@ Rút ra: **vở còn thì làm lại được, nhưng làm lại tốn công**. 
 | Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` (GCC 11.4.0) | chưa có — dựng lại bằng `make tools` |
 | Repo gốc cũ ổ D | `D:\1ABC\@TMNIOSC\...\baremetal\cavOS` | không còn |
 
-> Mọi chỗ trong vault còn ghi `/home/tmnvi/...` (nhất là [[Build & Debug Cheatsheet]] mục cross tools)
+> Mọi chỗ trong vault còn ghi `/home/tmnvi/...` (nhất là [[Cẩm nang build & debug]] mục cross tools)
 > đều phải sửa lại theo user mới. `common.mk` bản dựng lại **không hard-code** nữa mà dùng `$(HOME)`.
 
 ## 1. cavOS — clone lại, nguyên bản 100%
@@ -70,7 +70,7 @@ Rút ra: **vở còn thì làm lại được, nhưng làm lại tốn công**. 
 - Nguồn: `https://github.com/malwarepad/cavOS` (branch `master`).
 - Cỡ: ~13 MB đủ lịch sử.
 - Vị trí: `~/cavOS` **trong WSL ext4** — tuyệt đối không build trên `/mnt/c` `/mnt/d` (bài học 9p/CRLF
-  trong [[Build & Debug Cheatsheet]]).
+  trong [[Cẩm nang build & debug]]).
 
 ```bash
 git clone https://github.com/malwarepad/cavOS.git ~/cavOS
@@ -84,13 +84,13 @@ git clone https://github.com/malwarepad/cavOS.git ~/cavOS
 > _Đây là code tự viết, không ai giữ hộ. Note tả rất kỹ kiến trúc và kết quả nhưng **không chứa full source**
 > (chỉ vài snippet) → phải viết lại. Chạy đúng như cũ thì được, giống từng dòng thì không._
 
-**Bản dựng lại đặt trong vault:** `Labs/src/oskernel-lab/` → commit chung repo `cavos_notes` để đẩy GitHub.
-Đây chỉ là **bản lưu**; **build vẫn phải trong WSL** (`~/oskernel-lab`), không build trong `Labs/src`.
+**Bản dựng lại đặt trong vault:** `Thực hành/src/oskernel-lab/` → commit chung repo `cavos_notes` để đẩy GitHub.
+Đây chỉ là **bản lưu**; **build vẫn phải trong WSL** (`~/oskernel-lab`), không build trong `Thực hành/src`.
 
 ### Cây file dựng lại
 
 ```
-Labs/src/oskernel-lab/
+Thực hành/src/oskernel-lab/
 ├─ common.mk           build chung: tự dò cross x86_64-cavos-gcc, không có thì lùi về gcc hệ thống
 ├─ linker.ld           bản gốc (mỗi project giữ 1 copy)
 ├─ limine.conf         timeout 0 · protocol limine · kernel_path boot():/boot/kernel.bin
@@ -112,15 +112,15 @@ Labs/src/oskernel-lab/
 | `ENTRY(kmain)` (không phải `_start`), `. = 0xffffffff80000000`, PHDRS **không ghi FLAGS**, `KEEP(*(.limine_requests))` | [[Lab 0x00 - Hello Serial]] "Các mảnh chính" |
 | `LIMINE_BASE_REVISION(2)` — không dùng 3 | [[Lab 0x00 - Hello Serial]] + [[Limine Protocol]] §4 |
 | `-Wl,-z,max-page-size=0x1000` để `ALIGN(MAXPAGESIZE)` ra biên `0x1000` | trích `kernel.map` trong [[Lab 0x00 - Hello Serial]] (rodata @ `…80001000`) |
-| 4 artifact `.map/.dis/.sym/.elf.txt` sinh mỗi lần link | [[Build & Debug Cheatsheet]] bảng artifact |
+| 4 artifact `.map/.dis/.sym/.elf.txt` sinh mỗi lần link | [[Cẩm nang build & debug]] bảng artifact |
 | `put_pixel` nhảy hàng bằng **`pitch`**, format **BGRX**, font 8x8 nhúng thẳng | [[Lab 0x02 - Framebuffer]] "Khác với cavOS" |
 | `mmTotal` = **cộng dồn length mọi vùng khác `RESERVED`** (không lấy max-end) | [[Lab 0x03 - PMM & VMM]] (bám `bootloader.c`) |
 | Guard `if (first+i >= pmm_blocks) break;` trong `bm_mark` | [[Lab 0x03 - PMM & VMM]] |
 | Trình tự PMM: `memset 0xff` → mở USABLE → đóng non-USABLE → tự mark bitmap | [[Lab 0x03 - PMM & VMM]] mục 1 |
 | PML4 mới + copy 512 entry + `mov cr3`; `vmap` lazy 4 tầng + `invlpg`; `vresolve` | [[Lab 0x03 - PMM & VMM]] mục 2, 3 |
-| Bảng `pmm_dump_map` 10 cột (region row + dòng con `>` + dòng gap) | `Labs/outputs/lab-0x03-run.txt` |
+| Bảng `pmm_dump_map` 10 cột (region row + dòng con `>` + dòng gap) | `Thực hành/outputs/lab-0x03-run.txt` |
 | String output **tiếng Anh**, comment tiếng Việt; `SRCS := ...` trong `GNUmakefile` | quy ước trong [[CLAUDE]] |
-| Không để comment cùng dòng với `VAR := value` | [[Build & Debug Cheatsheet]] |
+| Không để comment cùng dòng với `VAR := value` | [[Cẩm nang build & debug]] |
 
 ### Một chỗ CỐ Ý làm khác bản cũ (bug bitmap)
 
@@ -144,7 +144,7 @@ Bản dựng lại: `bm_mark(bitmap_pa, bytes, 1)` làm tròn **LÊN** → chi�
 **Đã chạy thật 2026-09-03, xác nhận vá đúng:** lần boot này Limine xếp khác nên bitmap rơi vào `0x53000`
 (`0x53000`–`0x5506d` = frame `0x53/0x54/0x55`), và `alloc #1` ra `0x56000` — **frame ngay sau** bitmap,
 không giẫm lên nữa. Kiểm chéo: USABLE `76 + 65077 + 31 = 65184` frame, trừ 3 frame bitmap = `65181`,
-đúng bằng `free frames` in ra. Output đầy đủ: `Labs/outputs/lab-0x03-run-2026-09-03.txt`.
+đúng bằng `free frames` in ra. Output đầy đủ: `Thực hành/outputs/lab-0x03-run-2026-09-03.txt`.
 
 > Con số dự đoán trước khi chạy (`alloc #1 = 0x63000`, `free = 65195`) **sai**, vì nó giả định memmap
 > giống hệt lần cũ — thực tế Limine dời hết vùng mỗi lần boot. Ghi lại đây đúng tinh thần
@@ -169,7 +169,7 @@ make -C ~/opt/limine
 git clone https://github.com/malwarepad/cavOS.git ~/cavOS
 
 # 4. lab: chép bản lưu từ vault sang WSL rồi build ở ext4 (KHÔNG build trong /mnt/d)
-cp -r /mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab ~/oskernel-lab
+cp -r /mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab ~/oskernel-lab
 ```
 
 > **v8.x-binary chứ không phải v9+**: từ Limine 9, `kernel_path` đổi tên và
@@ -185,6 +185,29 @@ cp -r /mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab ~/oskernel-lab
 - [x] Clone cavOS → `~/cavOS`; chép source lab → `~/oskernel-lab`
 - [x] Cài gói hệ thống + Limine `v8.x-binary` (Limine 8.7.0) → `~/opt/limine`
 - [x] **Build + boot thật cả 4 lab**, chép output thật vào note (Lab 0x03 xác nhận đã vá bug bitmap)
+- [x] Commit `Thực hành/src/` + note vào repo vault (`f8159d4`)
 - [ ] `make tools` (đang chạy) → `sudo -v && make disk` → `make qemu`
 - [ ] Sửa `/home/tmnvi/...` còn sót trong vault theo user mới
-- [ ] Commit + push `Labs/src/` lên GitHub để lần sau không mất nữa
+- [ ] Push lên GitHub
+
+## Bước cuối: DỌN SẠCH DẤU VẾT
+
+> _User chốt: xong hết thì vault không được nhắc gì tới chuyện mất source / dựng lại nữa._
+
+Khi checklist trên tick hết, làm một lượt rồi commit:
+
+1. **Xoá file này.**
+2. Gỡ mọi câu nhắc tới "mất source / dựng lại / máy cũ / viết lại từ note" ở:
+   - [[Home]] — callout cảnh báo đầu trang + dòng Meta trỏ note này
+   - [[CLAUDE]] — tiêu đề mục "Vị trí ... MÁY MỚI", câu cảnh báo, mục "Trạng thái môi trường",
+     dòng backup trong "Quy ước làm việc" (giữ **quy ước backup**, bỏ lý do "sau khi mất sạch source")
+   - [[Cẩm nang build & debug]] — callout đầu note
+   - [[Lab 0x00 - Hello Serial]], [[Lab 0x01 - Bootloader Parser]], [[Lab 0x02 - Framebuffer]],
+     [[Lab 0x03 - PMM & VMM]] — callout đầu note (giữ nguyên phần output thật + mục "Chạy lại")
+   - [[Dựng môi trường chung]], [[Dựng môi trường cavOS]], [[Dựng môi trường oskernel-lab]] —
+     dòng "Liên quan" và mấy câu kiểu "sau khi mất source"
+   - `Thực hành/src/oskernel-lab/README.md` — viết lại thành mô tả cây source bình thường
+3. Cân nhắc gộp/viết lại message của commit `f8159d4` cho trung tính (chưa push nên sửa được).
+
+**Giữ lại** (đây là kiến thức thật, không phải chuyện sự cố): output thật trong note Lab, 3 note dựng
+môi trường, các bảng "bẫy đã dính", quy ước backup `Thực hành/src/`, `.gitattributes`.

@@ -102,4 +102,4 @@ việc đầu tiên `_start` làm là bật serial ([[Step 01 - Serial UART]]).
 ## Ánh xạ spec
 - ELF64: System V ABI / ELF spec (program headers, `PT_LOAD`, `PT_DYNAMIC`).
 - Long mode, paging: [[Intel SDM]] Vol.3 (để dành chi tiết).
-- Limine boot protocol: [[Spec Library]].
+- Limine boot protocol: [[Danh mục tài liệu]].

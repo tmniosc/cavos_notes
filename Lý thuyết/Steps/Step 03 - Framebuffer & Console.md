@@ -164,6 +164,6 @@ printf(...) → (printf.c) → putchar_(c) → printfch(c) → drawCharacter(c) 
 - **Scroll?** → `scrollConsole`: `memcpy` dịch ảnh lên 1 dòng chữ, xóa dòng đáy.
 
 ## Ánh xạ spec
-- Limine framebuffer response (`address`, `pitch`, `bpp`, `*_mask_shift/size`): [[Spec Library]].
+- Limine framebuffer response (`address`, `pitch`, `bpp`, `*_mask_shift/size`): [[Danh mục tài liệu]].
 - PSF1 font format (magic `0x0436`, header 4 byte, glyph 8×height): PSF spec.
 - Pixel BGRX/GOP: UEFI GOP `PixelBlueGreenRedReserved8BitPerColor`.

@@ -11,7 +11,7 @@ status: done
 **Vị trí:** `~/oskernel-lab/01-bootloader-parser/` · build/run y hệt Lab 0x00 (`make kernel`, `make run`).
 
 > [!note] Source viết lại & đã chạy lại (2026-09-03)
-> Source hiện tại viết lại từ note → `Labs/src/oskernel-lab/01-bootloader-parser/`, **đã boot QEMU thật lại**.
+> Source hiện tại viết lại từ note → `Thực hành/src/oskernel-lab/01-bootloader-parser/`, **đã boot QEMU thật lại**.
 > Kết quả mới ở mục "Run thật 2026-09-03" bên dưới; bản 2026-05-28 giữ nguyên để đối chiếu.
 
 ## Làm gì

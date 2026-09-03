@@ -9,7 +9,7 @@ status: đang làm
 > Đây là repo đọc để học, không phải code mình viết._
 
 Nền chung (WSL, quy tắc build ở đâu, gói dùng chung): [[Dựng môi trường chung]] — làm trước note này.
-Liên quan: [[Dựng môi trường oskernel-lab]] · [[Build & Debug Cheatsheet]] · [[Khôi phục source (2026-09-03)]]
+Liên quan: [[Dựng môi trường oskernel-lab]] · [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]]
 
 ## Nói thật đơn giản
 
@@ -95,7 +95,7 @@ disk ─► disk_prepare ─► verifytools ─► limine ─► uacpi ─► mu
                                                     ─► make -C src/kernel disk ─► disk.img
 ```
 
-Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[Build & Debug Cheatsheet]] cho
+Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[Cẩm nang build & debug]] cho
 `make kernel`, `make qemu_dbg`, GDB và `compile_commands.json`.
 
 ## 5. Bẫy đã dính (đừng dính lại)

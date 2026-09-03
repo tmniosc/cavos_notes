@@ -175,4 +175,4 @@ RAM vật lý (mmTotal)
 - `bitmap.c` là data structure tổng quát (`DS_Bitmap`) — còn dùng cho ext2 ([[Step 14 - AHCI & Filesystems]]).
 
 ## Ánh xạ spec
-- Limine memmap types (USABLE/RESERVED/ACPI/BOOTLOADER_RECLAIMABLE/KERNEL_AND_MODULES/FRAMEBUFFER): [[Spec Library]].
+- Limine memmap types (USABLE/RESERVED/ACPI/BOOTLOADER_RECLAIMABLE/KERNEL_AND_MODULES/FRAMEBUFFER): [[Danh mục tài liệu]].

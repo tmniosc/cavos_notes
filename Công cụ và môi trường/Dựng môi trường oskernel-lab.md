@@ -9,7 +9,7 @@ status: đang làm
 > Nhẹ hơn cavOS nhiều — **không cần** cross-compiler._
 
 Nền chung (WSL, quy tắc build ở đâu, gói dùng chung): [[Dựng môi trường chung]] — làm trước note này.
-Liên quan: [[Dựng môi trường cavOS]] · [[Build & Debug Cheatsheet]] · [[Khôi phục source (2026-09-03)]]
+Liên quan: [[Dựng môi trường cavOS]] · [[Cẩm nang build & debug]] · [[Khôi phục source (2026-09-03)]]
 
 ## Nói thật đơn giản
 
@@ -18,7 +18,7 @@ Liên quan: [[Dựng môi trường cavOS]] · [[Build & Debug Cheatsheet]] · [
 
 Khác biệt lớn nhất so với cavOS:
 
-- **Nguồn code**: cavOS `git clone` từ trên mạng; lab thì **chép từ vault** (`Labs/src/oskernel-lab/`),
+- **Nguồn code**: cavOS `git clone` từ trên mạng; lab thì **chép từ vault** (`Thực hành/src/oskernel-lab/`),
   vì đây là code tự viết, không ai giữ hộ. Sửa xong nhớ **chép ngược về vault** rồi push.
 - **Không cần đúc cross-compiler**: kernel lab nhỏ, gcc hệ thống với mấy cờ "freestanding" là đủ. Đỡ hàng
   chục phút chờ. (Có cross rồi thì `common.mk` tự dùng, khỏi sửa gì.)
@@ -29,7 +29,7 @@ Khác biệt lớn nhất so với cavOS:
 | Thứ | Giá trị |
 | --- | --- |
 | Source lab | `~/oskernel-lab` |
-| Bản lưu trong vault | `D:\tmniosc\cavos_notes\Labs\src\oskernel-lab` |
+| Bản lưu trong vault | `D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab` |
 | Limine | `~/opt/limine` — branch `v8.x-binary` (đang dùng **8.7.0**) |
 | Toolchain | gcc hệ thống; `common.mk` tự dùng cross nếu có |
 
@@ -67,7 +67,7 @@ Branch `*-binary` đã có sẵn file nhị phân (`limine-bios.sys`, `BOOTX64.E
 ## 3. Lấy source lab về
 
 ```bash
-cp -r /mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab ~/oskernel-lab
+cp -r /mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab ~/oskernel-lab
 chmod +x ~/oskernel-lab/scripts/mkimage.sh
 ```
 
@@ -106,15 +106,15 @@ make run QEMU_FLAGS="-M q35 -m 512M -serial stdio"
 make CROSS_PREFIX=$HOME/opt/cross/bin/x86_64-cavos-
 ```
 
-Chi tiết 4 artifact phân tích build và cấu trúc `os.img`: [[Build & Debug Cheatsheet]].
+Chi tiết 4 artifact phân tích build và cấu trúc `os.img`: [[Cẩm nang build & debug]].
 
 ## 5. Sửa code thì nhớ chép ngược
 
 > _Đây là bài học đắt nhất: lần mất máy vừa rồi chỉ vault sống sót vì nó nằm trên D: và đã push GitHub._
 
 ```bash
-cp -r ~/oskernel-lab/. /mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab/
-cd /mnt/d/tmniosc/cavos_notes && git add Labs/src && git commit -m "lab: ..." && git push
+cp -r ~/oskernel-lab/. /mnt/d/tmniosc/cavos_notes/Thực hành/src/oskernel-lab/
+cd /mnt/d/tmniosc/cavos_notes && git add "Thực hành/src" && git commit -m "lab: ..." && git push
 ```
 
 Đừng chép ngược file rác build (`.o`, `kernel.bin`, `os.img`, `.map/.dis/.sym/.elf.txt`) —
@@ -138,4 +138,4 @@ cd /mnt/d/tmniosc/cavos_notes && git add Labs/src && git commit -m "lab: ..." &&
 - [x] Chép source lab → `~/oskernel-lab`
 - [x] Build + boot thật **cả 4 lab** bằng gcc hệ thống, output đã chép vào note Lab
 - [ ] Chạy lại bằng cross `x86_64-cavos-gcc` sau khi cavOS `make tools` xong
-- [ ] Push `Labs/src/` lên GitHub
+- [ ] Push `Thực hành/src/` lên GitHub

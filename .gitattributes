@@ -1,3 +1,0 @@
-# Source lab để trong repo notes: LUÔN giữ LF (build trong WSL, CRLF làm hỏng .sh)
-Labs/src/** text eol=lf
-Labs/src/**/*.sh text eol=lf

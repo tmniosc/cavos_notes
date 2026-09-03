@@ -1,0 +1,2 @@
+# Source lab build trong WSL: LUÔN giữ LF (CRLF gây lỗi env: bash)
+* text eol=lf
