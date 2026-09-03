@@ -1,0 +1,38 @@
+<svg width="100%" viewBox="0 0 760 344" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>.lbl{fill:#5c5a52;} .mono{font-family:'SF Mono',Consolas,monospace;} .tline{stroke:#c7c4ba;} .flow{ stroke:#8C8A82; }
+  @media (prefers-color-scheme: dark){ .lbl{fill:#c2c0b6;} .tline{stroke:rgba(222,220,209,0.3);} .flow{stroke:#7d7b73;} }</style>
+</defs>
+
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">what "segment" means changes with the mode — and it keeps shrinking</text>
+
+<!-- real mode -->
+<rect x="90" y="34" width="580" height="62" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="110" y="56" fill="#F0DBAE" font-size="11.5" font-weight="600">Real mode</text>
+<text x="110" y="74" fill="#D8A54A" font-size="9" class="mono">segment = a raw multiplier: linear = segment × 16 + offset</text>
+<text x="110" y="89" fill="#D8A54A" font-size="9">goal: reach FURTHER — 16-bit registers stretched to 1 MB. No protection at all.</text>
+
+<line x1="380" y1="96" x2="380" y2="126" class="flow" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="396" y="115" class="lbl" font-size="9">add protection and a descriptor table</text>
+
+<!-- protected mode -->
+<rect x="90" y="126" width="580" height="62" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="110" y="148" fill="#B5D4F4" font-size="11.5" font-weight="600">Protected mode</text>
+<text x="110" y="166" fill="#85B7EB" font-size="9" class="mono">segment = selector into the GDT: base + limit + ring</text>
+<text x="110" y="181" fill="#85B7EB" font-size="9">goal: PARTITION and PROTECT — each segment has its own range and privilege.</text>
+
+<line x1="380" y1="188" x2="380" y2="218" class="flow" stroke-width="1.4" marker-end="url(#arrow)"/>
+<text x="396" y="207" class="lbl" font-size="9">paging arrives and wins — segments become redundant</text>
+
+<!-- long mode -->
+<rect x="90" y="218" width="580" height="62" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="110" y="240" fill="#C6E7CC" font-size="11.5" font-weight="600">Long mode</text>
+<text x="110" y="258" fill="#8FC79A" font-size="9" class="mono">segment = a flat selector: base forced to 0, limit ignored</text>
+<text x="110" y="273" fill="#8FC79A" font-size="9">all that survives is the ring and the L flag. Paging is in charge.</text>
+
+<text x="380" y="310" text-anchor="middle" class="lbl" font-size="9">segmentation never disappeared — it shrank to a privilege check that still runs before paging</text>
+<text x="380" y="326" text-anchor="middle" class="lbl" font-size="9">that is why a 64-bit kernel still has to build a GDT it barely uses</text>
+</svg>

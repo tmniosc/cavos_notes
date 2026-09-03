@@ -1,0 +1,40 @@
+<svg width="100%" viewBox="0 0 720 274" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>.lbl{fill:#5c5a52;} .mono{font-family:'SF Mono',Consolas,monospace;} .tline{stroke:#c7c4ba;} .flow{ stroke:#8C8A82; }
+  @media (prefers-color-scheme: dark){ .lbl{fill:#c2c0b6;} .tline{stroke:rgba(222,220,209,0.3);} .flow{stroke:#7d7b73;} }</style>
+</defs>
+
+<text x="360" y="22" text-anchor="middle" class="lbl" font-size="10">permissions are granted per page — so a section boundary must land on a page boundary</text>
+
+<text x="180" y="46" text-anchor="middle" class="lbl" font-size="10">sections share one page</text>
+<text x="540" y="46" text-anchor="middle" class="lbl" font-size="10">each section gets its own page</text>
+
+<!-- bad -->
+<rect x="40" y="56" width="280" height="86" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="180" y="82" text-anchor="middle" fill="#F0C9C9" font-size="10.5" font-weight="600" class="mono">one page: .text + .rodata</text>
+<text x="180" y="104" text-anchor="middle" fill="#EEC2C2" font-size="9">the page needs R + W + X to satisfy both</text>
+<text x="180" y="122" text-anchor="middle" fill="#EEC2C2" font-size="9">code becomes writable, data becomes executable</text>
+
+<!-- good -->
+<rect x="400" y="56" width="280" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="75" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 1: .text — R + X</text>
+
+<rect x="400" y="84" width="280" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="103" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 2: .rodata — R, NX</text>
+
+<rect x="400" y="112" width="280" height="30" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="132" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 3: .data — R + W, NX</text>
+
+<text x="180" y="166" text-anchor="middle" class="lbl" font-size="9">an attacker who can write anywhere</text>
+<text x="180" y="180" text-anchor="middle" class="lbl" font-size="9">can now write code and run it</text>
+
+<text x="540" y="166" text-anchor="middle" class="lbl" font-size="9">writable and executable never overlap —</text>
+<text x="540" y="180" text-anchor="middle" class="lbl" font-size="9">this is what W^X means</text>
+
+<text x="360" y="216" text-anchor="middle" class="lbl" font-size="9">this is why the linker script inserts ALIGN(CONSTANT(MAXPAGESIZE)) between segments:</text>
+<text x="360" y="232" text-anchor="middle" class="lbl" font-size="9">without it two sections land in one page and the kernel has to weaken that page's permissions</text>
+<text x="360" y="254" text-anchor="middle" class="lbl mono" font-size="8.5">alignment is not cosmetic — it is what makes per-section permissions possible at all</text>
+</svg>

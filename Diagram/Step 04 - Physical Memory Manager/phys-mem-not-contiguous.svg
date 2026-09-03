@@ -1,0 +1,67 @@
+<svg width="100%" viewBox="0 0 760 254" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>.lbl{fill:#5c5a52;} .mono{font-family:'SF Mono',Consolas,monospace;} .tline{stroke:#c7c4ba;} .flow{ stroke:#8C8A82; }
+  @media (prefers-color-scheme: dark){ .lbl{fill:#c2c0b6;} .tline{stroke:rgba(222,220,209,0.3);} .flow{stroke:#7d7b73;} }</style>
+</defs>
+
+<text x="30" y="26" class="lbl" font-size="9.5">low physical addresses</text>
+<text x="730" y="26" text-anchor="end" class="lbl" font-size="9.5">high physical addresses</text>
+
+<!-- boundary addresses -->
+<text x="34" y="46" class="lbl mono" font-size="8.5">0x1000</text>
+<text x="192" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0x100000</text>
+<text x="490" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0xfd000000</text>
+<text x="676" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0xfd00000000</text>
+
+<!-- the map -->
+<rect x="30" y="54" width="40" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="50" y="86" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600" class="mono">BR</text>
+
+<rect x="70" y="54" width="90" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="115" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<text x="115" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">252 KB</text>
+
+<rect x="160" y="54" width="32" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="176" y="86" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600" class="mono">R</text>
+
+<rect x="192" y="54" width="190" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="287" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<text x="287" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">~254 MiB — the main block</text>
+
+<rect x="382" y="54" width="32" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="398" y="86" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600" class="mono">BR</text>
+
+<rect x="414" y="54" width="76" height="54" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="452" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9" font-weight="600">KERNEL</text>
+<text x="452" y="95" text-anchor="middle" fill="#85B7EB" font-size="8.5">in use</text>
+
+<rect x="490" y="54" width="96" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="538" y="80" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600">FRAMEBUF</text>
+<text x="538" y="95" text-anchor="middle" fill="#EEC2C2" font-size="8.5">MMIO</text>
+
+<rect x="586" y="54" width="76" height="54" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="624" y="86" text-anchor="middle" fill="#D3D1C7" font-size="8.5">gap</text>
+
+<rect x="662" y="54" width="68" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="696" y="80" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600">RESERVED</text>
+<text x="696" y="95" text-anchor="middle" fill="#EEC2C2" font-size="8.5">high MMIO</text>
+
+<!-- brackets -->
+<line x1="30" y1="126" x2="490" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="30" y1="120" x2="30" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="490" y1="120" x2="490" y2="126" class="tline" stroke-width="1.2"/>
+<text x="260" y="144" text-anchor="middle" class="lbl" font-size="9">real RAM — USABLE and BR are what the PMM may hand out</text>
+
+<line x1="490" y1="126" x2="730" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="730" y1="120" x2="730" y2="126" class="tline" stroke-width="1.2"/>
+<text x="610" y="144" text-anchor="middle" class="lbl" font-size="9">not RAM — devices; a write here</text>
+<text x="610" y="158" text-anchor="middle" class="lbl" font-size="9">drives hardware, it stores nothing</text>
+
+<text x="380" y="188" text-anchor="middle" class="lbl" font-size="9">BR = BOOT_RECLAIM (Limine structures, reclaimable once read) · R = RESERVED · gap = neither RAM nor device</text>
+<text x="380" y="208" text-anchor="middle" class="lbl" font-size="9">the address space has holes — so total RAM must be summed from region lengths,</text>
+<text x="380" y="222" text-anchor="middle" class="lbl" font-size="9">never taken as "the highest address seen", which would balloon past the MMIO hole</text>
+<text x="380" y="242" text-anchor="middle" class="lbl" font-size="8.5">not to scale</text>
+</svg>

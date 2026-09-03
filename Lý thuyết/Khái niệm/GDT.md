@@ -33,7 +33,7 @@ tags: [concept, cpu, segmentation]
 > đồ bộ nhớ vật lý. Nó không biết và không quan tâm máy có bao nhiêu RAM hay RAM nằm đâu.*
 
 Một địa chỉ trên x86 đi qua **2 tầng dịch** trước khi chạm RAM thật:
-![[addr-translation-stages.svg]]
+![[addr-translation-stages.svg|1083]]
 
 - **GDT ở tầng segmentation** → `base`/`limit` của descriptor mô tả một "cửa sổ" trong **không gian địa chỉ
   tuyến tính** (ảo), KHÔNG phải trong RAM vật lý.

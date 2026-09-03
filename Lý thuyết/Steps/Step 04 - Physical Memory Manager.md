@@ -71,17 +71,7 @@ cao nhất") → bỏ MMIO/PCI hole ở địa chỉ rất cao, bitmap không ph
 > _RAM không phải một dải liền từ 0. Không gian địa chỉ vật lý là bản đồ chung; RAM chỉ chiếm vài mảnh, xen
 > kẽ là vùng cấm (BIOS/ACPI) và MMIO (thiết bị). Đó là lý do PMM phải đọc memmap thay vì "RAM = 0..tổng"._
 
-```
- PA thấp                                                                    PA cao
- 0x1000        0x100000              0xfd000000      0xfd00000000
- ┌──┬───────┬──┬───────────────┬──┬──────┬─────────┬────────────┬──────────────┐
- │BR│USABLE │R │   USABLE      │BR│KERNEL│FRAMEBUF │ (lỗ trống) │  RESERVED    │
- │  │ 252KB │  │  ~254 MiB     │  │ MODS │ (MMIO)  │            │  (MMIO cao)  │
- └──┴───────┴──┴───────────────┴──┴──────┴─────────┴────────────┴──────────────┘
-   ▲ RAM thật (cấp được) ↑                ▲ KHÔNG phải RAM ────────────────────►
-                                          (thiết bị — ghi vào = điều khiển, cấm cấp)
- BR=BOOT_RECLAIM  R=RESERVED   ·   PA không liền nhau, có nhiều "lỗ"
-```
+![[phys-mem-not-contiguous.svg]]
 - **RAM rải rác, có lỗ** (BIOS ~`0x9fc00`, PCI hole quanh `0xfd000000`).
 - **Địa chỉ cao ≠ RAM**: `0xfd000000` (framebuffer) và `0xfd00000000` là **MMIO** — xem [[Step 03 - Framebuffer & Console]], [[HHDM]].
 - → Đây là lý do PMM **không cấp theo địa chỉ liền** mà tra `memmap` (USABLE) cho từng vùng; và tính `mmTotal`
@@ -153,16 +143,7 @@ không thấy → INVALID_BLOCK
 ## 4.5 Bức tranh tổng thể
 > _Toàn cảnh: RAM chia vùng (dùng được / cấm), bitmap đánh dấu tương ứng, cấp phát lấy từ vùng trống._
 
-```
-RAM vật lý (mmTotal)
-┌────────┬──────┬──────────────────────┬────────┬────┬───────┐
-│ USABLE │ RSVD │ USABLE (chứa bitmap) │ KERNEL │ FB │ ...   │
-└───┬────┴──────┴──────────┬───────────┴────────┴────┴───────┘
-    │ bit=0 (free)         │ bitmap tự đánh dấu used (bước 5)
-    ▼                      ▼
-  bitmap:  0 0 0 ...    1 1 1 (chính nó)    ... 1 1 (reserved/kernel/fb)
-           ▲ cấp phát lấy từ đây (FindFreeRegion → first-fit)
-```
+![[pmm-bitmap-mapping.svg]]
 
 ## ✅ Câu hỏi mở (đã trả lời)
 - **Bitmap đặt ở đâu?** → ngay trong vùng USABLE đầu tiên đủ lớn (`mm->base`), truy cập qua HHDM; tự

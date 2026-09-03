@@ -40,18 +40,7 @@ tầng cấp bảng con từ PMM, `vresolve()` dịch ngược VA→PA. Test: gh
 > xen kẽ là vùng cấm (BIOS, ACPI) và MMIO (thiết bị). Đây là lý do PMM phải đọc memmap._
 
 Dump memmap thật (QEMU `-m 256M`, từ [[Lab 0x01 - Bootloader Parser]]):
-```
- PA thấp                                                                    PA cao
- 0x1000        0x100000              0xfd000000      0xfd00000000
- ┌──┬───────┬──┬───────────────┬──┬──────┬─────────┬────────────┬───────────────┐
- │BR│USABLE │R │   USABLE      │BR│KERNEL│FRAMEBUF │ (lỗ trống) │  RESERVED     │
- │  │ 252KB │  │  ~254 MiB     │  │ MODS │ (MMIO)  │            │  (MMIO cao)   │
- └──┴───────┴──┴───────────────┴──┴──────┴─────────┴────────────┴───────────────┘
-   ▲ RAM thật ↑                          ▲ KHÔNG phải RAM ──────────────────────►
-   (USABLE/BOOT_RECLAIM = cấp được)      (RESERVED/FRAMEBUFFER = thiết bị, cấm cấp)
-
- BR=BOOT_RECLAIM  R=RESERVED   ·   các con số PA KHÔNG liền nhau, có "lỗ"
-```
+![[phys-mem-not-contiguous.svg]]
 3 điều rút ra:
 - **RAM nằm rải rác**, không liền: có lỗ ở `0x9fc00` (BIOS), quanh `0xfd000000` (PCI hole), và một vùng
   RESERVED tít ở `0xfd00000000`.

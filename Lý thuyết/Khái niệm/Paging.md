@@ -30,7 +30,7 @@ Tiến độ: [[Home]] · phục vụ cho [[Step 03 - Framebuffer & Console]] v�
 
 Mọi địa chỉ kernel chạm vào là **địa chỉ ảo (virtual address — VA)**. Phần cứng MMU dịch sang **địa chỉ vật lý (physical — PA)** bằng cách tra **page table**. Thanh ghi **CR3** trỏ tới gốc bảng.
 
-![[mmu-translation-flow.svg]]
+![[mmu-translation-flow.svg|1083]]
 
 Ý nghĩa: kernel **không** sờ thẳng RAM — luôn qua một lớp dịch. Đây là lý do có HHDM (ý 5).
 
@@ -57,15 +57,7 @@ Mỗi entry trong bảng mang các bit quyền:
 
 Vì phân quyền chỉ ở **mức nguyên 1 trang**, hai vùng khác quyền không được chung trang → đó là lý do `link.ld` chèn `. = ALIGN(MAXPAGESIZE)` giữa các segment:
 
-```
- KHÔNG tách trang (hở W^X)        CÓ tách trang (sạch)
- ┌────────────────────────┐      ┌──────────────────────────┐
- │ Trang chung: .text+.ro │      │ Trang 1: .text  → R+X    │
- │ buộc cấp R+W+X cho cả  │      ├──────────────────────────┤
- │ → code ghi được /      │      │ Trang 2: .rodata→ R,NX   │
- │   data chạy được ⚠     │      │ Trang 3: .data  → R+W,NX │
- └────────────────────────┘      └──────────────────────────┘
-```
+![[wx-page-split.svg]]
 
 **W^X** = Write XOR eXecute: không trang nào vừa ghi-được vừa chạy-được.
 
@@ -140,11 +132,7 @@ dừng ở PDPT(PS=1)             : offset 30 bit → 2^30 = 1 GiB   (hugepage 1
 Tức **1 entry "nhân" lên**: PD entry hugepage = 512 × 4 KiB = 2 MiB (gộp 512 trang con thành 1).
 
 **Số tầng là per-NHÁNH, không per-bảng** — cùng 1 PML4 trộn được:
-```
-PML4 ┬[256] HHDM   → PDPT → PD →(PS=1) 2MB     ← 3 tầng (hugepage)
-     ├[511] kernel → PDPT → PD → PT →   4KB    ← 4 tầng (trang thường)
-     └[192] testVA → PDPT → PD → PT →   4KB    ← 4 tầng
-```
+![[pml4-branches-huge-vs-4k.svg]]
 MMU walk **từng VA độc lập**, gặp `PS=1` thì dừng. (Lưu ý: bản thân **bảng** PML4/PDPT/PD vẫn 4 KiB; "2 MiB"
 là vùng *một entry* phủ, không phải cỡ bảng.)
 

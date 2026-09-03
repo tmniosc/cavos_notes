@@ -56,15 +56,7 @@ RAM cụ thể, mà là **cơ chế CPU dùng để định địa chỉ**. Cơ 
 | **Long mode** (64-bit) | x86-64 | vẫn **selector** trỏ GDT | `base=0, limit=∞` → **phẳng, gần như tắt** | quyền giờ do [[Paging]] lo |
 
 ### Mạch tiến hoá (nhớ đúng cái này là đủ)
-```
-Real mode:      segment = số nhân thô     → mục tiêu: VỚI XA hơn (16-bit → 1MB)
-                   │  (thêm bảo vệ + bảng descriptor)
-                   ▼
-Protected mode: segment = selector→GDT    → mục tiêu: PHÂN VÙNG + BẢO VỆ (ring, base/limit)
-                   │  (paging ra đời và thắng → segment thành thừa)
-                   ▼
-Long mode:      segment = selector phẳng  → segment TEO LẠI, chỉ còn khai RING. Paging làm chủ.
-```
+![[segmentation-three-modes.svg]]
 
 ### Vì sao boot phải đi qua cả 3?
 CPU x86 **luôn khởi động ở real mode** (tương thích 8086 từ 1978), rồi bootloader leo dần: real → bật A20,

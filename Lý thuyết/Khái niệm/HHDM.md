@@ -27,7 +27,7 @@ bootloader.rsdp = (size_t)rsdp_response->address - bootloader.hhdmOffset;
 ```
 
 ## Sơ đồ
-![[va-space-64bit.svg]]
+![[va-space-64bit.svg|1083]]
 
 ## CR3 vs HHDM — ai làm gì (đừng nhầm!)
 HHDM **không thay thế** paging. CR3 + paging vẫn **luôn chạy**; HHDM chỉ là **một vùng được map sẵn
