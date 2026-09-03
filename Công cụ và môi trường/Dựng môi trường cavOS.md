@@ -108,12 +108,52 @@ Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[
 | Triệu chứng | Nguyên nhân | Cách tránh |
 | --- | --- | --- |
 | `x86_64-cavos-gcc was not found!` | chưa `make tools` | chạy `make tools` (1 lần) |
-| `Could not access KVM kernel module: Permission denied` | user chưa ở group `kvm` (WSL có sẵn `/dev/kvm` nhưng quyền `root:kvm`) | `sudo usermod -aG kvm $USER` rồi `wsl --shutdown` bên Windows. Chưa muốn sửa thì chạy tay lệnh qemu **bỏ `-enable-kvm`** (chậm hơn nhưng boot được) |
+| `Could not access KVM kernel module: Permission denied` | user chưa ở group `kvm` | `sudo usermod -aG kvm $USER` rồi `wsl --shutdown` bên Windows |
+| `Could not access KVM kernel module: No such device` | **máy này không có KVM thật** — xem mục dưới | dùng `~/cavos-qemu.sh` (bỏ `-enable-kvm`) |
 | `sudo -v` gõ ở terminal khác vẫn bị hỏi lại mật khẩu | Ubuntu đặt `timestamp_type=tty`, cache gắn với đúng terminal đó | gõ `sudo -v` và `make disk` **trong cùng một terminal** |
 | `sudo: timed out` giữa `make disk` | bước `ports` hỏi mật khẩu muộn | `sudo -v` ngay trước |
 | `tar` thiếu file (vd `opcode/i386.h`) | giải nén trên `/mnt` (9p) | build trong `~`, xem [[Dựng môi trường chung]] |
 | `env: bash\r` | script `.sh` bị CRLF do nằm ổ Windows | build trong `~` |
 | `Error relocating /bin/bash` | rootfs `target/` copy qua `/mnt` nên hỏng | bootstrap sạch trong `~` |
+
+## Chạy QEMU: máy này không có KVM
+
+> _`make qemu` của cavOS luôn kèm `-enable-kvm`. Trên máy này cờ đó không dùng được, và đây không phải
+> lỗi cấu hình — là giới hạn của Windows 10._
+
+Triệu chứng đi theo 2 nấc, đừng nhầm chúng với nhau:
+
+| Lỗi | Nghĩa là |
+| --- | --- |
+| `Permission denied` | mở `/dev/kvm` không được vì user chưa ở group `kvm`. **Sửa được**: `sudo usermod -aG kvm $USER` rồi `wsl --shutdown`. |
+| `No such device` (errno 19) | đã mở được file rồi, nhưng **bên dưới không có KVM**. Không sửa được. |
+
+Vì sao: nested virtualization trong WSL2 chỉ có trên **Windows 11 / Server 2022** trở lên. Máy này là
+**Windows 10 Home (19045)** nên `/dev/kvm` chỉ là cái vỏ — thêm `nestedVirtualization=true` vào `.wslconfig`
+cũng vô ích. Kiểm nhanh:
+
+```bash
+python3 -c "import os; os.open('/dev/kvm', os.O_RDWR)"    # ENODEV = không có KVM thật
+```
+
+Cách chạy thay thế — `~/cavos-qemu.sh`, y hệt target `qemu` nhưng bỏ `-enable-kvm`:
+
+```bash
+~/cavos-qemu.sh            # cửa sổ SDL
+~/cavos-qemu.sh -nogfx     # headless, chỉ serial (tiện chép log)
+```
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+cd ~/cavOS/src/kernel
+DISPLAY_ARGS=(-vga vmware -display sdl)
+[ "${1:-}" = "-nogfx" ] && DISPLAY_ARGS=(-display none)
+exec qemu-system-x86_64 -d guest_errors -serial stdio     -drive file=../../disk.img,format=raw,id=disk,if=none     -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0     -m 4g -netdev user,id=mynet0 -net nic,model=e1000,netdev=mynet0     "${DISPLAY_ARGS[@]}"
+```
+
+> Không sửa `src/kernel/Makefile` của cavOS: đó là code upstream, sửa vào sẽ vướng khi `git pull`.
+> Chậm hơn KVM khá nhiều nhưng boot tới `REACHED SYSTEM` vẫn chỉ mất vài giây.
 
 ## Tiến độ trên máy này
 
@@ -121,7 +161,7 @@ Vòng lặp hằng ngày về sau chỉ còn `make disk && make qemu` — xem [[
 - [x] `git clone cavOS` → `~/cavOS`
 - [x] `make tools` → `x86_64-cavos-gcc (GCC) 11.4.0`
 - [x] `make disk` → `disk.img` 1.88 GB
-- [x] Boot QEMU: chạm `====== REACHED SYSTEM ======` (chạy không KVM, xem bảng bẫy)
+- [x] Boot QEMU bằng `~/cavos-qemu.sh`: chạm `====== REACHED SYSTEM ======`
 
 Boot in ra (rút gọn):
 
