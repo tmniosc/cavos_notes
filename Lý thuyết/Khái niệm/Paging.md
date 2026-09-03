@@ -57,7 +57,7 @@ Mỗi entry trong bảng mang các bit quyền:
 
 Vì phân quyền chỉ ở **mức nguyên 1 trang**, hai vùng khác quyền không được chung trang → đó là lý do `link.ld` chèn `. = ALIGN(MAXPAGESIZE)` giữa các segment:
 
-![[wx-page-split.svg]]
+![[wx-page-split.svg|1083]]
 
 **W^X** = Write XOR eXecute: không trang nào vừa ghi-được vừa chạy-được.
 
@@ -65,13 +65,7 @@ Vì phân quyền chỉ ở **mức nguyên 1 trang**, hai vùng khác quyền k
 
 VA 48 bit được cắt thành 4 chỉ số 9-bit + offset 12-bit, đi qua 4 tầng:
 
-```
-  VA: [ 9 bit ][ 9 bit ][ 9 bit ][ 9 bit ][ 12 bit offset ]
-        PML4  →  PDPT  →   PD   →   PT   →  byte trong trang
-
-  CR3 ──► PML4 ──► PDPT ──► PD ──► PT ──► Frame 4KiB
-         (mỗi bảng 512 entry × 8 byte = đúng 1 trang)
-```
+![[paging-4-levels-overview.svg|1083]]
 
 Cần nhớ ở mức này: **"TỐI ĐA 4 tầng, CR3 trỏ gốc, mỗi bảng 512 entry"**. ("Tối đa" vì có thể dừng sớm bằng
 hugepage — xem #4c.) Chi tiết duyệt bảng để dành tới step VMM.
@@ -100,7 +94,7 @@ VA = 0x0000_0080_8060_4A30
 
 Đi qua 4 bảng — **bảng giữa chỉ "chỉ đường tới bảng sau", riêng PT cho ra khung vật lý thật + bit quyền**:
 
-![[page-walk-4-level.svg]]
+![[page-walk-4-level.svg|1083]]
 
 Ghép khung + offset (offset **chép thẳng** từ VA, không tra bảng):
 
@@ -112,7 +106,7 @@ Ghép khung + offset (offset **chép thẳng** từ VA, không tra bảng):
 
 Toàn cảnh — cái gì đổi, cái gì giữ nguyên:
 
-![[va-split-to-pa.svg]]
+![[va-split-to-pa.svg|1083]]
 
 - **36 bit trên của VA** (4 nhóm 9-bit) → qua 4 bảng → thành **PFN** của PA.
 - **12 bit offset** → **không tra bảng, chép nguyên** sang PA.
@@ -124,15 +118,15 @@ Toàn cảnh — cái gì đổi, cái gì giữ nguyên:
 Mỗi entry ở PDPT/PD có bit **PS (Page Size)**. Bật `PS=1` → entry đó là **lá** (trỏ thẳng vùng nhớ), bỏ
 các tầng dưới. Bỏ 1 tầng = offset dài thêm 9 bit = vùng phủ to lên **512 lần**:
 
-```
-dừng ở PT  (PS không có ở PT) : offset 12 bit → 2^12 = 4 KiB   (trang thường, 4 tầng)
-dừng ở PD  (PS=1)             : offset 21 bit → 2^21 = 2 MiB   (hugepage 2M, 3 tầng — bỏ PT)
-dừng ở PDPT(PS=1)             : offset 30 bit → 2^30 = 1 GiB   (hugepage 1G, 2 tầng — bỏ PD+PT)
-```
+| Dừng ở tầng | Offset dài | Một entry phủ | Số tầng phải đi |
+| --- | --- | --- | --- |
+| PT (không có bit PS) | 12 bit | 2^12 = **4 KiB** | 4 — trang thường |
+| PD với `PS=1` | 21 bit | 2^21 = **2 MiB** | 3 — bỏ PT |
+| PDPT với `PS=1` | 30 bit | 2^30 = **1 GiB** | 2 — bỏ cả PD lẫn PT |
 Tức **1 entry "nhân" lên**: PD entry hugepage = 512 × 4 KiB = 2 MiB (gộp 512 trang con thành 1).
 
 **Số tầng là per-NHÁNH, không per-bảng** — cùng 1 PML4 trộn được:
-![[pml4-branches-huge-vs-4k.svg]]
+![[pml4-branches-huge-vs-4k.svg|1083]]
 MMU walk **từng VA độc lập**, gặp `PS=1` thì dừng. (Lưu ý: bản thân **bảng** PML4/PDPT/PD vẫn 4 KiB; "2 MiB"
 là vùng *một entry* phủ, không phải cỡ bảng.)
 

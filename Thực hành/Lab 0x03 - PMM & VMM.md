@@ -40,7 +40,7 @@ tầng cấp bảng con từ PMM, `vresolve()` dịch ngược VA→PA. Test: gh
 > xen kẽ là vùng cấm (BIOS, ACPI) và MMIO (thiết bị). Đây là lý do PMM phải đọc memmap._
 
 Dump memmap thật (QEMU `-m 256M`, từ [[Lab 0x01 - Bootloader Parser]]):
-![[phys-mem-not-contiguous.svg]]
+![[phys-mem-not-contiguous.svg|1083]]
 3 điều rút ra:
 - **RAM nằm rải rác**, không liền: có lỗ ở `0x9fc00` (BIOS), quanh `0xfd000000` (PCI hole), và một vùng
   RESERVED tít ở `0xfd00000000`.

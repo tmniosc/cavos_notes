@@ -11,12 +11,14 @@
             "id": "b8acf3f3438b753a",
             "type": "leaf",
             "state": {
-              "type": "image",
+              "type": "markdown",
               "state": {
-                "file": "Diagram/Paging/va-split-to-pa.svg"
+                "file": "Lý thuyết/Khái niệm/Paging.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "lucide-image",
-              "title": "va-split-to-pa"
+              "icon": "lucide-file",
+              "title": "Paging"
             }
           }
         ]
@@ -156,7 +158,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Diagram/Paging/va-split-to-pa.svg",
+                "file": "Lý thuyết/Khái niệm/Paging.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -185,31 +187,37 @@
   },
   "active": "b8acf3f3438b753a",
   "lastOpenFiles": [
+    "Diagram/Paging/paging-4-levels-overview.svg",
+    "Diagram/Paging/paging-4-levels-overview.svg.tmp.7216.b50ec01aa436",
+    "Lý thuyết/Khái niệm/Request-Response Mechanism.md",
+    "Lý thuyết/Khái niệm/Paging.md",
+    "Thực hành/Lab 0x00 - Hello Serial.md",
+    "Thực hành/Lab 0x03 - PMM & VMM.md",
+    "Thực hành/Thực hành.md",
+    "Thực hành/Lab 0x02 - Framebuffer.md",
+    "Diagram/Paging/va-split-to-pa.svg",
+    "Diagram/Paging/pml4-branches-huge-vs-4k.svg",
+    "Diagram/Paging/pml4-branches-huge-vs-4k.svg.tmp.7216.043904db7ee0",
+    "Diagram/Paging/wx-page-split.svg",
+    "Diagram/Paging/wx-page-split.svg.tmp.7216.424e8f6d600b",
     "Diagram/Paging/page-walk-4-level.svg",
     "Diagram/Paging/mmu-translation-flow.svg",
     "Diagram/HHDM/va-space-64bit.svg",
     "Diagram/GDT/gdt-flags-nibble.svg",
     "Diagram/GDT/gdt-descriptor-8byte.svg",
     "Diagram/GDT/gdt-access-byte.svg",
-    "Thực hành/Lab 0x03 - PMM & VMM.md",
-    "Thực hành/Lab 0x02 - Framebuffer.md",
     "Thực hành/Lab 0x01 - Bootloader Parser.md",
     "Diagram/Step 04 - Physical Memory Manager/pmm-bitmap-mapping.svg",
     "Diagram/Step 04 - Physical Memory Manager/pmm-bitmap-mapping.svg.tmp.7216.d88193dbb09b",
-    "Diagram/x86 Segmentation/segmentation-three-modes.svg",
     "Diagram/x86 Segmentation/segmentation-three-modes.svg.tmp.7216.fe1bbe7b067d",
     "Diagram/x86 Segmentation",
-    "Diagram/Step 04 - Physical Memory Manager/phys-mem-not-contiguous.svg",
     "Diagram/Step 04 - Physical Memory Manager/phys-mem-not-contiguous.svg.tmp.7216.2774924d8387",
     "Diagram/Step 04 - Physical Memory Manager",
-    "Thực hành/Lab 0x00 - Hello Serial.md",
     "Lý thuyết/Lý thuyết.md",
     "Lý thuyết/Tài liệu gốc/UART 16550.md",
     "Lý thuyết/Tài liệu gốc/Intel SDM.md",
     "Lý thuyết/Tài liệu gốc/Danh mục tài liệu.md",
     "Lý thuyết/Khái niệm/x86 Segmentation.md",
-    "Lý thuyết/Khái niệm/Request-Response Mechanism.md",
-    "Lý thuyết/Khái niệm/Paging.md",
     "Lý thuyết/Khái niệm/Long Mode.md",
     "Lý thuyết/Khái niệm/Limine Protocol.md",
     "Lý thuyết/Khái niệm/KASLR & PIE Kernel.md",
@@ -217,15 +225,9 @@
     "Lý thuyết/Khái niệm/HHDM.md",
     "Lý thuyết/Khái niệm/GDT.md",
     "Lý thuyết/Khái niệm/Cấu trúc os.img.md",
-    "Diagram/GDT/addr-translation-stages.svg",
-    "Diagram/GDT/gdt-table-layout.svg",
     "CLAUDE.md.tmp.7216.bfb7d0867eec",
     "Diagram/Paging/mmu-translation-flow.svg.tmp.7216.9d40371c6161",
-    "Diagram/GDT/gdt-flags-nibble.svg.tmp.7216.d3494f3d3fb5",
-    "Diagram/GDT/gdt-access-byte.svg.tmp.7216.da645975f627",
-    "Diagram/GDT/gdt-descriptor-8byte.svg.tmp.7216.190b9b8ad16e",
     "CLAUDE.md",
-    "Thực hành/Thực hành.md",
     "Công cụ và môi trường/Cẩm nang build & debug.md",
     "Công cụ và môi trường/Công cụ và môi trường.md",
     "Công cụ và môi trường/Dựng môi trường cavOS.md",
