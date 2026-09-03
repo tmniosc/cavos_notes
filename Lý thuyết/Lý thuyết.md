@@ -11,7 +11,8 @@ Về trang chủ: [[Home]]
 
 ## Bắt đầu từ đâu
 
-1. [[Boot Flow (_start)]] — bản đồ thứ tự khởi tạo, xương sống của cả hành trình. Mọi Step đều treo vào đây.
+1. [[Boot Flow (_start)]] — bản đồ thứ tự khởi tạo, nằm ngay trong `Steps/` vì nó là chỉ mục của chuỗi đó.
+   Mọi Step đều treo vào đây.
 2. [[Paging]] — 5 ý nền tảng, nên nạp trước Step 03 thì đọc `link.ld` / memmap / HHDM mới trôi.
 3. [[Danh mục tài liệu]] — học phần nào thì mở tài liệu gốc nào, lấy ở đâu.
 

@@ -39,7 +39,7 @@ if (LIMINE_BASE_REVISION_SUPPORTED == false) panic();
 ## 5. Limine ĐÃ làm gì trước khi vào `_start`
 | Đã thiết lập                                 | Kernel KHỎI phải tự làm                         |                                           |     |
 | -------------------------------------------- | ----------------------------------------------- | ----------------------------------------- | --- |
-| CPU ở [[Long Mode]]                          | 64-bit [[long mode]]                            | không cần code chuyển real→protected→long |     |
+| CPU ở [[Long Mode]]                          | 64-bit [[Long Mode|long mode]]                            | không cần code chuyển real→protected→long |     |
 | Paging đã bật (bảng trang tạm)               | đã chạy ở địa chỉ ảo                            |                                           |     |
 | [[HHDM]]: map toàn bộ RAM vật lý vào nửa cao | truy cập phys = `phys + hhdmOffset`             |                                           |     |
 | Kernel nạp [[Higher-Half Kernel]]            | higher-half]], relocate ([[KASLR & PIE Kernel]] | KASLR                                     | —   |

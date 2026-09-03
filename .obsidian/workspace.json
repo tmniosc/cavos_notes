@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Home.md",
+                "file": "Lý thuyết/Lý thuyết.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Home"
+              "title": "Lý thuyết"
             }
           }
         ]
@@ -158,7 +158,7 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Home.md",
+                "file": "Lý thuyết/Lý thuyết.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
@@ -187,19 +187,21 @@
   },
   "active": "b8acf3f3438b753a",
   "lastOpenFiles": [
-    "CLAUDE.md.tmp.7216.c0cc45be55a6",
+    "Lý thuyết/Steps/Boot Flow (_start).md",
+    "Lý thuyết/Lý thuyết.md",
+    "Lý thuyết/Boot Flow (_start).md",
+    "Lý thuyết/Khái niệm/GDT.md",
+    "Công cụ và môi trường/Cẩm nang build & debug.md",
     "Công cụ và môi trường/Công cụ và môi trường.md",
+    "Home.md",
+    "CLAUDE.md.tmp.7216.c0cc45be55a6",
     "Công cụ và môi trường/Công cụ và môi trường.md.tmp.7216.901160dcf5d9",
     "Thực hành/Thực hành.md",
     "Thực hành/Thực hành.md.tmp.7216.feb77ab1477f",
-    "Lý thuyết/Lý thuyết.md",
     "Lý thuyết/Lý thuyết.md.tmp.7216.5fc548d79e45",
     "Lý thuyết/Tài liệu gốc/Intel SDM.md",
     "Lý thuyết/Tài liệu gốc/Danh mục tài liệu.md",
-    "Home.md",
-    "Lý thuyết/Boot Flow (_start).md",
     "Công cụ và môi trường/Khôi phục source (2026-09-03).md",
-    "Công cụ và môi trường/Cẩm nang build & debug.md",
     "Công cụ và môi trường/Dựng môi trường oskernel-lab.md",
     "Công cụ và môi trường/Dựng môi trường cavOS.md",
     "Công cụ và môi trường/Dựng môi trường chung.md",
@@ -218,10 +220,8 @@
     "Thực hành/src/oskernel-lab/03-pmm-vmm/boot.h",
     "Thực hành/src/oskernel-lab/03-pmm-vmm/pmm.c",
     "Thực hành/src/oskernel-lab/03-pmm-vmm/boot.c",
-    "Thực hành/src/oskernel-lab/03-pmm-vmm/GNUmakefile",
     "Thực hành/src/oskernel-lab/README.md",
     "Thực hành/Lab 0x03 - PMM & VMM.md",
-    "Thực hành/Lab 0x02 - Framebuffer.md",
-    "Thực hành/Lab 0x01 - Bootloader Parser.md"
+    "Thực hành/Lab 0x02 - Framebuffer.md"
   ]
 }

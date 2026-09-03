@@ -37,8 +37,7 @@ cavos_notes/
 ├─ CLAUDE.md · Home.md                    ← gốc; Home chỉ móc tới 3 trang chỉ mục
 ├─ Lý thuyết/
 │   ├─ Lý thuyết.md                       ← CHỈ MỤC: bảng Step, khái niệm, tài liệu
-│   ├─ Boot Flow (_start).md              ← xương sống, thứ tự khởi tạo
-│   ├─ Steps/        Step 00 → 17
+│   ├─ Steps/        Boot Flow (_start).md (bản đồ) + Step 00 → 17
 │   ├─ Khái niệm/    Paging, Limine Protocol, HHDM, Higher-Half, Long Mode, KASLR, Request-Response
 │   └─ Tài liệu gốc/ Danh mục tài liệu, Intel SDM, UART 16550
 ├─ Thực hành/
