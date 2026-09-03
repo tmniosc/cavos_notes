@@ -8,7 +8,11 @@ status: done
 > in ra serial — thấy tận mắt paging/HHDM/kernel-address/memmap mà Step 02 chỉ đọc vào struct.
 > Nối tiếp [[Lab 0x00 - Hello Serial]] (tái dùng serial 16550).
 
-**Vị trí:** `~/oskernel-lab/01-bootloader-parser/` · build/run y hệt Lab 0x00 (`make kernel`, `sudo -v && make run`).
+**Vị trí:** `~/oskernel-lab/01-bootloader-parser/` · build/run y hệt Lab 0x00 (`make kernel`, `make run`).
+
+> [!note] Source viết lại & đã chạy lại (2026-09-03)
+> Source hiện tại viết lại từ note → `Labs/src/oskernel-lab/01-bootloader-parser/`, **đã boot QEMU thật lại**.
+> Kết quả mới ở mục "Run thật 2026-09-03" bên dưới; bản 2026-05-28 giữ nguyên để đối chiếu.
 
 ## Làm gì
 Khai 4 request (gói trong `.limine_requests`, `used`):
@@ -68,6 +72,27 @@ Thêm 2 helper so với Lab 0x00: `serial_puthex(uint64_t)`, `serial_putdec(uint
   -- USABLE = 254 MiB / non-RES = 259 MiB (QEMU cấp 256 MiB)
 [done] halt.
 ```
+
+### Run thật 2026-09-03 (source dựng lại, QEMU `-M q35 -m 256M`)
+```
+=== Lab 0x01 - Bootloader Parser (Step 02) ===
+[paging] mode = 4-level
+[hhdm]   offset = 0xffff800000000000        ← Y HỆT lần trước: HHDM cố định, không theo KASLR
+[kernel] virt = 0xffffffff80000000          ← Y HỆT: top-2GiB luôn cố định
+         phys = 0x000000000ff42000          ← ĐỔI (lần trước 0x0ffb2000) — Limine chọn lại mỗi lần boot
+[memmap]                                         ; 16 entries
+  [0]  base=0x0000000000001000 len=0x0000000000052000 BOOT_RECLAIM
+  [1]  base=0x0000000000053000 len=0x000000000004c000 USABLE
+  [4]  base=0x0000000000100000 len=0x000000000fe3f000 USABLE   ← khối RAM chính sau 1 MiB
+  [6]  base=0x000000000ff42000 len=0x0000000000003000 KERNEL_MODS  ← đúng bằng phys_base
+  [12] base=0x00000000fd000000 len=0x00000000003e8000 FRAMEBUFFER
+  ...
+  -- USABLE = 254 MiB / non-RES = 259 MiB
+[done] halt.
+```
+> **Điều đáng học nằm ở chỗ so 2 lần chạy:** `hhdm` và `virt` **không đổi một bit**, còn `phys_base` +
+> ranh giới các vùng thì **đổi hết**. Đó chính là lý do kernel phải hỏi bootloader thay vì hard-code địa chỉ.
+> Vẫn đúng 16 entry và vẫn `254 / 259 MiB` vì QEMU cấu hình y như cũ.
 
 ### 🏷️ Các loại vùng (memmap type) — kernel được làm gì với chúng
 > _Mỗi vùng có 1 "nhãn" cho biết là RAM trống, RAM mượn-tạm, hay vùng cấm. PMM ([[Step 04 - Physical Memory Manager]]) dựa vào nhãn này để quyết định cấp phát._

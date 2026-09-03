@@ -11,6 +11,12 @@ Mở folder này bằng **Obsidian** (Open folder as vault). Các note liên k�
 >
 > 🧠 **Context + bộ nhớ + tiến độ ở [[CLAUDE]]** (tự nạp khi mở Claude tại thư mục này).
 
+> [!warning] 2026-09-03 — mất toàn bộ source, đang dựng lại
+> Máy cũ mất → mất cả `~/cavOS` lẫn `~/oskernel-lab`. **Vault này còn nguyên** (chỉ vault sống sót).
+> cavOS clone lại được 100%; source lab đã **viết lại từ note** và cất tại `Labs/src/oskernel-lab/`,
+> **chưa build/boot lại lần nào** → output cũ trong các note Lab vẫn là của máy cũ.
+> Đọc [[Khôi phục source (2026-09-03)]] trước khi chạy bất kỳ lệnh nào.
+
 ## 🚀 Bắt đầu từ đây
 - [[Boot Flow (_start)]] — bản đồ thứ tự khởi tạo, xương sống của cả hành trình
 - [[Spec Library]] — danh mục tài liệu spec & nơi tải
@@ -61,3 +67,10 @@ Mở folder này bằng **Obsidian** (Open folder as vault). Các note liên k�
 ## 📖 Spec notes
 - [[Intel SDM]]
 - [[UART 16550]]
+
+## 🛠️ Meta
+- [[Dựng môi trường chung]] — nền cho cả hai: WSL, vault ở đâu, quy tắc build trong `~`, gói dùng chung
+- [[Dựng môi trường cavOS]] — nhánh cavOS: cross-compiler → `make disk` → `make qemu`
+- [[Dựng môi trường oskernel-lab]] — nhánh lab: Limine v8.x → chép source từ vault → `make run`
+- [[Build & Debug Cheatsheet]] — lệnh build/QEMU/GDB, cấu trúc `os.img`, lỗi thường gặp
+- [[Khôi phục source (2026-09-03)]] — note **tạm**, xoá sau khi khôi phục xong

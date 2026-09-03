@@ -6,7 +6,13 @@ status: done
 # Lab 0x00 — Hello Serial
 
 Tự viết lại phần **boot + serial** từ số 0 (gộp [[Step 00 - Boot & Limine]] + [[Step 01 - Serial UART]]).
-Vị trí: `~/oskernel-lab`.
+Vị trí: `~/oskernel-lab/00-hello-serial/` (máy cũ để ngay ở gốc `~/oskernel-lab`).
+
+> [!note] Source viết lại & đã chạy lại (2026-09-03)
+> Bản gốc mất cùng máy cũ → source hiện tại **viết lại từ chính note này**, lưu ở
+> `Labs/src/oskernel-lab/00-hello-serial/`. Đã **build + boot QEMU thật lại** trên máy mới:
+> serial in đúng `Hello Serial`, và `kernel.map` khớp y bài học (xem mục "4 file phân tích build").
+> Toolchain lần chạy này là **gcc hệ thống** (cross `x86_64-cavos-gcc` chưa dựng xong).
 
 ## Mục tiêu
 - Limine nạp kernel ELF64 vào [[Long Mode]] → nhảy vào entry `kmain` (= `ENTRY(kmain)` trong `linker.ld`).
@@ -52,6 +58,23 @@ Makefile lab tự tạo mỗi lần build — dùng để **thấy tận mắt**
          0xffffffff80001000  . = ALIGN(MAXPAGESIZE)   ← đẩy sang trang mới
 .rodata  0xffffffff80001000   0x8a            ← rodata khởi đầu ĐÚNG biên trang 0x1000
 ```
+
+**Chạy lại 2026-09-03 (source dựng lại, gcc hệ thống)** — cùng kết luận, chỉ khác kích thước:
+```
+.text           0xffffffff80000000      0x152
+                0xffffffff80000000                kmain     ← entry ngay đầu .text
+.rodata         0xffffffff80001000       0x4c               ← vẫn đúng biên trang 0x1000
+.data           0xffffffff80002000       0x18
+```
+`readelf -lW kernel.bin` xác nhận **W^X** đúng như [[Step 00 - Boot & Limine]] §0.1.2:
+```
+LOAD 0xffffffff80000000 ... R E     ← .text: đọc + THỰC THI, không ghi
+LOAD 0xffffffff80001000 ... R       ← .rodata: chỉ đọc
+LOAD 0xffffffff80002000 ... RW      ← .data/.bss: đọc + ghi, không thực thi
+```
+> Ba segment `PT_LOAD` rơi đúng 3 trang liền nhau vì `linker.ld` chèn `ALIGN(CONSTANT(MAXPAGESIZE))`
+> và link với `-Wl,-z,max-page-size=0x1000` — thiếu cờ này MAXPAGESIZE = 2 MiB, rodata sẽ nhảy lên
+> `…80200000` chứ không phải `…80001000`.
 
 ## Liên hệ
 - Lý thuyết: [[Step 00 - Boot & Limine]], [[Step 01 - Serial UART]].

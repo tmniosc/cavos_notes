@@ -10,6 +10,15 @@ status: done
 
 **Vị trí:** `~/oskernel-lab/03-pmm-vmm/` · base revision **2**. **Chạy:** `make run`.
 
+> [!note] Source viết lại & đã chạy lại (2026-09-03) — CÓ SỬA 1 BUG
+> Source hiện tại viết lại từ note → `Labs/src/oskernel-lab/03-pmm-vmm/`, **đã boot QEMU thật lại**.
+> Bản cũ đánh dấu **thiếu 1 frame** của bitmap: bitmap 8301 B tại `0x60000` trải 3 frame
+> (`0x60000/0x61000/0x62000`) nhưng chỉ mark 2 → `pmm_alloc` phát ra chính `0x62000` **đang chứa 109 byte
+> cuối của bitmap**. Không sập vì PML4 mới chỉ dùng entry 192/256/511 (offset từ 1536 byte trở đi) → may
+> chứ không đúng. Bản mới làm tròn **LÊN**, đã xác nhận vá đúng ở mục "Chạy lại 2026-09-03" bên dưới.
+> Số cũ + `outputs/lab-0x03-run.txt` giữ nguyên để đối chiếu; output mới ở
+> `outputs/lab-0x03-run-2026-09-03.txt`.
+
 ## 📦 Cấu trúc module
 ```
 io.h        — outb/inb (inline)
@@ -161,6 +170,48 @@ memmap 1 dòng, kèm dòng con `>` cho từng **OBJECT** nằm trong vùng đó:
 
 > 📐 **Sơ đồ "PA ←→ VA" trực quan** (mũi tên, aliasing): xem [[Lab 0x01 - Bootloader Parser]] — bảng
 > `pmm_dump_map` ở trên đã thể hiện đủ 3 cột PA/VA-HHDM/VA-kernel cho mọi vùng.
+
+## Chạy lại 2026-09-03 (source dựng lại, đã vá bug bitmap)
+
+> _Cùng một cấu hình QEMU nhưng Limine xếp bộ nhớ khác lần trước, nên mọi địa chỉ đều dời. Cái **không**
+> dời mới là bài học: tổng số frame, cỡ bitmap, và mọi quan hệ giữa các con số._
+> Output đầy đủ: `outputs/lab-0x03-run-2026-09-03.txt`.
+
+```
+[pmm] total frames = 66405  bitmap bytes = 8301        ← Y HỆT lần cũ
+[pmm] bitmap at PA = 0x0000000000053000  (block #83)   ← dời (cũ: 0x60000, block #96)
+[pmm] free frames  = 65181
+[pmm] alloc #1 PA  = 0x0000000000056000                ← BUG ĐÃ VÁ (xem dưới)
+[pmm] alloc #2 PA  = 0x0000000000057000
+[pmm] free -2 = 65179  OK      /  free after free = 65181  OK (back to start)
+
+[vmm] our pml4 (VA) = 0xffff800000056000      PML4 old = 0x0ff88000
+[walk] HHDM   PML4[0x100] -> PDPT@0x0ff84000 -> PD@0x0ff83000 -> 2MB hugepage
+[walk] kernel PML4[0x1ff] -> PDPT@0x0ff87000[0x1fe] -> PD@0x0ff86000 -> PT@0x0ff85000
+[vmm] map VA 0x600000000000 -> PA 0x57000
+[vmm] tables: PDPT=0x58000 (new) PD=0x59000 (new) PT=0x5a000 (new)
+[vmm] write via new VA, read via HHDM = 0xdeadbeefcafebabe  OK (same PA!)
+[vmm] vresolve(VA) = 0x57000  OK
+```
+
+**Bug đã vá — kiểm bằng số:** bitmap `0x53000` → `0x5506d`, tức chiếm frame `0x53/0x54/0x55` (**3 frame**).
+`alloc #1` ra `0x56000` = frame ngay **sau** frame cuối của bitmap. Bản cũ sẽ ra `0x55000` và giẫm lên
+đuôi bitmap. Đối chiếu tiếp: USABLE có `76 + 65077 + 31 = 65184` frame, trừ 3 frame bitmap = **65181**,
+đúng bằng `free frames` in ra → sổ sách khớp tuyệt đối.
+
+**Cái gì cố định, cái gì đổi:**
+
+| Đại lượng | Đổi? | Vì sao |
+| --- | --- | --- |
+| `total frames = 66405`, `bitmap bytes = 8301` | không | phụ thuộc **tổng RAM** (`mmTotal`), mà QEMU vẫn cấp 256 MiB |
+| `hhdm offset = 0xffff800000000000` | không | hằng số của 4-level paging |
+| PA của bitmap / PML4 / các bảng | đổi hết | Limine xếp vùng khác đi mỗi lần boot |
+| Bảng con HHDM/kernel nằm trong BOOT_REC | không | Limine luôn gom cây page table của nó vào BOOT_REC |
+| HHDM = 2 MiB hugepage (3 tầng), kernel = 4 KiB (4 tầng) | không | thiết kế của Limine, không phải ngẫu nhiên |
+
+> Lần này bảng con của HHDM/kernel nằm `0x0ff83000`–`0x0ff87000`, cùng vùng BOOT_REC với PML4 old
+> `0x0ff88000` — **đúng y kết luận rút ra từ lần chạy cũ** dù số đã khác hoàn toàn. Đó là dấu hiệu bài học
+> đúng chứ không phải trùng hợp.
 
 ## 🔑 Điểm học chính
 

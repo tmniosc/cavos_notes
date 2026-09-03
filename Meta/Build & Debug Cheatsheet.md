@@ -6,6 +6,14 @@ tags: [reference, build]
 
 Repo: `~/cavOS` (trong WSL native fs — **không** dùng `/mnt/d`).
 
+> [!warning] 2026-09-03 — máy mới, môi trường đang dựng lại
+> Mọi lệnh dưới đây **giả định đã có** `~/cavOS`, `~/oskernel-lab`, cross toolchain, qemu, mtools, Limine.
+> Cài từ đầu: **[[Dựng môi trường chung]]** (nền) rồi rẽ [[Dựng môi trường cavOS]] /
+> [[Dựng môi trường oskernel-lab]];
+> lý do phải dựng lại: [[Khôi phục source (2026-09-03)]].
+> Các đường dẫn `/home/tmnvi/...` bên dưới là của **máy cũ** — user mới sẽ khác;
+> `common.mk` bản dựng lại dùng `$(HOME)` nên không cần sửa tay nữa.
+
 ## Build & chạy
 ```bash
 cd ~/cavOS
@@ -83,7 +91,9 @@ Mỗi lần build kernel tự sinh kèm (tên dẫn xuất từ `KERNEL`, vd `ke
 > nên chưa có địa chỉ cuối để "map". `kernel.bin` link từ **một mình `kernel.o`** + `linker.ld`, kiểu
 > **freestanding** (`-nostdlib -static -no-pie`): không libc, không crt0 — Limine thay crt nhảy thẳng `kmain`.
 
-> Cross tools (`objdump/readelf/nm`) không nằm trên `$PATH` → `common.mk` gọi full path `/home/tmnvi/opt/cross/bin/x86_64-cavos-*`.
+> Cross tools (`objdump/readelf/nm`) không nằm trên `$PATH`. Bản `common.mk` **dựng lại 2026-09-03** dò
+> `$(HOME)/opt/cross/bin/x86_64-cavos-gcc`; **chưa có thì tự lùi về `gcc` hệ thống** (kernel freestanding vẫn
+> build đúng). Xem toolchain đang dùng bằng `make info`. (Máy cũ hard-code `/home/tmnvi/opt/cross/bin/...`.)
 > ⚠️ Trong Makefile, **đừng** để comment cùng dòng với `VAR := value` — Make nuốt cả khoảng trắng trước `#` vào giá trị → tên file dính space, hỏng build.
 
 > 💡 Soi section/flag của **`.o`** (trước link): `readelf -S kernel.o` / `objdump -h kernel.o`
@@ -132,6 +142,23 @@ fdisk -l os.img                 # bảng phân vùng
 mdir -i "os.img@@1M" -b -/ ::   # cây file trong FAT32
 xxd -s 510 -l 2 os.img          # chữ ký boot 55 AA
 ```
+
+## Dựng lại lab trên máy trắng (từ bản lưu trong vault)
+> _Source lab giờ được cất trong chính vault (`Labs/src/`). Máy mới chỉ cần chép sang WSL + cài vài gói._
+
+```bash
+sudo apt install -y build-essential qemu-system-x86 mtools parted xorriso git
+git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
+make -C ~/opt/limine
+cp -r "/mnt/d/tmniosc/cavos_notes/Labs/src/oskernel-lab" ~/oskernel-lab
+cd ~/oskernel-lab/00-hello-serial && make info && make run
+```
+- **`v8.x-binary`, KHÔNG v9+**: từ Limine 9, `kernel_path` đổi tên và `LIMINE_KERNEL_ADDRESS_REQUEST` bị thay
+  bằng `EXECUTABLE_ADDRESS` → lệch `limine.h` của cavOS và lệch mọi note đã viết.
+- `common.mk` đọc `LIMINE_DIR` (mặc định `~/opt/limine`) và `CROSS_PREFIX` — đổi bằng biến môi trường,
+  không sửa file: `make run LIMINE_DIR=/duong/dan/khac`.
+- `make info` in ra đang dùng cross gcc hay gcc hệ thống.
+- Chép **1 chiều** `/mnt/d` → `~`; **không bao giờ build** trên `/mnt` (9p + CRLF, xem lỗi bên dưới).
 
 ## Lỗi thường gặp (đã trải qua)
 - `env: bash\r` → CRLF (do build trên ổ Windows). Build trong `~`, git Linux giữ LF.

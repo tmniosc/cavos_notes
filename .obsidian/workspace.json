@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Khái niệm/x86 Segmentation.md",
+                "file": "Labs/src/oskernel-lab/README.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "x86 Segmentation"
+              "title": "README"
             }
           }
         ]
@@ -41,7 +41,9 @@
               "type": "file-explorer",
               "state": {
                 "sortOrder": "alphabetical",
-                "autoReveal": false
+                "autoReveal": false,
+                "showSearch": false,
+                "searchQuery": ""
               },
               "icon": "lucide-folder-closed",
               "title": "Files"
@@ -156,13 +158,13 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Khái niệm/x86 Segmentation.md",
+                "file": "Labs/src/oskernel-lab/README.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Outline of x86 Segmentation"
+              "title": "Outline"
             }
           }
         ],
@@ -185,40 +187,40 @@
   },
   "active": "b8acf3f3438b753a",
   "lastOpenFiles": [
+    "Meta/Build & Debug Cheatsheet.md",
+    "Meta/Khôi phục source (2026-09-03).md",
+    "Meta/Dựng môi trường chung.md",
+    "Meta/Dựng môi trường cavOS.md",
+    "sedaohsF4",
+    "Meta/Khôi phục source (2026-09-03).md.tmp.7216.cb75851f60af",
+    "Meta/Khôi phục source (2026-09-03).md.tmp.7216.cfd00af2afb2",
+    "Meta/Khôi phục source (2026-09-03).md.tmp.7216.b327c192fd19",
+    "Meta/Build & Debug Cheatsheet.md.tmp.7216.a48de0d49149",
+    "Meta/gW0BXsdS",
+    "Meta/O3r6OJjH",
+    "CLAUDE.md.tmp.7216.0d0c1d51286e",
+    "Home.md.tmp.7216.a2f6667d680e",
+    "Meta/Dựng môi trường cavOS.md.tmp.7216.aa0a2c4935f6",
+    "Meta/Dựng môi trường oskernel-lab.md",
+    "Labs/Lab 0x00 - Hello Serial.md",
     "Khái niệm/Paging.md",
+    "Labs/Lab 0x03 - PMM & VMM.md",
     "Khái niệm/x86 Segmentation.md",
     "Khái niệm/GDT.md",
-    "Khái niệm/Long Mode.md.tmp.18088.6d81ba81356a",
-    "Khái niệm/GDT.md.tmp.18088.18763a2f4e54",
-    "Home.md.tmp.18088.2d5558559c93",
-    "Khái niệm/x86 Segmentation.md.tmp.18088.c71ca1097725",
-    "Khái niệm/GDT.md.tmp.18088.9073c07b2f7b",
     "Steps/Step 06 - GDT & TSS.md",
-    "Steps/Step 06 - GDT & TSS.md.tmp.18088.eaee2cac4510",
-    "Home.md.tmp.18088.4ef7bf2803df",
-    "Khái niệm/GDT.md.tmp.18088.320c5ff598d6",
     "Home.md",
     "Steps/Step 08 - IDT & Interrupts.md",
-    "CLAUDE.md.tmp.15852.c63d5440739b",
-    "Home.md.tmp.15852.e2c4c0726c49",
     "Khái niệm/Request-Response Mechanism.md",
-    "Labs/Lab 0x03 - PMM & VMM.md",
     "Khái niệm/HHDM.md",
     "Steps/Step 05 - Virtual Memory & Paging.md",
     "Labs/Lab 0x02 - Framebuffer.md",
     "Labs/Lab 0x01 - Bootloader Parser.md",
-    "Labs/Lab 0x00 - Hello Serial.md",
     "Khái niệm/Higher-Half Kernel.md",
     "Khái niệm/KASLR & PIE Kernel.md",
     "Khái niệm/Limine Protocol.md",
     "Khái niệm/Long Mode.md",
     "Steps/Step 04 - Physical Memory Manager.md",
-    "Meta/Build & Debug Cheatsheet.md",
     "Steps/Step 02 - Bootloader Parser.md",
-    "Steps/Step 13 - PCI & NIC.md",
-    "Steps/Step 00 - Boot & Limine.md",
-    "Steps/Step 03 - Framebuffer & Console.md",
-    "Steps/Step 01 - Serial UART.md",
-    "Spec/UART 16550.md"
+    "Steps/Step 13 - PCI & NIC.md"
   ]
 }

@@ -1,0 +1,10 @@
+CompileFlags:
+  Remove:
+    - -mcmodel=kernel
+    - -mno-red-zone
+    - -fno-stack-clash-protection
+    - -mno-80387
+    - -fno-lto
+Diagnostics:
+  UnusedIncludes: None
+  MissingIncludes: None

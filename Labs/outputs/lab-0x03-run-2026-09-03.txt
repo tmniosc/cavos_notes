@@ -1,0 +1,74 @@
+Lab 0x03 - PMM & VMM - full serial output (QEMU -M q35 -m 256M, 2026-09-03)
+Nguon: ~/oskernel-lab/03-pmm-vmm  ·  make run  ·  source dung lai sau khi mat may cu
+Lan chay cu (2026-06-01) van giu o lab-0x03-run.txt de doi chieu.
+================================================================================
+
+=== Lab 0x03 - PMM + VMM (Step 04 + 05) ===
+
+[init] hhdm offset = 0xffff800000000000
+
+[pmm] total frames = 66405  bitmap bytes = 8301
+[pmm] bitmap at PA = 0x0000000000053000  (block #83)  VA = 0xffff800000053000
+[pmm] free frames  = 65181
+[pmm] alloc #1 PA  = 0x0000000000056000
+[pmm] alloc #2 PA  = 0x0000000000057000
+[pmm] free -2 = 65179  OK
+[pmm] free after free = 65181  OK (back to start)
+
+[vmm] built new PML4 + mov cr3
+[vmm] our pml4 (VA) = 0xffff800000056000
+[walk] HHDM    VA=0xffff800000000000
+       PML4 @0x0000000000056000 [idx 0x0000000000000100]
+       PDPT @0x000000000ff84000 [idx 0x0000000000000000]
+       PD   @0x000000000ff83000 [idx 0x0000000000000000]
+       PD entry = 2MB hugepage -> PA 0x0000000000000000
+[walk] kernel  VA=0xffffffff80000000
+       PML4 @0x0000000000056000 [idx 0x00000000000001ff]
+       PDPT @0x000000000ff87000 [idx 0x00000000000001fe]
+       PD   @0x000000000ff86000 [idx 0x0000000000000000]
+       PT   @0x000000000ff85000 [idx 0x0000000000000000]
+[vmm] map VA 0x0000600000000000 -> PA 0x0000000000057000
+[vmm] tables for VA: PDPT=0x0000000000058000 (new) PD=0x0000000000059000 (new) PT=0x000000000005a000 (new)
+
+[map] PMM physical memory layout (region rows + sub-rows for objects)
++--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+----------+-------+----------------+------------+
+| PA begin           | PA end             | VA-HHDM begin      | VA-HHDM end        | VA-kernel begin    | VA-kernel end      | type     | alloc | stores         | size       |
++--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+----------+-------+----------------+------------+
+| 0x0000000000001000 | 0x0000000000053000 | 0xffff800000001000 | 0xffff800000053000 | -                  | -                  | BOOT_REC |   Y   | (region)       |      328 K |
+| 0x0000000000053000 | 0x000000000009f000 | 0xffff800000053000 | 0xffff80000009f000 | -                  | -                  | USABLE   |   Y   | (region)       |      304 K |
+| 0x0000000000053000 | 0x000000000005506d | 0xffff800000053000 | 0xffff80000005506d | -                  | -                  |  (obj)   |   .   | > PMM bitmap   |        8 K |
+| 0x0000000000056000 | 0x0000000000057000 | 0xffff800000056000 | 0xffff800000057000 | -                  | -                  |  (obj)   |   .   | > PML4 (new)   |        4 K |
+| 0x0000000000058000 | 0x0000000000059000 | 0xffff800000058000 | 0xffff800000059000 | -                  | -                  |  (obj)   |   .   | > PDPT testVA  |        4 K |
+| 0x0000000000059000 | 0x000000000005a000 | 0xffff800000059000 | 0xffff80000005a000 | -                  | -                  |  (obj)   |   .   | > PD testVA    |        4 K |
+| 0x000000000005a000 | 0x000000000005b000 | 0xffff80000005a000 | 0xffff80000005b000 | -                  | -                  |  (obj)   |   .   | > PT testVA    |        4 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x000000000009fc00 | 0x00000000000a0000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |        1 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x00000000000f0000 | 0x0000000000100000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |       64 K |
+| 0x0000000000100000 | 0x000000000ff35000 | 0xffff800000100000 | 0xffff80000ff35000 | -                  | -                  | USABLE   |   Y   | (region)       |   260308 K |
+| 0x000000000ff35000 | 0x000000000ff38000 | 0xffff80000ff35000 | 0xffff80000ff38000 | -                  | -                  | BOOT_REC |   Y   | (region)       |       12 K |
+| 0x000000000ff38000 | 0x000000000ff3c000 | 0xffff80000ff38000 | 0xffff80000ff3c000 | 0xffffffff80000000 | 0xffffffff80004000 | KERNEL   |   n   | (region)       |       16 K |
+| 0x000000000ff3c000 | 0x000000000ff51000 | 0xffff80000ff3c000 | 0xffff80000ff51000 | -                  | -                  | BOOT_REC |   Y   | (region)       |       84 K |
+| 0x000000000ff51000 | 0x000000000ff70000 | 0xffff80000ff51000 | 0xffff80000ff70000 | -                  | -                  | USABLE   |   Y   | (region)       |      124 K |
+| 0x000000000ff70000 | 0x000000000ffdf000 | 0xffff80000ff70000 | 0xffff80000ffdf000 | -                  | -                  | BOOT_REC |   Y   | (region)       |      444 K |
+| 0x000000000ff88000 | 0x000000000ff89000 | 0xffff80000ff88000 | 0xffff80000ff89000 | -                  | -                  |  (obj)   |   .   | > PML4 (old)   |        4 K |
+| 0x000000000ffdf000 | 0x0000000010000000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |      132 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x00000000b0000000 | 0x00000000c0000000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |   262144 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x00000000fd000000 | 0x00000000fd3e8000 | -                  | -                  | -                  | -                  | FRAMEBUF |   n   | framebuffer    |     4000 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x00000000fed1c000 | 0x00000000fed20000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |       16 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x00000000fffc0000 | 0x0000000100000000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       |      256 K |
+|                                                                 .. address gap (not backed by RAM/device) ..                                                                 |
+| 0x000000fd00000000 | 0x0000010000000000 | -                  | -                  | -                  | -                  | RESERVED |   n   | (region)       | 12582912 K |
++--------------------+--------------------+--------------------+--------------------+--------------------+--------------------+----------+-------+----------------+------------+
+region row = 1 memmap entry; sub-row starting with > = 1 OBJECT inside that region.
+PDPT/PD/PT testVA = tables LAB built for the test mapping 0x600000000000.
+HHDM/kernel sub-tables are built by Limine (PML4 new shares them) -> not listed.
+VA-HHDM = PA + HHDM (RAM only); VA-kernel only for kernel image.
+[vmm] write via new VA, read via HHDM = 0xdeadbeefcafebabe  OK (same PA!)
+[vmm] vresolve(VA)  = 0x0000000000057000  OK
+
+[done] halt.
