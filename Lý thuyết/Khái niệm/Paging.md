@@ -30,13 +30,7 @@ Tiến độ: [[Home]] · phục vụ cho [[Step 03 - Framebuffer & Console]] v�
 
 Mọi địa chỉ kernel chạm vào là **địa chỉ ảo (virtual address — VA)**. Phần cứng MMU dịch sang **địa chỉ vật lý (physical — PA)** bằng cách tra **page table**. Thanh ghi **CR3** trỏ tới gốc bảng.
 
-```
-   Code dùng VA          MMU (phần cứng)            RAM thật
-   ┌─────────┐    tra     ┌───────────────┐   ra    ┌─────────┐
-   │  0x...  │ ─────────► │  page tables  │ ──────► │  PA     │
-   └─────────┘            │  (gốc = CR3)  │         └─────────┘
-                          └───────────────┘
-```
+![[mmu-translation-flow.svg]]
 
 Ý nghĩa: kernel **không** sờ thẳng RAM — luôn qua một lớp dịch. Đây là lý do có HHDM (ý 5).
 

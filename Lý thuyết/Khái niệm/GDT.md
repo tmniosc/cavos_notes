@@ -33,15 +33,7 @@ tags: [concept, cpu, segmentation]
 > đồ bộ nhớ vật lý. Nó không biết và không quan tâm máy có bao nhiêu RAM hay RAM nằm đâu.*
 
 Một địa chỉ trên x86 đi qua **2 tầng dịch** trước khi chạm RAM thật:
-```
-địa chỉ logic (segment:offset)
-   │
-   ▼  [SEGMENTATION]  ← GDT làm việc Ở ĐÂY: linear = segment.base + offset, check limit + quyền (ring/code-data)
-địa chỉ tuyến tính (linear / virtual)
-   │
-   ▼  [PAGING]        ← page table (cr3) làm việc ở đây → tra ra frame vật lý
-địa chỉ vật lý (physical) → RAM thật / MMIO / ROM / ...
-```
+![[addr-translation-stages.svg]]
 
 - **GDT ở tầng segmentation** → `base`/`limit` của descriptor mô tả một "cửa sổ" trong **không gian địa chỉ
   tuyến tính** (ảo), KHÔNG phải trong RAM vật lý.
@@ -91,29 +83,12 @@ paging lo trọn.
 - **[[Step 08 - IDT & Interrupts|IDT]]** (Interrupt Descriptor Table) — bảng **trình xử lý ngắt**. Khác hẳn
   GDT về nội dung (gate descriptor), nhưng các gate này lại **tham chiếu selector trong GDT** (kernel code).
 
-```
-        ┌──────── GDT ────────┐
-GDTR ──▶│ null                │
-        │ kernel code (ring0) │◀── CS của kernel trỏ vào đây
-        │ kernel data (ring0) │◀── DS/SS kernel
-        │ user code (ring3)   │◀── CS của user
-        │ user data (ring3)   │
-        │ TSS descriptor ─────┼──▶ TSS (RSP0, IST...)  → xem Step 06
-        └─────────────────────┘
-```
+![[gdt-table-layout.svg]]
 
 ## 3. GDTR — thanh ghi trỏ tới bảng
 > *CPU không giữ cả bảng trong người; nó chỉ giữ một con trỏ + độ dài, gọi là GDTR. Nạp bằng lệnh `lgdt`.*
 
-GDTR là thanh ghi **10 byte** (ở long mode):
-
-```
-┌───────────────┬────────────────────────────────┐
-│  limit 16-bit │       base 64-bit (long mode)   │
-│  (size − 1)   │   (địa chỉ tuyến tính của GDT)  │
-└───────────────┴────────────────────────────────┘
-   2 byte                 8 byte
-```
+GDTR là thanh ghi **10 byte** (ở long mode): 2 byte `limit` + 8 byte `base` — vẽ ở sơ đồ mục 2 bên trên.
 
 - **limit** = *kích thước bảng tính theo byte − 1*. Vì mỗi descriptor 8 byte, bảng N entry → `limit = N*8 − 1`.
 - **base** = địa chỉ bắt đầu bảng (32-bit ở protected mode, 64-bit ở long mode).
@@ -127,14 +102,7 @@ GDTR là thanh ghi **10 byte** (ở long mode):
 
 Sơ đồ 8 byte (đọc theo little-endian, byte 0 ở địa chỉ thấp):
 
-```
- Byte:  7        6        5        4        3        2        1        0
-       ┌────────┬────────┬────────┬────────┬────────┬────────┬────────┬────────┐
-       │base24:31│ flags │base16:23│ access │   base 0:15     │   limit 0:15    │
-       │         │+limit │         │        │                 │                 │
-       │         │16:19  │         │        │                 │                 │
-       └────────┴────────┴────────┴────────┴────────┴────────┴────────┴────────┘
-```
+![[gdt-descriptor-8byte.svg]]
 
 | Trường         | Rộng   | Ý nghĩa                                                             |
 | -------------- | ------ | ------------------------------------------------------------------ |
@@ -159,12 +127,7 @@ Sơ đồ 8 byte (đọc theo little-endian, byte 0 ở địa chỉ thấp):
 > *Một byte này quyết định: đoạn có tồn tại không, ai được dùng (ring), là hệ thống hay code/data, code
 > hay data, đọc/ghi được không. Đây là byte hay tra cứu nhất.*
 
-```
- bit:  7    6 5    4    3    2    1    0
-      ┌───┬─────┬───┬────┬────┬────┬───┐
-      │ P │ DPL │ S │ E  │ DC │ RW │ A │
-      └───┴─────┴───┴────┴────┴────┴───┘
-```
+![[gdt-access-byte.svg]]
 
 | Bit       | Tên | Ý nghĩa                                                                                   |
 | --------- | --- | ----------------------------------------------------------------------------------------- |
@@ -187,12 +150,7 @@ Sơ đồ 8 byte (đọc theo little-endian, byte 0 ở địa chỉ thấp):
 ## 6. Nibble `flags` — kích thước & long mode
 > *4 bit cao của byte 6 quyết định đoạn là 16/32/64-bit và đơn vị limit.*
 
-```
- bit:  3    2    1    0
-      ┌───┬───┬───┬───┐
-      │ G │D/B│ L │AVL│
-      └───┴───┴───┴───┘
-```
+![[gdt-flags-nibble.svg]]
 
 | Bit     | Tên | Ý nghĩa                                                                          |
 | ------- | --- | -------------------------------------------------------------------------------- |
@@ -223,12 +181,7 @@ Sơ đồ 8 byte (đọc theo little-endian, byte 0 ở địa chỉ thấp):
 > *Thanh ghi đoạn (CS, DS, SS...) không chứa descriptor, chúng chứa một **selector 16-bit** = "lấy dòng
 > thứ mấy trong bảng, ở ring nào". CPU dùng selector để tra ra descriptor.*
 
-```
- bit: 15 ────────────── 3   2    1 0
-      ┌──────────────────┬───┬──────┐
-      │     Index (13)   │ TI│ RPL  │
-      └──────────────────┴───┴──────┘
-```
+![[segment-selector-bits.svg]]
 
 | Trường    | Ý nghĩa                                                                        |
 | --------- | ------------------------------------------------------------------------------ |

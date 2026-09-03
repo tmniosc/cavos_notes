@@ -44,8 +44,15 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
   duy nhất toàn vault**.
 - **KHÔNG dùng emoji/icon trong note.** Heading trần (`## Mục đích`), callout `> [!warning]` không gắn hình.
   Note cũ còn icon thì dọn khi nào sửa tới. Mũi tên `→`, ký tự vẽ bảng `├─►`, tick `[x]` không tính là icon.
-- Sơ đồ ASCII → SVG theo skill `dark-native-diagrams`, lưu ở `Diagram/<Tên note>/`, nhúng `![[tên.svg]]`.
-  **Giữ nguyên** cây thư mục và code fence — chỉ chuyển sơ đồ thật.
+- **Sơ đồ dùng SVG, không dùng ASCII art.** Theo skill `dark-native-diagrams` (đã copy vào
+  `.claude/skills/` của vault): nền tối / viền sáng / chữ sáng, `@media (prefers-color-scheme)` cho
+  neutral, box vuông góc, mũi tên chỉ ngang hoặc dọc. Lưu `Diagram/<Tên note>/<tên>.svg`, nhúng
+  `![[tên.svg]]` — **tên file phải duy nhất toàn vault**.
+- **Chữ trong sơ đồ để TIẾNG ANH** (title, label, caption) dù note viết tiếng Việt.
+- **Giữ nguyên dạng text**: cây thư mục (`├── └──`), code fence, bảng markdown, và block output thật.
+  Chỉ chuyển sơ đồ thật (flow, memory map, bit layout, layer stack, cây box).
+- Vẽ xong **mở SVG trong browser xem bằng mắt** trước khi báo xong — lỗi hay gặp là nhãn mũi tên đè lên
+  box và chữ tràn ra ngoài khung.
 
 ## Quy ước viết note
 - **Đọc code** trong WSL. **Ghi note** vào vault trên D:.
