@@ -68,7 +68,7 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
 - **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (bảng trong [[Thực hành]]).
 - **Build + boot QEMU thật rồi mới chép output vào note** — KHÔNG bịa output/bài học
   (đã từng sai, xem [[Lab 0x03 - PMM & VMM]] "Ghi chú trung thực").
-- **Tách module từ Lab 0x02 trở đi**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}` +
+- **Tách module ngay từ Lab 0x00**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}` +
   `kernel.c` chỉ orchestrate; `GNUmakefile` khai `SRCS := ...`. **String in ra để tiếng Anh**, comment
   tiếng Việt. Bám cách cavOS thật làm, KHÔNG tự chế khác (vd `mmTotal` = cộng dồn length ≠ RESERVED).
 - **Sửa code xong chép ngược** về `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ duy nhất

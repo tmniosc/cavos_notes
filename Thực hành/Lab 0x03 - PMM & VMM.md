@@ -12,12 +12,20 @@ status: done
 
 Source: `Thực hành/src/oskernel-lab/03-pmm-vmm/`.
 
-> [!warning] Đã vá một bug đánh dấu bitmap
-> Phiên bản đầu mark **thiếu 1 frame**: bitmap 8301 B tại `0x60000` trải 3 frame
-> (`0x60000/0x61000/0x62000`) nhưng chỉ mark 2 → `pmm_alloc` phát ra chính `0x62000` **đang chứa 109 byte
-> cuối của bitmap**. Không sập vì PML4 mới chỉ dùng entry 192/256/511 (offset từ 1536 byte trở đi) — may
-> chứ không đúng. Nay `bm_mark(bitmap_pa, bytes, 1)` làm tròn **LÊN**; xác nhận ở mục
-> "Chạy lại 2026-09-03" bên dưới. Output cũ giữ ở `outputs/lab-0x03-run.txt` để đối chiếu.
+> [!warning] Đã vá một bug đánh dấu bitmap — có thật, đã đối chiếu source
+> `bm_mark` bản đầu làm tròn **XUỐNG** (`n = len / PAGE`), nên bitmap 8301 B tại `0x60000` trải 3 frame
+> (`0x60000/0x61000/0x62000`) nhưng **chỉ mark 2**. Frame thứ ba vẫn "free" trong khi nó đang chứa 109 byte
+> cuối của chính bitmap → `pmm_alloc` cấp phát trúng nó.
+>
+> Không sập, nhưng chỉ vì **may**: PML4 mới ghi vào entry 192/256/511, tức từ offset 1536 byte trở đi, nên
+> chưa đụng phần bitmap nằm trong frame đó. Đổi vài entry là hỏng ngay.
+>
+> Nay dùng `DivRoundUp(len, PAGE_SIZE)` — làm tròn **LÊN**. Xác nhận ở mục "Chạy lại 2026-09-03" bên dưới;
+> output cũ giữ ở `outputs/lab-0x03-run.txt` để đối chiếu.
+>
+> Lỗi này **không phải suy đoán**: đã so trực tiếp với source gốc lấy lại được, đúng là bản gốc ghi
+> `n = len / PAGE`. Chỉ riêng lần tự-đánh-dấu bitmap mới lộ ra, vì mọi vùng memmap khác đều có length
+> chia hết 4 KiB nên làm tròn xuống hay lên đều như nhau.
 
 ## 📦 Cấu trúc module
 ```

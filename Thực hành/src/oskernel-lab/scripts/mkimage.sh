@@ -11,6 +11,7 @@ CONF="${CONF:-limine.conf}"
 for f in "$KERNEL" "$CONF" "$LIMINE_DIR/limine" "$LIMINE_DIR/limine-bios.sys" "$LIMINE_DIR/BOOTX64.EFI"; do
     [ -e "$f" ] || { echo "mkimage: missing $f" >&2; exit 1; }
 done
+command -v mformat >/dev/null || { echo "mkimage: thieu mtools -> sudo apt install -y mtools" >&2; exit 1; }
 
 echo "[1/5] create 64 MiB raw image -> $IMG"
 rm -f "$IMG"
