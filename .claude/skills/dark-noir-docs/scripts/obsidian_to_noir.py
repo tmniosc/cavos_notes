@@ -517,6 +517,7 @@ def main():
         (out / 'assets').mkdir(parents=True, exist_ok=True)
         for f in ('noir.css', 'noir.js'):
             shutil.copyfile(ASSETS / f, out / 'assets' / f)
+        shutil.copytree(ASSETS / 'fonts', out / 'assets' / 'fonts', dirs_exist_ok=True)
         (out / 'assets' / 'site.js').write_text(conv.site_js(order), encoding='utf-8')
         for path, text in pages.items():
             (out / path).parent.mkdir(parents=True, exist_ok=True)

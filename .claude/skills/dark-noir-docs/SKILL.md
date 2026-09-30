@@ -32,6 +32,7 @@ what it explains. Files in `assets/`:
 | `noir.css` | the whole theme (tokens, layout, components) |
 | `noir.js` | syntax colours, Copy buttons, sidebar (site map + page contents), scroll-spy, prev/next |
 | `page.html` | skeleton of one page with an example of every component |
+| `fonts/` | IBM Plex Mono woff2 (12 files, ~140 KB) + `LICENSE` (OFL) |
 
 `scripts/obsidian_to_noir.py` converts an Obsidian vault (wikilinks, embeds,
 callouts, front matter) into a site in this theme.
@@ -40,7 +41,8 @@ callouts, front matter) into a site in this theme.
 
 **Single page** (a README, one guide). Copy `page.html`, paste the contents of
 `noir.css` into a `<style>` and of `noir.js` into a `<script>` at the end of
-`<body>`, drop the `site.js` script tag. One file, opens with a double click.
+`<body>`, drop the `site.js` script tag, and put the `fonts/` folder next to
+the page (the `@font-face` URLs are `fonts/…`). Opens with a double click.
 
 **Site** (a vault, a set of pages). Keep the files shared:
 
@@ -49,6 +51,7 @@ callouts, front matter) into a site in this theme.
 ├── index.html            home page
 ├── assets/noir.css       copied from the skill
 ├── assets/noir.js        copied from the skill
+├── assets/fonts/         copied from the skill
 ├── assets/site.js        the site map: window.SITE = {title, home, pages:[{t, h, c:[...]}]}
 └── <folder>/<page>.html  each page links ../assets/... with a relative path
 ```
@@ -120,10 +123,16 @@ Content components (all shown in `page.html`):
   paper `#f0f0f0`. **Only colours:** danger red (`#c62828` / `#ff6b6b`) and
   the syntax colours in code blocks.
 - **Square corners.** Keep `*, *::before, *::after { border-radius: 0 !important; }`.
-- **Type.** Body `"Segoe UI", system-ui` 15.5px/1.7; mono `"Cascadia Code",
-  Consolas` 13.5px; labels, h1, table headers, sidebar groups, code bars in
-  `Bahnschrift` / `"Arial Narrow"`, uppercase, letter-spaced.
-- **Offline.** No CDN, no web fonts, nothing fetched.
+- **Type: IBM Plex Mono for everything** (body 14.5px/1.75, code 13px),
+  bundled in `assets/fonts/` (SIL OFL, so it may live in a public repo) and
+  declared in `noir.css` per script (`latin`, `latin-ext`, `vietnamese`;
+  weights 400, 400 italic, 600, 700) with `unicode-range`. Labels, h1, table
+  headers, sidebar groups and code bars are the same face in 600/700,
+  uppercase, letter-spaced .08–.12em. Glyphs outside the subsets (box drawing
+  `├──`) fall back to Cascadia/Consolas. The user asked for Berkeley Mono
+  first: it is commercial and its licence forbids redistribution, so do not
+  bundle it; Plex Mono was the chosen free stand-in.
+- **Offline.** No CDN, nothing fetched: fonts are local files next to the CSS.
 - **Mobile (≤ 900px).** One column, sidebar above the text, 16px gutters, no
   horizontal page scroll. `main` has `overflow-wrap: break-word` because long
   `A/B/C/D` runs once overflowed a 375px screen.
