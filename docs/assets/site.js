@@ -1,7 +1,7 @@
 // Site map for noir.js: page titles and paths relative to the site root.
 // Regenerate with obsidian_to_noir.py, or edit by hand when adding a page.
 window.SITE = {
- "title": "cavOS notes",
+ "title": "Học cavOS",
  "pages": [
   {
    "t": "Lý thuyết",
