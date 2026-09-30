@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 02 — Bootloader Parser · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_02_bootloader_parser.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 02 — Bootloader Parser</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>File:</strong> <code>entry/bootloader.c</code>, <code>include/bootloader.h</code> · <strong>Spec:</strong> <a href="../khai_niem/limine_protocol.html">Limine Protocol</a> · KN: <a href="../khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>, <a href="../khai_niem/hhdm.html">HHDM</a>
+** Thực hành:** <a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a> — tự khai HHDM/kernel_address/memmap/paging request, in response ra serial.</p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Thu hoạch mọi thông tin phần cứng Limine cung cấp vào MỘT struct dùng chung</strong>, để các step sau khỏi
+đụng trực tiếp vào API Limine. Limine đã điền các <code>response</code> (HHDM, kernel address, memmap, SMP, RSDP...);
+step này đọc hết và đóng gói gọn vào <code>bootloader</code>. Đây là <strong>nguồn dữ liệu đầu vào</strong> cho gần như mọi tầng:
+PMM cần <code>memmap</code>+<code>mmTotal</code>, paging cần <code>hhdmOffset</code>, ACPI cần <code>rsdp</code>, scheduler cần <code>smp</code>.</p>
+<h3 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h3>
+<p>Lúc giao máy, Limine có kèm theo một "tờ khai" về phần cứng. Step 02 <strong>đọc tờ khai đó và chép vào một cuốn
+sổ tay</strong> (<code>struct bootloader</code>) để cả kernel về sau tra cứu. Không tính toán phức tạp — chỉ <strong>thu thập thông
+tin</strong> một lần, gọn vào một chỗ.</p>
+<p>6 thứ thu thập, và sau này ai cần:</p>
+<ul>
+<li><strong>Tổng RAM + bản đồ RAM</strong> (vùng nào dùng được / cấm) → cho bộ quản lý RAM <a href="step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>.</li>
+<li><strong>Độ lệch HHDM</strong> (con số để đổi giữa "địa chỉ thật" và "địa chỉ kernel dùng") → cho <a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>.</li>
+<li><strong>Kernel nằm ở đâu</strong> (địa chỉ ảo &amp; vật lý).</li>
+<li><strong>Có mấy CPU</strong> → cho đa nhiệm <a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>.</li>
+<li><strong>Bảng ACPI ở đâu</strong> (thông tin bo mạch) → cho <a href="step_07_acpi.html">Step 07 - ACPI</a>.</li>
+</ul>
+<p>Ví von: Limine để lại cho bạn một tập giấy tờ; bài này gom hết vào một bìa hồ sơ để tiện lấy ra dùng.</p>
+<p><code>initialiseBootloaderParser()</code> chạy ngay sau <a href="step_01_serial_uart.html">serial</a> trong <code>_start()</code>.<br/>
+<strong>Nhiệm vụ:</strong> thu hoạch mọi <code>response</code> Limine đã điền → gom vào <strong>một struct <code>bootloader</code></strong> dùng chung cả kernel.
+Đây là lúc <a href="../khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> "trả công": Step 00 chỉ <em>khai báo</em> request, giờ mới <em>đọc</em> response.</p>
+<h2 id="6-request-được-khai-báo">6 request được khai báo</h2>
+<p class="lede"><em>6 "phiếu yêu cầu" kernel đặt sẵn, mỗi phiếu hỏi một thứ (RAM, màn hình, số CPU...). Limine thấy phiếu thì
+điền câu trả lời vào ô <code>response</code>.</em></p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile struct limine_paging_mode_request liminePagingreq =
+    {.id = LIMINE_PAGING_MODE_REQUEST, .revision = 0, .mode = LIMINE_PAGING_MODE_X86_64_4LVL};
+static volatile struct limine_hhdm_request           limineHHDMreq = {.id = LIMINE_HHDM_REQUEST, ...};
+static volatile struct limine_kernel_address_request limineKrnreq  = {.id = LIMINE_KERNEL_ADDRESS_REQUEST, ...};
+static volatile struct limine_memmap_request         limineMMreq   = {.id = LIMINE_MEMMAP_REQUEST, ...};
+static volatile struct limine_smp_request            limineSmpReq  = {.id = LIMINE_SMP_REQUEST, ...};
+static volatile struct limine_rsdp_request           limineRsdpReq = {.id = LIMINE_RSDP_REQUEST, ...};</code></pre></div>
+<p>Mỗi cái = <code>.id</code> (magic) + <code>.response = NULL</code>; bootloader quét magic rồi điền <code>.response</code>.</p>
+<h2 id="struct-đích-bootloader-bootloaderh">Struct đích <code>bootloader</code> (<code>bootloader.h</code>)</h2>
+<p class="lede"><em>"Cuốn sổ tay" chứa toàn bộ thông tin đã gom: mỗi dòng là một mẩu (RAM ở đâu, kernel chỗ nào...). Cả kernel
+về sau tra sổ này thay vì hỏi lại Limine.</em></p>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct Bootloader {
+  size_t   hhdmOffset;                     // ② ảo↔vật lý
+  size_t   kernelVirtBase, kernelPhysBase; // ③ kernel ở đâu (KASLR)
+  size_t   rsdp;                           // ⑥ ACPI (phys)
+  size_t   mmTotal;                        // ④ tổng RAM (loose)
+  uint64_t mmEntryCnt;
+  struct limine_memmap_entry **mmEntries;  // ④ bản đồ RAM
+  struct limine_smp_response  *smp;        // ⑤ danh sách CPU
+  uint64_t smpBspIndex;
+} Bootloader;</code></pre></div>
+<h2 id="6-thứ-thu-hoạch">6 thứ thu hoạch</h2>
+<p class="lede"><em>Bảng tra nhanh: mỗi phiếu lấy ra cái gì và sau này bài nào dùng tới.</em></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Request</th>
+<th>Lấy ra</th>
+<th>Dùng cho</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>①</td>
+<td>paging_mode</td>
+<td>xác nhận 4-level</td>
+<td><a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a></td>
+</tr>
+<tr>
+<td>②</td>
+<td>hhdm</td>
+<td><code>hhdmOffset</code> (<code>VA = PA + offset</code>)</td>
+<td><a href="../khai_niem/hhdm.html">HHDM</a>, mọi truy cập PA</td>
+</tr>
+<tr>
+<td>③</td>
+<td>kernel_address</td>
+<td>virt/phys base kernel</td>
+<td><a href="../khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a></td>
+</tr>
+<tr>
+<td>④</td>
+<td>memmap</td>
+<td>mảng vùng RAM (usable/reserved…)</td>
+<td><a href="step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a></td>
+</tr>
+<tr>
+<td>⑤</td>
+<td>smp</td>
+<td>danh sách CPU + BSP index</td>
+<td><a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a></td>
+</tr>
+<tr>
+<td>⑥</td>
+<td>rsdp</td>
+<td>con trỏ RSDP (ACPI)</td>
+<td><a href="step_07_acpi.html">Step 07 - ACPI</a></td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="các-con-số-này-nghĩa-là-gì-toạ-độ-trong-không-gian-ảo-map-về-ram">Các con số này nghĩa là gì (toạ độ trong không gian ảo + map về RAM)</h3>
+<ul>
+<li><strong>② hhdmOffset</strong> (<code>0xffff800000000000</code>): mốc vùng HHDM. Cộng vào PA bất kỳ → ra VA đọc/ghi được ngay (<a href="../khai_niem/hhdm.html">HHDM</a>).</li>
+<li><strong>③ kernel_address</strong>: kernel có <strong>virt</strong> (<code>0xffffffff80000000</code>, cố định) và <strong>phys</strong> (đổi mỗi boot — KASLR).
+Cùng frame kernel ⇒ <strong>2 VA</strong> (qua HHDM + qua kernel mapping) trỏ <strong>1 PA</strong> → aliasing.</li>
+<li><strong>④ memmap</strong>: bảng liệt kê từng vùng RAM vật lý (cấp được / cấm) → đầu vào PMM (<a href="step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>).</li>
+<li><strong>⑥ rsdp</strong>: là <strong>PA thuần</strong>; muốn đọc bảng ACPI phải <code>+ hhdmOffset</code> trước (<a href="step_07_acpi.html">Step 07 - ACPI</a>).</li>
+</ul>
+<div class="callout quote">
+<p><strong>Sơ đồ "RAM vật lý ← → địa chỉ ảo"</strong> (mũi tên aliasing, số thật): xem <a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>.
+Bảng đầy đủ 3 cột PA / VA-HHDM / VA-kernel cho mọi vùng: <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>pmm_dump_map</code>).</p>
+</div>
+<h2 id="lưu-ý">Lưu ý</h2>
+<p class="lede"><em>Vài điều dễ sụp nếu quên: phải kiểm tra Limine có trả lời chưa trước khi đọc.</em></p>
+<ul>
+<li>Luôn check <code>req.response != NULL</code> trước khi đọc (Limine có thể không cấp).</li>
+<li><code>memmap</code> là <strong>đầu vào sống còn</strong> cho PMM: chỉ các entry <code>LIMINE_MEMMAP_USABLE</code> mới được cấp phát.</li>
+<li><code>hhdmOffset</code> điển hình <code>0xffff800000000000</code> — xem <a href="../khai_niem/paging.html">Paging</a> ý #5.</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>Limine protocol (struct request/response, memmap types): <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</li>
+<li>ACPI RSDP: <a href="step_07_acpi.html">Step 07 - ACPI</a>, spec ACPI.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 02 - Bootloader Parser</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

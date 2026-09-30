@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 09 — APIC &amp; Timer · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_09_apic_timer.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 09 — APIC &amp; Timer</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, apic, timer</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiateAPIC()</code> · <strong>Đầu vào:</strong> MADT từ <a href="step_07_acpi.html">Step 07 - ACPI</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Có nguồn "nhịp tim" (timer interrupt) và bộ định tuyến ngắt hiện đại.</strong> Local APIC timer phát ngắt định kỳ<br/>
+→ làm <strong>tick</strong> để scheduler cướp quyền (preempt). IO APIC định tuyến IRQ thiết bị → vector IDT. Thay thế PIC
+8259 cũ. Không có tick thì không có đa nhiệm theo thời gian (<a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>).</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Local APIC (MMIO base), spurious vector, EOI.</li>
+<li>IO APIC: định tuyến IRQ → vector.</li>
+<li>Local APIC timer (one-shot/periodic) làm tick scheduler.</li>
+<li>Tắt PIC 8259 cũ (mask).</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] Calibrate APIC timer bằng gì (PIT/HPET/TSC)?</li>
+<li>[ ] x2APIC hay xAPIC (MMIO)?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — APIC. ACPI MADT.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 09 - APIC &amp; Timer</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

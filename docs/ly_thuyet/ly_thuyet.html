@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lý thuyết · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="ly_thuyet/ly_thuyet.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span>Lý thuyết</div>
+    <h1>Lý thuyết</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> moc, lythuyet</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><em>Nửa "đọc và hiểu" của vault: đi theo thứ tự khởi tạo của cavOS, mỗi bước ánh xạ code thật với spec
+nền tảng x86_64. Nửa còn lại là <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a> — tự viết lại để kiểm chứng.</em></p>
+</div>
+<p>Về trang chủ: <a href="../index.html">Home</a></p>
+<h2 id="bắt-đầu-từ-đâu">Bắt đầu từ đâu</h2>
+<ol>
+<li><a href="steps/boot_flow_start.html">Boot Flow (_start)</a> — bản đồ thứ tự khởi tạo, nằm ngay trong <code>Steps/</code> vì nó là chỉ mục của chuỗi đó.
+Mọi Step đều treo vào đây.</li>
+<li><a href="khai_niem/paging.html">Paging</a> — 5 ý nền tảng, nên nạp trước Step 03 thì đọc <code>link.ld</code> / memmap / HHDM mới trôi.</li>
+<li><a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> — học phần nào thì mở tài liệu gốc nào, lấy ở đâu.</li>
+</ol>
+<h2 id="các-bước-theo-start">Các bước theo <code>_start()</code></h2>
+<div class="callout quote">
+<p><em>Mỗi Step = một mảnh trong hàm khởi tạo của cavOS, đọc theo đúng thứ tự máy chạy.</em>
+Cột <strong>Lab</strong> là bài thực hành phụ trách step đó, chi tiết ở <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a>.</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Step</th>
+<th>Lab</th>
+<th>Tiến độ</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>00</td>
+<td><a href="steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a></td>
+<td>0x00</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>01</td>
+<td><a href="steps/step_01_serial_uart.html">Step 01 - Serial UART</a></td>
+<td>0x00</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>02</td>
+<td><a href="steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+<td>0x01</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>03</td>
+<td><a href="steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a></td>
+<td>0x02</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>04</td>
+<td><a href="steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a></td>
+<td>0x03</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>05</td>
+<td><a href="steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a></td>
+<td>0x03</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>06</td>
+<td><a href="steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a></td>
+<td>0x04</td>
+<td>xong</td>
+</tr>
+<tr>
+<td>07</td>
+<td><a href="steps/step_07_acpi.html">Step 07 - ACPI</a></td>
+<td>0x04</td>
+<td>tiếp theo</td>
+</tr>
+<tr>
+<td>08</td>
+<td><a href="steps/step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a></td>
+<td>0x04</td>
+<td></td>
+</tr>
+<tr>
+<td>09</td>
+<td><a href="steps/step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></td>
+<td>0x04</td>
+<td></td>
+</tr>
+<tr>
+<td>10</td>
+<td><a href="steps/step_10_ps2_keyboard_mouse.html">Step 10 - PS2 Keyboard &amp; Mouse</a></td>
+<td>0x05</td>
+<td></td>
+</tr>
+<tr>
+<td>11</td>
+<td><a href="steps/step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a></td>
+<td>0x06</td>
+<td></td>
+</tr>
+<tr>
+<td>12</td>
+<td><a href="steps/step_12_networking.html">Step 12 - Networking</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+<tr>
+<td>13</td>
+<td><a href="steps/step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+<tr>
+<td>14</td>
+<td><a href="steps/step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+<tr>
+<td>15</td>
+<td><a href="steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+<tr>
+<td>16</td>
+<td><a href="steps/step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+<tr>
+<td>17</td>
+<td><a href="steps/step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a></td>
+<td>0x07+</td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="khái-niệm-cốt-lõi">Khái niệm cốt lõi</h2>
+<p class="lede"><em>Thứ dùng đi dùng lại ở nhiều Step, tách riêng để khỏi giải thích lại mỗi lần.</em></p>
+<ul>
+<li><a href="khai_niem/paging.html">Paging</a> — nền tảng nhất, đọc trước</li>
+<li><a href="khai_niem/long_mode.html">Long Mode</a> — chế độ 64-bit, nơi kernel thực sự chạy</li>
+<li><a href="khai_niem/higher_half_kernel.html">Higher-Half Kernel</a> — vì sao kernel nằm ở nửa cao không gian ảo</li>
+<li><a href="khai_niem/hhdm.html">HHDM</a> — cửa sổ nhìn toàn bộ RAM vật lý, và chuyện hai địa chỉ ảo trỏ một chỗ</li>
+<li><a href="khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a> — ảnh đĩa boot: MBR + FAT32 + Limine, hai đường BIOS/UEFI</li>
+<li><a href="khai_niem/limine_protocol.html">Limine Protocol</a> · <a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
+<li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — vì sao địa chỉ vật lý đổi mỗi lần boot</li>
+<li><a href="khai_niem/x86_segmentation.html">x86 Segmentation</a> — segment + 3 chế độ (real/protected/long)</li>
+<li><a href="khai_niem/gdt.html">GDT</a> — segment descriptor table, bổ trợ Step 06</li>
+</ul>
+<h2 id="tài-liệu-gốc">Tài liệu gốc</h2>
+<p class="lede"><em>x86 PC không có một cuốn TRM duy nhất như SoC ARM — nó là tổ hợp nhiều spec rời.</em></p>
+<ul>
+<li><a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> — bảng tra tổng: cần gì thì mở cuốn nào</li>
+<li><a href="tai_lieu_goc/intel_sdm.html">Intel SDM</a> — Intel 64 &amp; IA-32 Software Developer's Manual</li>
+<li><a href="tai_lieu_goc/uart_16550.html">UART 16550</a> — datasheet con chip serial dùng ở Step 01</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Lý thuyết</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

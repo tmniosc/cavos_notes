@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x01 — Bootloader Parser · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x01_bootloader_parser.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x01 — Bootloader Parser</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Thực hành <a href="../ly_thuyet/steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</strong> Tự khai các Limine request, đọc response,
+in ra serial — thấy tận mắt paging/HHDM/kernel-address/memmap mà Step 02 chỉ đọc vào struct.
+Nối tiếp <a href="lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> (tái dùng serial 16550).</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/01-bootloader-parser/</code> · build/run y hệt Lab 0x00 (<code>make kernel</code>, <code>make run</code>).</p>
+<p>Source: <code>lab/src/oskernel-lab/01-bootloader-parser/</code>.</p>
+<h2 id="làm-gì">Làm gì</h2>
+<p>Khai 4 request (gói trong <code>.limine_requests</code>, <code>used</code>):</p>
+<div class="code"><div class="code-bar">c</div><pre><code>#define LIMINE_REQUEST __attribute__((used, section(".limine_requests")))
+LIMINE_REQUEST static volatile struct limine_hhdm_request           hhdm_request   = {.id=LIMINE_HHDM_REQUEST};
+LIMINE_REQUEST static volatile struct limine_kernel_address_request kaddr_request  = {.id=LIMINE_KERNEL_ADDRESS_REQUEST};
+LIMINE_REQUEST static volatile struct limine_memmap_request         memmap_request = {.id=LIMINE_MEMMAP_REQUEST};
+LIMINE_REQUEST static volatile struct limine_paging_mode_request    paging_request = {.id=LIMINE_PAGING_MODE_REQUEST, .mode=LIMINE_PAGING_MODE_X86_64_4LVL};</code></pre></div>
+<p>Trong <code>kmain</code>: kiểm <code>response != NULL</code> rồi in:</p>
+<ul>
+<li><strong>paging</strong> mode (4-level / 5-level),</li>
+<li><strong>hhdm</strong> offset (hex),</li>
+<li><strong>kernel</strong> virt_base + phys_base (hex) → đúng câu "ảo ở <code>…80…</code>, vật lý ở đâu",</li>
+<li><strong>memmap</strong>: từng entry <code>base/len/type</code> + tổng <code>USABLE</code> và <code>non-RESERVED</code> (MiB).</li>
+</ul>
+<p>Thêm 2 helper so với Lab 0x00: <code>serial_puthex(uint64_t)</code>, <code>serial_putdec(uint64_t)</code>.</p>
+<h2 id="kỳ-vọng-output-qemu--m-256m">Kỳ vọng output (QEMU <code>-m 256M</code>)</h2>
+<div class="code"><div class="code-bar">text</div><pre><code>[paging] mode = 4-level
+[hhdm]   offset = 0xffff800000000000        (cố định cho 4-level; KHÔNG đổi theo KASLR)
+[kernel] virt = 0xffffffff80000000          (cố định: top-2GiB của higher-half)
+         phys = 0x0000000000xxxxxx          ← phys thật Limine chọn (đổi mỗi lần boot)
+[memmap]
+  [0] base=0x... len=0x... USABLE
+  ...
+  -- USABLE = ~2xx MiB</code></pre></div>
+<h2 id="khác-với-cavos-step-02">Khác với cavOS (Step 02)</h2>
+<ul>
+<li>cavOS gom vào struct <code>bootloader</code> dùng nội bộ; lab chỉ <strong>in ra</strong> để quan sát.</li>
+<li>Lab <strong>chưa</strong> trừ <code>hhdmOffset</code> cho RSDP / chưa xử SMP (giữ tối giản); tập trung HHDM + memmap + kernel-address.</li>
+<li>Khẳng định lại bài "ảo vs vật lý": <code>virt_base</code> luôn <code>0xffffffff80000000</code>, <code>phys_base</code> đổi theo mỗi lần boot.</li>
+</ul>
+<h2 id="tự-kiểm-tra">✓ Tự kiểm tra</h2>
+<ol>
+<li><code>hhdm offset + phys_base</code> có bằng <code>virt_base</code> không? Vì sao (gần) bằng?</li>
+<li>Vì sao <code>USABLE</code> &lt; tổng RAM khai báo cho QEMU? (vùng RESERVED/BOOTLOADER/KERNEL ăn bớt)</li>
+<li>Đổi <code>-m 256M</code> → <code>-m 512M</code> trong <code>QEMU_FLAGS</code>, output USABLE đổi thế nào?</li>
+</ol>
+<h2 id="notes-của-tôi">Notes của tôi</h2>
+<h3 id="run-thật-2026-05-28-qemu--m-q35--m-256m">Run thật (2026-05-28, QEMU <code>-M q35 -m 256M</code>)</h3>
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Step 02) ===
+[paging] mode = 4-level
+[hhdm]   offset = 0xffff800000000000
+[kernel] virt = 0xffffffff80000000
+         phys = 0x000000000ffb2000
+[memmap]                                         ; 16 entries
+  [0] base=0x0000000000001000 len=0x0000000000005f000 BOOT_RECLAIM
+  [1] base=0x0000000000060000 len=0x000000000003f000 USABLE
+  [4] base=0x0000000000100000 len=0x000000000fe58000 USABLE   ← khối RAM "thật" sau 1 MiB
+  [8] base=0x000000000ffb2000 len=0x0000000000002000 KERNEL_MODS  ← chính là phys_base
+  [12] base=0x00000000fd000000 len=0x00000000003e8000 FRAMEBUFFER
+  ...
+  -- USABLE = 254 MiB / non-RES = 259 MiB (QEMU cấp 256 MiB)
+[done] halt.</code></pre></div>
+<h3 id="run-thật-2026-09-03-qemu--m-q35--m-256m">Run thật 2026-09-03 (QEMU <code>-M q35 -m 256M</code>)</h3>
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Step 02) ===
+[paging] mode = 4-level
+[hhdm]   offset = 0xffff800000000000        ← Y HỆT lần trước: HHDM cố định, không theo KASLR
+[kernel] virt = 0xffffffff80000000          ← Y HỆT: top-2GiB luôn cố định
+         phys = 0x000000000ff42000          ← ĐỔI (lần trước 0x0ffb2000) — Limine chọn lại mỗi lần boot
+[memmap]                                         ; 16 entries
+  [0]  base=0x0000000000001000 len=0x0000000000052000 BOOT_RECLAIM
+  [1]  base=0x0000000000053000 len=0x000000000004c000 USABLE
+  [4]  base=0x0000000000100000 len=0x000000000fe3f000 USABLE   ← khối RAM chính sau 1 MiB
+  [6]  base=0x000000000ff42000 len=0x0000000000003000 KERNEL_MODS  ← đúng bằng phys_base
+  [12] base=0x00000000fd000000 len=0x00000000003e8000 FRAMEBUFFER
+  ...
+  -- USABLE = 254 MiB / non-RES = 259 MiB
+[done] halt.</code></pre></div>
+<div class="callout quote">
+<p><strong>Điều đáng học nằm ở chỗ so 2 lần chạy:</strong> <code>hhdm</code> và <code>virt</code> <strong>không đổi một bit</strong>, còn <code>phys_base</code> +
+ranh giới các vùng thì <strong>đổi hết</strong>. Đó chính là lý do kernel phải hỏi bootloader thay vì hard-code địa chỉ.
+Vẫn đúng 16 entry và vẫn <code>254 / 259 MiB</code> vì QEMU cấu hình y như cũ.</p>
+</div>
+<h3 id="các-loại-vùng-memmap-type-kernel-được-làm-gì-với-chúng">Các loại vùng (memmap type) — kernel được làm gì với chúng</h3>
+<p class="lede"><em>Mỗi vùng có 1 "nhãn" cho biết là RAM trống, RAM mượn-tạm, hay vùng cấm. PMM (<a href="../ly_thuyet/steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>) dựa vào nhãn này để quyết định cấp phát.</em></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>type</th>
+<th>Là RAM?</th>
+<th>Cấp phát?</th>
+<th>Chứa gì</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>USABLE</strong></td>
+<td>✓</td>
+<td>✓ ngay</td>
+<td>RAM trống hoàn toàn — nguồn chính của PMM</td>
+</tr>
+<tr>
+<td><strong>BOOT_RECLAIM</strong> (Bootloader Reclaimable)</td>
+<td>✓</td>
+<td>✓ <em>sau khi reclaim</em></td>
+<td>cấu trúc tạm Limine: page table cũ (PML4 lúc boot), boot info, response struct. Đọc xong → đòi lại được</td>
+</tr>
+<tr>
+<td><strong>RESERVED</strong></td>
+<td>✗ (thường là MMIO)</td>
+<td>✗ không bao giờ</td>
+<td>firmware/BIOS, <strong>MMIO/PCI hole</strong> (vd framebuffer, <code>0xfd00000000</code>), lỗ địa chỉ không có RAM</td>
+</tr>
+<tr>
+<td><strong>KERNEL_MODS</strong> (Kernel &amp; Modules)</td>
+<td>✓</td>
+<td>✗</td>
+<td>nơi kernel image được nạp — đang chạy, cấm đụng (<code>phys_base</code> rơi vào đây)</td>
+</tr>
+<tr>
+<td><strong>FRAMEBUFFER</strong></td>
+<td>✗</td>
+<td>✗</td>
+<td>VRAM màn hình (MMIO) — xem <a href="../ly_thuyet/steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a></td>
+</tr>
+<tr>
+<td><strong>ACPI_RECLAIM</strong></td>
+<td>✓</td>
+<td>✓ <em>sau reclaim</em></td>
+<td>bảng ACPI; đọc xong reclaim được (giống BOOT_RECLAIM)</td>
+</tr>
+<tr>
+<td><strong>ACPI_NVS</strong> / <strong>BAD_MEM</strong></td>
+<td>✓/—</td>
+<td>✗</td>
+<td>ACPI non-volatile (giữ nguyên) / RAM hỏng</td>
+</tr>
+</tbody>
+</table></div>
+<p>→ <strong>2 mức phân loại PMM dùng</strong> (<a href="../ly_thuyet/steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>):</p>
+<ul>
+<li><strong>"Đếm vào tổng RAM" (<code>mmTotal</code>)</strong>: mọi type <strong>trừ <code>RESERVED</code></strong> (cộng dồn length).</li>
+<li><strong>"Cấp phát được ngay"</strong>: <code>USABLE</code> (+ <code>BOOT_RECLAIM</code> nếu coi như đã reclaim). Dòng <code>-- USABLE</code> vs <code>non-RES</code>
+ở trên chính là 2 con số này (254 vs 259 MiB).</li>
+</ul>
+<p>Đây là <strong>Limine memmap types</strong> (<code>LIMINE_MEMMAP_USABLE</code>, <code>..._BOOTLOADER_RECLAIMABLE</code>, <code>..._RESERVED</code>... trong <code>limine.h</code>).</p>
+<h3 id="sơ-đồ-4-con-số-này-nằm-đâu-trong-không-gian-ảo-map-về-ram-nào">Sơ đồ: 4 con số này nằm đâu trong KHÔNG GIAN ẢO, map về RAM nào</h3>
+<p class="lede"><em>hhdm/kernel-virt/kernel-phys/memmap không phải số trừu tượng — mỗi vùng RAM vật lý (cột trái) được trỏ
+tới từ những địa chỉ ảo nào (2 cột phải). Số thật của lần chạy trên: <code>phys = 0x0ffb2000</code>.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>  PA (vật lý)  | VA qua HHDM ②      | VA qua kernel map ③ | ghi chú
+  -------------+--------------------+---------------------+---------------------------
+  0x00000000   | 0xffff800000000000 | -                   | mốc HHDM (= PA + offset)
+  0x00100000   | 0xffff800000100000 | -                   | khối RAM chính (chỉ HHDM)
+  0x0ffb2000   | 0xffff80000ffb2000 | 0xffffffff80000000  | KERNEL -&gt; 2 VA = ALIASING
+  0xfd000000   | 0xffff8000fd000000 | -                   | FRAMEBUFFER/MMIO (ko phải RAM)
+
+  ② cột HHDM : MỌI vùng đều có (= PA + hhdmOffset) — Limine map toàn bộ RAM vào nửa cao.
+  ③ cột kernel: CHỈ vùng KERNEL có (0xffffffff80000000) — map riêng kernel image; vùng khác '-'.</code></pre></div>
+<p>→ Vùng KERNEL <code>0x0ffb2000</code> là dòng DUY NHẤT có cả 2 cột VA → <strong>2 địa chỉ ảo cùng trỏ 1 PA</strong> = aliasing:
+một "cửa" qua HHDM (đọc/ghi như data), một "cửa" qua kernel map (chạy code, quyền X). Xem <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> "dùng VA nào".</p>
+<h3 id="trả-lời-tự-kiểm-tra">Trả lời ✓ Tự kiểm tra</h3>
+<ol>
+<li><strong><code>hhdm + phys_base = virt_base?</code> KHÔNG.</strong> <code>0xffff800000000000 + 0x0ffb2000 = 0xffff80000ffb2000</code>, nhưng kernel virt = <code>0xffffffff80000000</code> — hai vùng higher-half <strong>khác nhau</strong>: HHDM map toàn bộ RAM vật lý vào <code>0xffff8000…</code>, còn kernel có <strong>ánh xạ riêng</strong> ở top-2 GiB (<code>0xffffffff80…</code>). Tức là một byte trong kernel có <strong>hai địa chỉ ảo cùng trỏ về cùng phys</strong>: qua HHDM và qua kernel mapping (xem sơ đồ trên — đây là <strong>aliasing</strong>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>).</li>
+<li><code>USABLE 254 MiB &lt; 256 MiB QEMU cấp</code> vì các vùng <code>RESERVED/BOOT_RECLAIM/KERNEL_MODS/FRAMEBUFFER</code> ăn bớt (entry 0/2/3/5/7/8/9/10 trong dump trên).</li>
+</ol>
+<div class="callout quote">
+<p><strong>Thấy 3 cột địa chỉ (PA / VA-HHDM / VA-kernel) thành bảng</strong>: <a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> có <code>pmm_dump_map</code>
+in mọi vùng kèm cả 2 cột VA — đúng sơ đồ này nhưng đầy đủ 16 vùng.</p>
+</div>
+<h3 id="gotcha-khi-chạy">Gotcha khi chạy</h3>
+<ul>
+<li><code>make image</code> <strong>chỉ dựng <code>os.img</code></strong> rồi dừng — thấy stderr của <code>limine bios-install</code> (<code>Physical block size... / Installing to MBR / Reminder: copy limine-bios.sys / installed successfully</code>) là <strong>bình thường</strong>, không phải lỗi. Dòng <code>Reminder</code> Limine in cứng mọi lần, nhưng <code>scripts/mkimage.sh</code> đã chép <code>limine-bios.sys</code> vào <code>::/boot/limine/</code> ở bước <code>5/5</code> → boot OK.</li>
+<li>Muốn thấy serial của kernel: dùng <strong><code>make run</code></strong> (không phải <code>make image</code>).</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Lab 0x01 - Bootloader Parser</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

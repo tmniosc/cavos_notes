@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Long Mode (64-bit) · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/long_mode.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>Long Mode (64-bit)</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, cpu</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Chế độ hoạt động 64-bit của CPU x86_64. Khi <a href="limine_protocol.html">Limine</a> nhảy vào <code>_start</code>, CPU <strong>đã ở
+long mode</strong> và <strong>paging đã bật</strong> — kernel không phải tự chuyển chế độ.</p>
+</div>
+<h2 id="các-chế-độ-x86-lịch-sử">Các chế độ x86 (lịch sử)</h2>
+<div class="callout quote">
+<p>Gỡ rối đầy đủ "segment + 3 chế độ": <a href="x86_segmentation.html">x86 Segmentation</a>.</p>
+</div>
+<div class="code"><div class="code-bar">text</div><pre><code>Real mode (16-bit) → Protected mode (32-bit) → Long mode (64-bit)</code></pre></div>
+<p>Bình thường bootloader phải đi qua từng nấc (bật A20, dựng GDT, bật PAE, set EFER.LME, bật paging,
+set CR0.PG...). <strong>Limine làm hết</strong> → cavOS bỏ qua phần asm phức tạp này.</p>
+<h2 id="đặc-điểm-long-mode-liên-quan-code-cavos">Đặc điểm long mode (liên quan code cavOS)</h2>
+<ul>
+<li>Địa chỉ ảo <strong>canonical</strong> 48-bit sign-extended → xem <a href="higher_half_kernel.html">Higher-Half Kernel</a>.</li>
+<li><strong>Paging luôn bật</strong>, dùng PAE 4-level (PML4) hoặc 5-level → xem <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>.</li>
+<li>Segmentation gần như "phẳng": base/limit bị bỏ qua cho hầu hết segment → ảnh hưởng <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</li>
+<li>Thanh ghi 64-bit (RAX...R15); calling convention theo x86-64 psABI.</li>
+</ul>
+<h2 id="bitmsr-liên-quan-để-tra-khi-cần">Bit/MSR liên quan (để tra khi cần)</h2>
+<ul>
+<li><code>CR0.PG</code> (paging), <code>CR0.PE</code> (protected), <code>CR4.PAE</code>, <code>EFER.LME</code>/<code>LMA</code> (long mode enable/active).</li>
+</ul>
+<h2 id="spec">Spec</h2>
+<p><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §9 (mode switching), §4 (paging), §3.x (segmentation in IA-32e).</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Long Mode</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

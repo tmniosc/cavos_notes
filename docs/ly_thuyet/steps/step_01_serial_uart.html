@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 01 — Serial UART (COM1) · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_01_serial_uart.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 01 — Serial UART (COM1)</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, boot, serial</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>File:</strong> <code>entry/serial.c</code> (hoặc tương đương) · <strong>Spec:</strong> <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a>
+** Thực hành:** <a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> (gộp Step 00 + 01).</p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Có kênh xuất log SỚM NHẤT có thể</strong> để debug mọi bước sau. Serial chỉ cần vài thanh ghi I/O port (không
+cần framebuffer/console/paging) → init được ngay đầu <code>_start</code>. QEMU nối COM1 ra stdout host → thấy log
+kernel trực tiếp. Đây là "đèn pin" soi đường cho toàn bộ hành trình còn lại.</p>
+<h3 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h3>
+<p>Kernel chưa có màn hình, chưa có gì để "in ra" cho bạn xem nó đang làm gì. <strong>Serial (cổng COM)</strong> là cách
+in chữ ra dễ nhất: chỉ cần ghi byte vào một "ống" phần cứng, QEMU hứng lấy rồi hiện trên terminal của bạn.<br/>
+→ Làm serial <strong>đầu tiên</strong> để từ đó về sau, bước nào lỗi cũng in ra xem được. Giống bật đèn trước khi vào phòng tối.</p>
+<p>Bài này làm 2 việc nhỏ:</p>
+<ul>
+<li><strong>Cài đặt cổng</strong> một lần: nói cho chip serial biết tốc độ truyền và định dạng (kiểu "chỉnh đài cho đúng
+tần số") bằng cách ghi vào vài thanh ghi của nó.</li>
+<li><strong>Gửi từng ký tự</strong>: trước khi gửi, hỏi chip "đã rảnh chưa?" rồi mới đẩy byte ra. Lặp lại cho cả chuỗi.</li>
+</ul>
+<p>Chỉ vậy thôi — serial đơn giản nên mới được chọn làm kênh log đầu tiên. (Tên/địa chỉ từng thanh ghi là
+phần kỹ thuật, xem <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a> khi cần.)</p>
+<p><code>initiateSerial()</code> là hàm <strong>đầu tiên</strong> <code>_start()</code> gọi (xem <a href="boot_flow_start.html">Boot Flow (_start)</a>) — để có kênh debug
+in log ra trước khi mọi hệ con khác chạy.</p>
+<h2 id="vì-sao-serial-trước-tiên">Vì sao serial trước tiên?</h2>
+<ul>
+<li>Không cần framebuffer/console (chưa init). Chỉ cần vài thanh ghi I/O port.</li>
+<li>QEMU chuyển COM1 ra stdout/file → <code>printf</code> kernel hiện ngay trên host.</li>
+</ul>
+<h2 id="khởi-tạo-com1-base-0x3f8-chuẩn-8n1-115200">Khởi tạo COM1 (base <code>0x3F8</code>, chuẩn 8N1, 115200)</h2>
+<p class="lede"><em>"Chỉnh đài" cho cổng serial: đặt tốc độ và định dạng truyền, làm đúng 1 lần lúc đầu. Mỗi dòng dưới là
+ghi một con số vào một nút chỉnh của chip.</em></p>
+<p>Thứ tự ghi thanh ghi (offset từ base) — xem chi tiết bảng thanh ghi ở <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>outb(PORT+1, 0x00);  // IER = 0: tắt mọi interrupt
+outb(PORT+3, 0x80);  // LCR: bật DLAB để set baud divisor
+outb(PORT+0, 0x03);  // DLL: divisor low  = 3 -&gt; 115200/3 = 38400 (tùy cấu hình)
+outb(PORT+1, 0x00);  // DLM: divisor high = 0
+outb(PORT+3, 0x03);  // LCR: 8 bit, no parity, 1 stop (8N1), tắt DLAB
+outb(PORT+2, 0xC7);  // FCR: bật FIFO, clear, ngưỡng 14 byte
+outb(PORT+4, 0x0B);  // MCR: IRQs enable, RTS/DSR set</code></pre></div>
+<h2 id="truyền-1-byte">Truyền 1 byte</h2>
+<p class="lede"><em>Gửi 1 ký tự: chờ chip báo "đã gửi xong cái trước, rảnh rồi" rồi mới đẩy byte mới vào. Không chờ thì chữ
+chồng lên nhau, mất.</em></p>
+<div class="code"><div class="code-bar">c</div><pre><code>while ((inb(PORT+5) &amp; 0x20) == 0);  // chờ LSR bit5 (THR empty)
+outb(PORT+0, c);                    // ghi vào THR</code></pre></div>
+<ul>
+<li><strong>LSR (offset 5) bit5 = THRE</strong>: thanh ghi truyền rỗng → an toàn ghi byte tiếp.</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>Thanh ghi &amp; bit: <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a> (datasheet 16550A).</li>
+<li><code>inb</code>/<code>outb</code>: port I/O x86, <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 01 - Serial UART</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

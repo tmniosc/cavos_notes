@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x00 — Hello Serial · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x00_hello_serial.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x00 — Hello Serial</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p>Tự viết lại phần <strong>boot + serial</strong> từ số 0 (gộp <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> + <a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>).
+Vị trí: <code>~/oskernel-lab/00-hello-serial/</code> · source lưu ở <code>lab/src/oskernel-lab/00-hello-serial/</code>.</p>
+<h2 id="mục-tiêu">Mục tiêu</h2>
+<ul>
+<li>Limine nạp kernel ELF64 vào <a href="../ly_thuyet/khai_niem/long_mode.html">Long Mode</a> → nhảy vào entry <code>kmain</code> (= <code>ENTRY(kmain)</code> trong <code>linker.ld</code>).</li>
+<li>Init COM1 (8N1, 115200) theo <a href="../ly_thuyet/tai_lieu_goc/uart_16550.html">UART 16550</a>.</li>
+<li>In <code>"Hello Serial"</code> ra QEMU serial.</li>
+</ul>
+<div class="callout quote">
+<p><strong>Base revision = 2</strong> (khớp cavOS gốc, không dùng 3) — <code>LIMINE_BASE_REVISION(2)</code> trong <code>kernel.c</code></p>
+<ul>
+<li>comment <code>linker.ld</code>. Đã rebuild + boot QEMU lại OK (2026-05-31). Xem <a href="../ly_thuyet/khai_niem/limine_protocol.html">Limine Protocol</a> §4.</li>
+</ul>
+</div>
+<h2 id="các-mảnh-chính">Các mảnh chính</h2>
+<ul>
+<li><code>linker.ld</code>: <code>ENTRY(kmain)</code> (lab dùng <code>kmain</code> làm entry, không phải <code>_start</code>), <code>. = 0xffffffff80000000</code>,
+PHDRS (text/rodata/data = <code>PT_LOAD</code>, <strong>không ghi <code>FLAGS</code></strong> → ld tự suy W^X từ section flags — xem
+<a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2), <code>. = ALIGN(CONSTANT(MAXPAGESIZE))</code> giữa các segment
+(xem <a href="../ly_thuyet/khai_niem/paging.html">Paging</a> ý #3).</li>
+<li><code>.limine_requests</code> gói trong <code>KEEP(*(.limine_requests))</code> (nằm trong <code>:rodata</code>) để Limine quét magic,
+<code>KEEP</code> chống linker GC bỏ section (chưa ai tham chiếu trực tiếp) — xem <a href="../ly_thuyet/khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>.</li>
+<li><code>limine.conf</code> + <code>limine bios-install</code> → đóng gói vào <code>os.img</code> (ảnh đĩa MBR + FAT32 + Limine,
+dựng bằng <code>scripts/mkimage.sh</code>) — bố cục ảnh đĩa: <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</li>
+<li><code>serial.c</code>: <code>outb/inb</code>, init COM1, <code>serial_putc</code> chờ LSR bit5 (THRE).</li>
+</ul>
+<h2 id="kết-quả">Kết quả</h2>
+<p>QEMU <code>-serial stdio</code> in ra <code>Hello Serial</code>. ✓</p>
+<h2 id="4-file-phân-tích-build-sinh-sẵn-soi-layout-đã-học">4 file phân tích build sinh sẵn (soi layout đã học)</h2>
+<p>Makefile lab tự tạo mỗi lần build — dùng để <strong>thấy tận mắt</strong> higher-half / ALIGN / W^X:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Lệnh sinh</th>
+<th>Cho biết</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kernel.map</code></td>
+<td><code>ld -Wl,-Map=kernel.map</code></td>
+<td><strong>Layout sau link</strong>: section ở địa chỉ nào, kích thước, mốc ALIGN, vị trí symbol</td>
+</tr>
+<tr>
+<td><code>kernel.dis</code></td>
+<td><code>objdump -d -M intel</code></td>
+<td>disassembly</td>
+</tr>
+<tr>
+<td><code>kernel.sym</code></td>
+<td><code>nm -n</code></td>
+<td>bảng symbol theo địa chỉ</td>
+</tr>
+<tr>
+<td><code>kernel.elf.txt</code></td>
+<td><code>readelf -a</code></td>
+<td>toàn bộ ELF: program headers + <code>p_flags</code> (R/X…)</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout warn">
+<p><strong>Map file là sản phẩm của LINKER (<code>kernel.bin</code>), KHÔNG phải của <code>kernel.o</code>.</strong> <code>.o</code> chưa link nên
+chưa có địa chỉ cuối để "map". Muốn soi section/flag của riêng <code>.o</code> (trước link):
+<code>readelf -S kernel.o</code> (→ <code>kernel.o.sections.txt</code>) hoặc <code>objdump -h kernel.o</code> (→ <code>kernel.o.headers.txt</code>)<br/>
+→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>=WA (gốc của W^X, xem <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2).</p>
+</div>
+<p><strong>Trích <code>kernel.map</code> (bằng chứng cho <a href="../ly_thuyet/khai_niem/paging.html">Paging</a> ý #3):</strong></p>
+<div class="code"><div class="code-bar">text</div><pre><code>.text    0xffffffff80000000   0xf3            ← kernel ở higher-half
+           0xffffffff80000060   kmain          ← entry point
+         0xffffffff80001000  . = ALIGN(MAXPAGESIZE)   ← đẩy sang trang mới
+.rodata  0xffffffff80001000   0x8a            ← rodata khởi đầu ĐÚNG biên trang 0x1000</code></pre></div>
+<p><strong>Lần chạy 2026-09-03</strong> — cùng kết luận, chỉ khác kích thước:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>.text           0xffffffff80000000      0x152
+                0xffffffff80000000                kmain     ← entry ngay đầu .text
+.rodata         0xffffffff80001000       0x4c               ← vẫn đúng biên trang 0x1000
+.data           0xffffffff80002000       0x18</code></pre></div>
+<p><code>readelf -lW kernel.bin</code> xác nhận <strong>W^X</strong> đúng như <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>LOAD 0xffffffff80000000 ... R E     ← .text: đọc + THỰC THI, không ghi
+LOAD 0xffffffff80001000 ... R       ← .rodata: chỉ đọc
+LOAD 0xffffffff80002000 ... RW      ← .data/.bss: đọc + ghi, không thực thi</code></pre></div>
+<div class="callout quote">
+<p>Ba segment <code>PT_LOAD</code> rơi đúng 3 trang liền nhau vì <code>linker.ld</code> chèn <code>ALIGN(CONSTANT(MAXPAGESIZE))</code>
+và link với <code>-Wl,-z,max-page-size=0x1000</code> — thiếu cờ này MAXPAGESIZE = 2 MiB, rodata sẽ nhảy lên
+<code>…80200000</code> chứ không phải <code>…80001000</code>.</p>
+</div>
+<h2 id="liên-hệ">Liên hệ</h2>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>.</li>
+<li>Build/QEMU: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Lab 0x00 - Hello Serial</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

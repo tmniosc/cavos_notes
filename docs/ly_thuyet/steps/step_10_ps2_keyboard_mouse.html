@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 10 — PS/2 Keyboard &amp; Mouse · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_10_ps2_keyboard_mouse.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 10 — PS/2 Keyboard &amp; Mouse</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, input</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiatePS2()</code> · <strong>Phụ thuộc:</strong> IRQ từ <a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>, handler <a href="step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Nhận input từ người dùng</strong> (bàn phím, chuột) qua controller 8042 + ngắt. Là thiết bị input đầu tiên — biến
+kernel từ "chỉ in ra" thành "tương tác được". Minh hoạ thực tế cách một driver dùng IRQ (<a href="step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a>,
+<a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>): thiết bị báo ngắt → handler đọc scancode → ánh xạ ký tự.</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Controller 8042 (port 0x60 data / 0x64 status+cmd).</li>
+<li>Keyboard: scancode set, IRQ1 → bản đồ ký tự.</li>
+<li>Mouse: bật aux device, gói 3/4 byte, IRQ12.</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] Scancode set 1 vs 2, translation?</li>
+<li>[ ] USB legacy emulation ảnh hưởng gì trên QEMU?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>8042 controller, PS/2 protocol (OSDev).</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 10 - PS2 Keyboard &amp; Mouse</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

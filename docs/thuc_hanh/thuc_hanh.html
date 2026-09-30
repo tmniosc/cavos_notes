@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thực hành · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/thuc_hanh.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span>Thực hành</div>
+    <h1>Thực hành</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> moc, thuchanh</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><em>Nửa "tự làm cho chạy" của vault: viết kernel từ số 0 trong <code>~/oskernel-lab</code>, build và boot QEMU thật.
+Nửa còn lại là <a href="../ly_thuyet/ly_thuyet.html">Lý thuyết</a> — đọc code cavOS và spec.</em></p>
+</div>
+<p>Về trang chủ: <a href="../index.html">Home</a></p>
+<h2 id="vì-sao-lab-không-map-11-với-step">Vì sao lab không map 1:1 với Step</h2>
+<p class="lede"><em>Nhiều Step phụ thuộc nhau, tách lẻ ra thì mỗi lab chẳng chạy được gì để mà xem.</em></p>
+<p>Lab gộp theo <strong>cụm "chạy thấy được"</strong>. Tiêu chí: <strong>1 lab = 1 thứ quan sát được bằng mắt</strong> — chữ hiện ra
+serial, hình vẽ lên màn hình, một con số in ra chứng minh điều vừa học.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Lab</th>
+<th>Phụ trách Step</th>
+<th>Thấy được gì</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a></td>
+<td>00 + 01</td>
+<td>dòng chữ đầu tiên chui ra cổng COM1</td>
+</tr>
+<tr>
+<td><a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a></td>
+<td>02</td>
+<td>HHDM offset, địa chỉ kernel, bản đồ bộ nhớ vật lý</td>
+</tr>
+<tr>
+<td><a href="lab_0x02_framebuffer.html">Lab 0x02 - Framebuffer</a></td>
+<td>03</td>
+<td>pixel và chữ vẽ lên màn hình</td>
+</tr>
+<tr>
+<td><a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a></td>
+<td>04 + 05</td>
+<td>cấp phát frame, tự dựng page table, <code>mov cr3</code></td>
+</tr>
+<tr>
+<td>0x04 (chưa làm)</td>
+<td>06 → 09</td>
+<td>GDT/TSS, ngắt, timer</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="nguyên-tắc">Nguyên tắc</h2>
+<p class="lede"><em>Ba điều đã trả giá mới rút ra được.</em></p>
+<ul>
+<li><strong>Phải build + boot QEMU thật rồi mới chép output vào note.</strong> Không bịa output, không bịa bài học —
+đã từng sai, xem mục "Ghi chú trung thực" trong <a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a>.</li>
+<li><strong>Tách module từ Lab 0x02 trở đi</strong>: <code>io.h</code> / <code>serial.{h,c}</code> / <code>boot.{h,c}</code> / <code>pmm.{h,c}</code> / <code>paging.{h,c}</code>,
+còn <code>kernel.c</code> chỉ điều phối. String in ra để <strong>tiếng Anh</strong>, comment giải thích tiếng Việt.</li>
+<li><strong>Bám cách cavOS thật làm</strong>, không tự chế kiểu khác — ví dụ PMM tính <code>mmTotal</code> bằng cộng dồn length các
+vùng khác <code>RESERVED</code>, y như <code>bootloader.c</code>.</li>
+</ul>
+<h2 id="source-và-cách-chạy">Source và cách chạy</h2>
+<div class="code"><div class="code-bar">text</div><pre><code>lab/src/oskernel-lab/     ← bản lưu trong vault (backup + push GitHub)
+~/oskernel-lab/                 ← bản làm việc trong WSL, BUILD Ở ĐÂY</code></pre></div>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/03-pmm-vmm
+make info      # đang dùng cross gcc hay gcc hệ thống
+make           # kernel.bin + kernel.map/.dis/.sym/.elf.txt
+make run       # QEMU headless, serial ra stdout
+make run-gfx   # có cửa sổ (dùng cho Lab 0x02)</code></pre></div>
+<p>Dựng môi trường: <a href="../cong_cu_va_moi_truong/dung_moi_truong_oskernel_lab.html">Dựng môi trường oskernel-lab</a> · lệnh chi tiết: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a> ·
+bố cục ảnh đĩa: <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</p>
+<div class="callout quote">
+<p><strong>Sửa code xong nhớ chép ngược</strong> về <code>lab/src/oskernel-lab/</code> rồi commit — vault là thứ duy nhất
+được backup lên GitHub.</p>
+</div>
+<h2 id="output-thật-đã-lưu">Output thật đã lưu</h2>
+<ul>
+<li><code>lab/outputs/lab-0x03-run.txt</code> — bản đầy đủ bảng <code>pmm_dump_map</code> (rộng ~176 cột, markdown không vừa)</li>
+<li><code>lab/outputs/lab-0x03-run-2026-09-03.txt</code> — lần chạy 2026-09-03, sau khi vá bug bitmap</li>
+<li><code>lab/outputs/cavos-boot-2026-09-03.txt</code> — boot log của <strong>cavOS thật</strong>, để đối chiếu với lab</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Thực hành</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

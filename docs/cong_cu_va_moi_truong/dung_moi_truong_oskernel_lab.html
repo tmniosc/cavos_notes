@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dựng môi trường oskernel-lab (máy trắng) · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="cong_cu_va_moi_truong/dung_moi_truong_oskernel_lab.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span><a href="cong_cu_va_moi_truong.html">Công cụ và môi trường</a></div>
+    <h1>Dựng môi trường oskernel-lab (máy trắng)</h1>
+    <div class="facts"><span class="fact"><b>Status</b> đang làm</span><span class="fact"><b>Tags</b> meta, build, setup, lab</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><em>Công thức dựng <strong>riêng lab tự viết</strong> (<code>~/oskernel-lab</code>): Limine, chép source từ vault, build, boot QEMU.
+Nhẹ hơn cavOS nhiều — <strong>không cần</strong> cross-compiler.</em></p>
+</div>
+<p>Nền chung (WSL, quy tắc build ở đâu, gói dùng chung): <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a> — làm trước note này.
+Liên quan: <a href="dung_moi_truong_cavos.html">Dựng môi trường cavOS</a> · <a href="cam_nang_build_debug.html">Cẩm nang build &amp; debug</a></p>
+<h2 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h2>
+<p class="lede"><em>cavOS là <strong>sách giáo khoa</strong> đi mượn; lab là <strong>vở bài tập</strong> của mình. Mượn sách thì mất cũng mua lại được,
+còn vở bài tập mất là mất luôn — nên vở phải tự cất giữ.</em></p>
+<p>Khác biệt lớn nhất so với cavOS:</p>
+<ul>
+<li><strong>Nguồn code</strong>: cavOS <code>git clone</code> từ trên mạng; lab thì <strong>chép từ vault</strong> (<code>lab/src/oskernel-lab/</code>),
+vì đây là code tự viết, không ai giữ hộ. Sửa xong nhớ <strong>chép ngược về vault</strong> rồi push.</li>
+<li><strong>Không cần đúc cross-compiler</strong>: kernel lab nhỏ, gcc hệ thống với mấy cờ "freestanding" là đủ. Đỡ hàng
+chục phút chờ. (Có cross rồi thì <code>common.mk</code> tự dùng, khỏi sửa gì.)</li>
+<li><strong>Cần một bootloader rời</strong>: Limine bản binary tải sẵn về <code>~/opt/limine</code>, dùng để cài vào ảnh đĩa <code>os.img</code>.</li>
+</ul>
+<h2 id="0-máy-hiện-tại">0. Máy hiện tại</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Thứ</th>
+<th>Giá trị</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Source lab</td>
+<td><code>~/oskernel-lab</code></td>
+</tr>
+<tr>
+<td>Bản lưu trong vault</td>
+<td><code>D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab</code></td>
+</tr>
+<tr>
+<td>Limine</td>
+<td><code>~/opt/limine</code> — branch <code>v8.x-binary</code> (đang dùng <strong>8.7.0</strong>)</td>
+</tr>
+<tr>
+<td>Toolchain</td>
+<td>gcc hệ thống; <code>common.mk</code> tự dùng cross nếu có</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="1-gói-riêng-của-lab">1. Gói riêng của lab</h2>
+<p class="lede"><em>Ngoài gói chung ở <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a>, lab cần thêm đúng một thứ đáng nói: <code>mtools</code>.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>sudo apt install -y mtools xorriso</code></pre></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Gói</th>
+<th>Để làm gì</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mtools</code></td>
+<td>chép file vào FAT32 <strong>không cần mount, không cần sudo</strong> — <code>mformat/mmd/mcopy</code>. Rất hợp WSL2 vì mount loop device trong WSL hay trục trặc</td>
+</tr>
+<tr>
+<td><code>xorriso</code></td>
+<td>chỉ cần nếu sau này muốn xuất ISO thay vì ảnh đĩa</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="2-limine-bootloader">2. Limine (bootloader)</h2>
+<div class="code"><div class="code-bar">bash</div><pre><code>git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
+make -C ~/opt/limine CC=gcc
+~/opt/limine/limine version        # kiểm: Limine 8.7.0</code></pre></div>
+<p>Branch <code>*-binary</code> đã có sẵn file nhị phân (<code>limine-bios.sys</code>, <code>BOOTX64.EFI</code>...); <code>make</code> chỉ build đúng
+<strong>công cụ dòng lệnh <code>limine</code></strong> dùng để ghi giai đoạn BIOS vào MBR.</p>
+<div class="callout quote">
+<p><strong>Phải là <code>v8.x-binary</code>, KHÔNG v9+.</strong> Từ Limine 9, <code>kernel_path</code> trong <code>limine.conf</code> đổi tên và
+<code>LIMINE_KERNEL_ADDRESS_REQUEST</code> bị thay bằng <code>EXECUTABLE_ADDRESS</code> → lệch <code>limine.h</code> mà lab đang dùng
+(lấy từ cavOS) và lệch mọi note đã viết — tất cả đang ở <strong>base revision 2</strong>.</p>
+</div>
+<div class="callout quote">
+<p><code>make -C ~/opt/limine</code> mà báo <code>cc: No such file or directory</code> thì thêm <code>CC=gcc</code>: Makefile của Limine gọi
+<code>cc</code>, mà Ubuntu sạch chưa chắc có symlink đó.</p>
+</div>
+<h2 id="3-lấy-source-lab-về">3. Lấy source lab về</h2>
+<div class="code"><div class="code-bar">bash</div><pre><code>cp -r /mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab ~/oskernel-lab
+chmod +x ~/oskernel-lab/scripts/mkimage.sh</code></pre></div>
+<p>Chép <strong>1 chiều</strong> vault → WSL, và <strong>build trong <code>~</code></strong> (lý do ở <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a>).</p>
+<div class="code"><div class="code-bar">text</div><pre><code>~/oskernel-lab/
+├─ common.mk           build chung: tự dò cross x86_64-cavos-gcc, không có thì lùi về gcc hệ thống
+├─ linker.ld           bản gốc (mỗi project giữ 1 copy)
+├─ limine.conf         timeout 0 · protocol limine · kernel_path boot():/boot/kernel.bin
+├─ limine.h            lấy từ cavOS src/kernel/include/limine.h (base revision 2)
+├─ .clangd             gỡ flag GCC-only cho clangd
+├─ scripts/mkimage.sh  dựng os.img: MBR + FAT32@1MiB + limine bios-install
+├─ 00-hello-serial/       Step 00 + 01
+├─ 01-bootloader-parser/  Step 02
+├─ 02-framebuffer/        Step 03
+└─ 03-pmm-vmm/            Step 04 + 05</code></pre></div>
+<h2 id="4-build-chạy">4. Build + chạy</h2>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/00-hello-serial
+make info      # in ra đang dùng cross gcc hay gcc hệ thống
+make           # kernel.bin + kernel.map/.dis/.sym/.elf.txt
+make image     # os.img
+make run       # QEMU headless, -serial stdio
+make run-gfx   # có cửa sổ (dùng cho Lab 0x02)</code></pre></div>
+<p>Biến chỉnh được từ dòng lệnh, <strong>không cần sửa file</strong>:</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>make run LIMINE_DIR=/duong/dan/khac
+make run QEMU_FLAGS="-M q35 -m 512M -serial stdio"
+make CROSS_PREFIX=$HOME/opt/cross/bin/x86_64-cavos-</code></pre></div>
+<p>Chi tiết 4 artifact phân tích build: <a href="cam_nang_build_debug.html">Cẩm nang build &amp; debug</a> · bố cục ảnh đĩa: <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</p>
+<h2 id="5-sửa-code-thì-nhớ-chép-ngược">5. Sửa code thì nhớ chép ngược</h2>
+<p class="lede"><em>Chỉ vault mới được đẩy lên GitHub. Code nằm trong WSL mà không chép ngược thì không có bản sao nào.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cp -r ~/oskernel-lab/. /mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab/
+cd /mnt/d/tmniosc/cavos_notes &amp;&amp; git add lab/src &amp;&amp; git commit -m "lab: ..." &amp;&amp; git push</code></pre></div>
+<p>Đừng chép ngược file rác build (<code>.o</code>, <code>kernel.bin</code>, <code>os.img</code>, <code>.map/.dis/.sym/.elf.txt</code>) —
+<code>make clean</code> trước cho gọn.</p>
+<h2 id="6-bẫy-đã-dính-đừng-dính-lại">6. Bẫy đã dính (đừng dính lại)</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Triệu chứng</th>
+<th>Nguyên nhân</th>
+<th>Cách tránh</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>make: cc: No such file or directory</code> khi build Limine</td>
+<td>Makefile Limine gọi <code>cc</code></td>
+<td><code>make -C ~/opt/limine CC=gcc</code></td>
+</tr>
+<tr>
+<td><code>'NULL' undeclared</code></td>
+<td>freestanding không tự có <code>NULL</code>; <code>limine.h</code> chỉ kéo <code>stdint.h</code></td>
+<td>thêm <code>#include &lt;stddef.h&gt;</code></td>
+</tr>
+<tr>
+<td><code>warning: .note.gnu.build-id section discarded</code></td>
+<td><code>linker.ld</code> có <code>/DISCARD/ *(.note.*)</code></td>
+<td>link thêm <code>-Wl,--build-id=none</code> (đã có trong <code>common.mk</code>)</td>
+</tr>
+<tr>
+<td><code>.rodata</code> nhảy lên <code>…80200000</code> thay vì <code>…80001000</code></td>
+<td>thiếu <code>-z max-page-size=0x1000</code> → MAXPAGESIZE = 2 MiB</td>
+<td>giữ cờ <code>-Wl,-z,max-page-size=0x1000</code></td>
+</tr>
+<tr>
+<td>Lab thiếu response / lỗi <code>kernel_path</code></td>
+<td>dùng Limine v9+</td>
+<td>đổi về <code>v8.x-binary</code></td>
+</tr>
+<tr>
+<td>Tên file dính khoảng trắng, build hỏng</td>
+<td>comment cùng dòng với <code>VAR := value</code> trong Makefile</td>
+<td>để comment ở dòng riêng</td>
+</tr>
+<tr>
+<td><code>make image</code> in "Reminder: copy limine-bios.sys"</td>
+<td>Limine in cứng mỗi lần</td>
+<td><strong>không phải lỗi</strong> — <code>mkimage.sh</code> đã chép ở bước 5/5</td>
+</tr>
+</tbody>
+</table></div>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Dựng môi trường oskernel-lab</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

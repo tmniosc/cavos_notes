@@ -1,0 +1,2 @@
+# Script chép vào WSL phải là LF (CRLF -> "env: bash")
+*.sh text eol=lf

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KASLR &amp; PIE Kernel · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/kaslr_pie_kernel.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>KASLR &amp; PIE Kernel</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, boot, security</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Kernel cavOS là <strong>ELF64 PIE</strong> (Position-Independent Executable) → <a href="limine_protocol.html">Limine</a> có thể
+nạp nó ở địa chỉ vật lý/ảo <strong>ngẫu nhiên</strong> (KASLR) rồi tự sửa (relocate) các con trỏ.</p>
+</div>
+<h2 id="pie-là-gì">PIE là gì?</h2>
+<p>Mã không phụ thuộc địa chỉ nạp cố định. Các tham chiếu tuyệt đối được liệt kê trong section
+<code>.dynamic</code> (relocation). Khi nạp ở base mới, loader cộng "slide" vào từng mục.</p>
+<h2 id="trong-linkld">Trong <code>link.ld</code></h2>
+<div class="code"><div class="code-bar">ld</div><pre><code>PHDRS { ... dynamic PT_DYNAMIC FLAGS(...); }
+.dynamic : { *(.dynamic) } :data :dynamic</code></pre></div>
+<p><code>PT_DYNAMIC</code> cho Limine biết chỗ chứa relocation (kiểu phổ biến: <code>R_X86_64_RELATIVE</code>).</p>
+<h2 id="kaslr-kernel-address-space-layout-randomization">KASLR = Kernel Address Space Layout Randomization</h2>
+<p>Nạp kernel ở base ngẫu nhiên mỗi lần boot → khó khai thác lỗ hổng. Vì base đổi, kernel cần biết
+base thực qua request <code>kernel_address</code> của Limine:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>bootloader.kernelVirtBase = limineKrnres-&gt;virtual_base;
+bootloader.kernelPhysBase = limineKrnres-&gt;physical_base;</code></pre></div>
+<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</p>
+<h2 id="spec">Spec</h2>
+<p>ELF64 / System V ABI (program headers, <code>.dynamic</code>, relocation types); Limine <code>PROTOCOL.md</code> (Kernel Address).</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · KASLR &amp; PIE Kernel</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

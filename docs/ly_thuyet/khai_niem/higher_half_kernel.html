@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Higher-Half Kernel · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/higher_half_kernel.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>Higher-Half Kernel</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, memory</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Kernel được nạp ở <strong>nửa cao</strong> của không gian địa chỉ ảo. cavOS: <code>0xffffffff80000000</code> (xem <code>link.ld</code>).</p>
+</div>
+<h2 id="vì-sao-nửa-cao">Vì sao nửa cao?</h2>
+<ul>
+<li>Không gian ảo x86_64 (4-level) là <strong>48-bit có dấu</strong>, sign-extend lên 64-bit → địa chỉ hợp lệ
+("canonical") chỉ ở 2 đầu: nửa thấp <code>0x0..00–0x0000_7fff_ffff_ffff</code> và nửa cao
+<code>0xffff_8000_..–0xffff_ffff_..</code>. Khoảng giữa là "lỗ" không dùng được. → xem <a href="long_mode.html">Long Mode</a>.</li>
+<li>Quy ước: <strong>kernel ở nửa cao, userspace ở nửa thấp</strong> → mỗi tiến trình dùng chung mapping kernel,
+tách bạch rõ ràng, dễ bảo vệ.</li>
+</ul>
+<h2 id="vì-sao-đúng-0xffffffff80000000-2gib">Vì sao đúng <code>0xffffffff80000000</code> (= −2GiB)?</h2>
+<p>Để dùng được <strong><code>-mcmodel=kernel</code></strong> của GCC: mọi địa chỉ tuyệt đối là offset 32-bit có dấu so với
+điểm này → lệnh sinh ra ngắn &amp; nhanh hơn.</p>
+<h2 id="trong-code-linkld">Trong code (<code>link.ld</code>)</h2>
+<div class="code"><div class="code-bar">ld</div><pre><code>. = 0xffffffff80000000;
+kernel_start = .;
+.text : { *(.text .text.*) } :text</code></pre></div>
+<p>Liên quan: <a href="hhdm.html">HHDM</a> (cũng ở nửa cao, vùng khác), <a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>, <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>.</p>
+<h2 id="spec">Spec</h2>
+<p><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §4.5 (canonical address / sign-extension); Limine <code>PROTOCOL.md</code> (Kernel Address — bắt buộc nửa cao).</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Higher-Half Kernel</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

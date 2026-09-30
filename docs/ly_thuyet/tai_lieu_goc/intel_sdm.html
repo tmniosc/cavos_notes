@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intel SDM (Software Developer&#x27;s Manual) · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/tai_lieu_goc/intel_sdm.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Tài liệu gốc</div>
+    <h1>Intel SDM (Software Developer's Manual)</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> spec, cpu</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>"Programming Manual" của CPU x86_64. Tải bản <strong>combined volumes</strong> PDF từ intel.com.
+(AMD64 APM là bản tương đương của AMD.)</p>
+</div>
+<h2 id="cấu-trúc">Cấu trúc</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Vol</th>
+<th>Nội dung</th>
+<th>Dùng cho step</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Vol 1</strong></td>
+<td>Basic architecture, thanh ghi, FPU/SSE/AVX</td>
+<td><a href="../steps/step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a></td>
+</tr>
+<tr>
+<td><strong>Vol 2</strong></td>
+<td>Instruction Set Reference (A-Z), gồm SYSCALL/SYSRET, IN/OUT</td>
+<td><a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a></td>
+</tr>
+<tr>
+<td><strong>Vol 3</strong></td>
+<td>System Programming Guide (kernel quan tâm nhất)</td>
+<td>hầu hết các step</td>
+</tr>
+<tr>
+<td><strong>Vol 4</strong></td>
+<td>Model-Specific Registers (MSR)</td>
+<td><a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a>, <a href="../steps/step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="các-mục-vol-3-hay-dùng-đánh-dấu-sẵn">Các mục Vol 3 hay dùng (đánh dấu sẵn)</h2>
+<ul>
+<li>§3 Protected-Mode Memory Management (segment descriptor) → <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a></li>
+<li>§4 Paging (4-level, entry format, NX) → <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a></li>
+<li>§5 Protection (privilege rings, SYSCALL §5.8.8) → <a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a></li>
+<li>§6 Interrupt &amp; Exception Handling (IDT, gate, IST) → <a href="../steps/step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a></li>
+<li>§8 Task Management (TSS, RSP0, IST stacks) → <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>, <a href="../steps/step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a></li>
+<li>§9 Processor Management &amp; Init (mode switch) → <a href="../khai_niem/long_mode.html">Long Mode</a></li>
+<li>§11 Advanced Programmable Interrupt Controller (APIC) → <a href="../steps/step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></li>
+<li>§13 Managing State (FXSAVE/XSAVE) → <a href="../steps/step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a></li>
+</ul>
+<div class="callout warn">
+<p>Số chương có thể lệch nhẹ giữa các phiên bản SDM — luôn kiểm mục lục bản bạn tải.</p>
+</div>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Intel SDM</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

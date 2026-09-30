@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HHDM — Higher Half Direct Map · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/hhdm.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>HHDM — Higher Half Direct Map</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, memory, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Toàn bộ RAM vật lý được ánh xạ thẳng (tuyến tính) vào nửa cao của không gian ảo</strong>, bắt đầu tại
+một offset cố định <code>hhdmOffset</code> do <a href="limine_protocol.html">Limine</a> cung cấp.</p>
+</div>
+<h2 id="công-thức-vàng">Công thức vàng</h2>
+<div class="code"><div class="code-bar">text</div><pre><code>địa_chỉ_ảo = địa_chỉ_vật_lý + hhdmOffset
+địa_chỉ_vật_lý = địa_chỉ_ảo − hhdmOffset</code></pre></div>
+<h2 id="vì-sao-cần">Vì sao cần?</h2>
+<p>Kernel chạy với <a href="long_mode.html">paging</a> đã bật → mọi truy cập là <strong>địa chỉ ảo</strong>. Nhưng kernel thường
+phải đọc/ghi tại <strong>địa chỉ vật lý</strong> cụ thể (bảng trang, MMIO, cấu trúc ACPI...). HHDM cho phép truy
+cập bất kỳ địa chỉ vật lý nào chỉ bằng cách cộng offset — không phải map tạm từng lần.</p>
+<h2 id="bằng-chứng-trong-code-entrybootloaderc">Bằng chứng trong code (<code>entry/bootloader.c</code>)</h2>
+<div class="code"><div class="code-bar">c</div><pre><code>bootloader.hhdmOffset = limineHHDMres-&gt;offset;
+...
+// Limine trả RSDP ở dạng ảo; trừ offset để lưu địa chỉ VẬT LÝ:
+bootloader.rsdp = (size_t)rsdp_response-&gt;address - bootloader.hhdmOffset;</code></pre></div>
+<h2 id="sơ-đồ">Sơ đồ</h2>
+<figure class="diagram">
+<svg id="svg-va-space-64bit" role="img" aria-label="va space 64bit" style="max-width:1083px" width="100%" viewBox="0 0 720 396" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-va-space-64bit-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-va-space-64bit .lbl{fill:#5c5a52;} #svg-va-space-64bit .mono{font-family:'SF Mono',Consolas,monospace;} #svg-va-space-64bit .tline{stroke:#c7c4ba;} #svg-va-space-64bit .flow{stroke:#8C8A82;} #svg-va-space-64bit .lbl{fill:#c2c0b6;} #svg-va-space-64bit .tline{stroke:rgba(222,220,209,0.3);} #svg-va-space-64bit .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="380" y="24" text-anchor="middle" class="lbl" font-size="10">64-bit virtual address space — 4-level paging, 48 usable bits</text>
+<!-- addresses on the left -->
+<text x="188" y="58" text-anchor="end" class="lbl mono" font-size="9">0x0000000000000000</text>
+<text x="188" y="116" text-anchor="end" class="lbl mono" font-size="9">0x00007fffffffffff</text>
+<text x="188" y="186" text-anchor="end" class="lbl mono" font-size="9">0xffff800000000000</text>
+<text x="188" y="274" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80000000</text>
+<text x="188" y="336" text-anchor="end" class="lbl mono" font-size="9">0xffffffffffffffff</text>
+<!-- low half -->
+<rect x="198" y="44" width="420" height="76" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="214" y="70" fill="#B5D4F4" font-size="11.5" font-weight="600">Lower half — user space</text>
+<text x="214" y="90" fill="#85B7EB" font-size="9">each process gets its own mapping here</text>
+<text x="214" y="107" fill="#85B7EB" font-size="9">128 TiB</text>
+<!-- canonical hole -->
+<rect x="198" y="126" width="420" height="46" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="214" y="146" fill="#D3D1C7" font-size="11" font-weight="600">non-canonical hole</text>
+<text x="214" y="163" fill="#B4B2A9" font-size="9">bits 63..48 must copy bit 47 — anything else faults</text>
+<!-- HHDM -->
+<rect x="198" y="178" width="420" height="82" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="214" y="202" fill="#C6E7CC" font-size="11.5" font-weight="600">HHDM — every physical byte, mapped once</text>
+<text x="214" y="222" fill="#8FC79A" font-size="9" class="mono">VA = PA + hhdmOffset</text>
+<text x="214" y="240" fill="#8FC79A" font-size="9">phys 0 lands at the offset; phys N at offset + N</text>
+<!-- kernel -->
+<rect x="198" y="266" width="420" height="60" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="214" y="290" fill="#F0DBAE" font-size="11.5" font-weight="600">kernel image</text>
+<text x="214" y="308" fill="#D8A54A" font-size="9">top 2 GiB — its own mapping, separate from HHDM</text>
+<text x="380" y="356" text-anchor="middle" class="lbl" font-size="9">a kernel frame is reachable two ways: through HHDM and through the kernel mapping</text>
+<text x="380" y="372" text-anchor="middle" class="lbl" font-size="9">two virtual addresses, one physical frame — that is aliasing</text>
+</svg>
+</figure>
+<h2 id="cr3-vs-hhdm-ai-làm-gì-đừng-nhầm">CR3 vs HHDM — ai làm gì (đừng nhầm!)</h2>
+<p>HHDM <strong>không thay thế</strong> paging. CR3 + paging vẫn <strong>luôn chạy</strong>; HHDM chỉ là <strong>một vùng được map sẵn
+bên trong</strong> page table mà CR3 trỏ tới.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>CR3 + paging</th>
+<th>HHDM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bản chất</td>
+<td>cơ chế <strong>phần cứng</strong> bắt buộc của <a href="long_mode.html">Long Mode</a></td>
+<td>một <strong>quy ước map</strong> (vùng VA = PA + offset)</td>
+</tr>
+<tr>
+<td>Ai ép?</td>
+<td>CPU — long mode không thể tắt paging</td>
+<td>không ai; chỉ là cách Limine chọn map</td>
+</tr>
+<tr>
+<td>Quan hệ</td>
+<td>trỏ tới <strong>cả</strong> page table</td>
+<td><strong>nằm trong</strong> chính page table đó</td>
+</tr>
+</tbody>
+</table></div>
+<div class="code"><div class="code-bar">text</div><pre><code>        CR3 ──► Page table (Limine dựng) ──► gồm: vùng HHDM + kernel + (sau: user/MMIO/heap)</code></pre></div>
+<ul>
+<li>Khi kernel làm <code>*(phys + hhdmOffset)</code>: CPU <strong>không</strong> tự cộng offset — nó vẫn tra bảng qua CR3 như
+mọi VA. Công thức <code>+offset</code> đúng <strong>chỉ vì</strong> Limine đã điền entry: trang ảo <code>0xffff8000+N</code> → khung <code>N</code>.</li>
+<li>Limine "đơn giản hóa" = nó <strong>dựng bảng + nạp CR3 hộ</strong> trước <code>_start</code> → bạn không thấy <code>mov cr3</code> nào ở
+<a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, nhưng CR3 <em>đang</em> hoạt động.</li>
+<li><strong>Bạn tự đụng CR3</strong> ở <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>: dựng bảng riêng, nhớ map lại HHDM + kernel
+vào bảng mới <strong>trước</strong> khi <code>mov cr3</code>, kẻo kernel "mất chân".</li>
+</ul>
+<p>Chi tiết cơ chế dịch: <a href="paging.html">Paging</a> (ý #1, #4 và ví dụ 4b).</p>
+<h2 id="dùng-va-nào-kernel-mapping-vs-hhdm">Dùng VA nào: kernel mapping vs HHDM</h2>
+<p>Kernel có <strong>2 vùng VA</strong> (cùng phủ RAM nhưng khác mục đích &amp; quyền — đây là aliasing 2 VA → 1 PA):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>VA</th>
+<th>Dải</th>
+<th>Dùng cho</th>
+<th>Quyền</th>
+<th>Cách dùng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Kernel mapping</strong></td>
+<td><code>0xffffffff80…</code></td>
+<td><strong>chạy code</strong> + biến global (.text/.rodata/.data/.bss)</td>
+<td>R+X / R+W</td>
+<td><strong>ngầm</strong>, compiler tự sinh — không gọi tên</td>
+</tr>
+<tr>
+<td><strong>HHDM</strong></td>
+<td><code>0xffff8000…</code></td>
+<td><strong>đọc/ghi 1 PA bất kỳ</strong> như dữ liệu</td>
+<td>R+W, NX</td>
+<td><strong>chủ động</strong> <code>pa + hhdmOffset</code></td>
+</tr>
+</tbody>
+</table></div>
+<div class="code"><div class="code-bar">c</div><pre><code>void *pa = pmm_alloc();                 // PMM trả PA thuần, vd 0x0ffb5000
+// *(uint64_t*)pa = 1;   ✗ PA KHÔNG phải VA — kernel chạy với paging, mọi deref là VA
+uint64_t *p = (uint64_t*)((size_t)pa + hhdmOffset);  // ✓ đổi sang VA qua HHDM
+*p = 123;                               // giờ ghi được</code></pre></div>
+<p><strong>Khi nào cần HHDM</strong> (càng về sau càng nhiều): PMM ghi vào frame vừa cấp (<a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>);
+sửa page table — entry chứa PFN vật lý (<a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>); đọc RSDP/MADT (<a href="../steps/step_07_acpi.html">Step 07 - ACPI</a>);
+chạm MMIO/framebuffer (<a href="../steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a>).</p>
+<div class="callout quote">
+<p>Quy tắc: <strong>code kernel sống ở kernel mapping (cần X); cầm một PA muốn đọc/ghi → qua HHDM (W, NX).</strong>
+Đó là lý do aliasing hữu ích: cùng byte, một cửa để <em>chạy</em>, một cửa để <em>ghi</em>.</p>
+</div>
+<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>, <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>.</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · HHDM</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 12 — Networking · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_12_networking.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 12 — Networking</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, network</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiateNetworking()</code> · <strong>Phụ thuộc:</strong> NIC từ <a href="step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Giao tiếp mạng</strong>: dựng stack tối thiểu Ethernet→ARP→IPv4→ICMP/UDP để máy gửi/nhận gói. Xây trên NIC do
+<a href="step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a> tìm và điều khiển. Cho phép ping/trao đổi dữ liệu với thế giới bên ngoài.</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Stack tối thiểu: Ethernet → ARP → IPv4 → ICMP/UDP.</li>
+<li>Buffer gói, hàng đợi TX/RX.</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] Thứ tự init: networking trước hay NIC trước? (xem <a href="boot_flow_start.html">Boot Flow (_start)</a>)</li>
+<li>[ ] Endianness mạng (big-endian) vs host.</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>RFC 791 (IP), 826 (ARP), 792 (ICMP).</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 12 - Networking</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

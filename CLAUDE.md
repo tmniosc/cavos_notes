@@ -1,24 +1,25 @@
 # CLAUDE.md — cavOS Study Vault (context + bộ nhớ)
 
-> Vault ghi chú học **cavOS** (hobby OS x86_64). File này tự nạp khi mở Claude tại thư mục này —
-> đọc đầu mỗi phiên để khôi phục context.
-> Điều hướng: [[Home]] → [[Lý thuyết]] · [[Thực hành]] · [[Công cụ và môi trường]].
+> Vault ghi chú học **cavOS** (hobby OS x86_64), viết bằng **HTML theme dark noir**. File này tự nạp khi mở
+> Claude tại thư mục này — đọc đầu mỗi phiên để khôi phục context.
+> Điều hướng: `docs/index.html` → `docs/ly_thuyet/ly_thuyet.html` · `docs/thuc_hanh/thuc_hanh.html` ·
+> `docs/cong_cu_va_moi_truong/cong_cu_va_moi_truong.html`.
 
 ## Ngôn ngữ
 **Trả lời bằng tiếng Việt.**
 
 ## Mục tiêu
 Đọc source cavOS từ đầu, **ánh xạ code ↔ spec nền tảng x86_64** (Intel SDM, ACPI, PCI, AHCI, Limine,
-datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem [[Boot Flow (_start)]]).
+datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem `docs/ly_thuyet/steps/boot_flow_start.html`).
 
 ## Vị trí (RẤT QUAN TRỌNG)
 | Thứ | Đường dẫn |
 | --- | --- |
 | **Vault ghi chú** (file này) — Windows | `<vault>` — CWD khi chạy `claude`, khác nhau theo máy (bảng dưới) |
 | Vault trên GitHub | `github.com/tmniosc/cavos_notes` (remote `origin`) |
-| **Bản lưu source lab** (backup/push, KHÔNG build ở đây) | `<vault>\Thực hành\src\oskernel-lab` |
+| **Bản lưu source lab** (backup/push, KHÔNG build ở đây) | `<vault>\lab\src\oskernel-lab` (log chạy thật: `lab\outputs\`) |
 | **Source cavOS** — trong WSL | `~/cavOS` — clone từ `github.com/malwarepad/cavOS` |
-| **Source lab** — trong WSL | `~/oskernel-lab` — chép từ `Thực hành/src/oskernel-lab` |
+| **Source lab** — trong WSL | `~/oskernel-lab` — chép từ `lab/src/oskernel-lab` |
 | Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` (GCC 11.4.0, dựng bằng `make tools`) |
 | Limine binary | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
 
@@ -31,7 +32,8 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 | Máy 2 | `E:\tmniosc\#lab\computer_system\cavos_notes` | Windows 11 | `thinker` | **có** `/dev/kvm` | `make qemu` (sau khi `usermod -aG kvm`) |
 
 > Máy 2 dựng ngày 2026-09-30: cavOS clone `2ba0edb`, Limine v8.7.0. `#` trong đường dẫn vault phải
-> quote khi dùng trong shell (`"/mnt/e/tmniosc/#lab/..."`).
+> quote khi dùng trong shell (`"/mnt/e/tmniosc/#lab/..."`). Git trên máy 2 báo "dubious ownership" với vault
+> → dùng `git -c safe.directory=E:/tmniosc/#lab/computer_system/cavos_notes ...`.
 
 ## Quy tắc chạy lệnh
 - **Build trong `~` (ext4), TUYỆT ĐỐI không trên `/mnt/*` (`c` `d` `e`)** — `/mnt` là 9p nên `tar` rớt file,
@@ -44,62 +46,85 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
   trước (giữ tarball), đừng trả lời `y` cho câu hỏi của `patch`.
 - **Máy 1 không có KVM** (Windows 10 → WSL2 không có nested virt): `make qemu` chết với `ENODEV`,
   dùng `~/cavos-qemu.sh` thay thế. Máy 2 có KVM, script đó vẫn tạo sẵn để dự phòng.
-- Bảng lỗi đầy đủ + cách dựng từ máy trắng: [[Dựng môi trường chung]] → [[Dựng môi trường cavOS]] /
-  [[Dựng môi trường oskernel-lab]]. Lệnh hằng ngày: [[Cẩm nang build & debug]].
+- Bảng lỗi đầy đủ + cách dựng từ máy trắng: `docs/cong_cu_va_moi_truong/dung_moi_truong_chung.html` →
+  `dung_moi_truong_cavos.html` / `dung_moi_truong_oskernel_lab.html`. Lệnh hằng ngày: `cam_nang_build_debug.html`.
+  Bản lưu `cavos-qemu.sh` nằm ở `scripts/`.
 
-## Quy ước vault
+## Quy ước vault (HTML)
+- **Bố cục gốc vault** — 4 thứ, không trộn:
+  ```
+  CLAUDE.md   context + bộ nhớ (Markdown)
+  docs/       site HTML: index.html, assets/, ly_thuyet/, thuc_hanh/, cong_cu_va_moi_truong/
+  lab/        src/oskernel-lab/ (source lab) + outputs/ (log chạy thật)
+  scripts/    script tiện ích (cavos-qemu.sh)
+  ```
+- **Mọi note là 1 trang HTML theo skill `dark-noir-docs`** (`.claude/skills/dark-noir-docs/`): noir đen/trắng/xám,
+  không bo góc, sidebar + mục lục tự sinh. Theme dùng chung ở `docs/assets/noir.css` + `noir.js`; sơ đồ site
+  ở `docs/assets/site.js`. Mở đúp `docs/index.html` là đọc được, không cần server. Không còn Markdown/Obsidian
+  (trừ file này và `lab/src/oskernel-lab/README.md` của source lab).
+- **Thêm note mới**: chép khung từ một trang cùng khu (hoặc `assets/page.html` trong skill), đặt đúng
+  `data-root` / `data-page`, rồi **thêm vào `docs/assets/site.js`** — thiếu là sidebar và Trước/Sau không thấy trang.
+  Link giữa các trang là **đường dẫn tương đối** → đổi tên/dời file phải sửa mọi link trỏ tới nó (grep tên file).
+- **Sửa theme**: sửa trong skill (`claude_setup/skills/dark-noir-docs/assets/`), chép sang `docs/assets/` của vault
+  và `.claude/skills/dark-noir-docs/`.
 - 3 khu: **Lý thuyết** (đọc hiểu) · **Thực hành** (tự viết chạy được) · **Công cụ và môi trường**.
-  Mỗi khu có 1 trang chỉ mục cùng tên nằm trong chính khu đó.
-- Tên thư mục + note mô tả để **tiếng Việt**; tên thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
-- Wikilink `[[...]]` phân giải theo **tên file** → dời thư mục KHÔNG làm hỏng link, nhưng **tên file phải
-  duy nhất toàn vault**.
-- **KHÔNG dùng emoji/icon trong note.** Heading trần (`## Mục đích`), callout `> [!warning]` không gắn hình.
-  Note cũ còn icon thì dọn khi nào sửa tới. Mũi tên `→`, ký tự vẽ bảng `├─►`, tick `[x]` không tính là icon.
-- **Sơ đồ dùng SVG, không dùng ASCII art.** Theo skill `dark-native-diagrams` (đã copy vào
-  `.claude/skills/` của vault): nền tối / viền sáng / chữ sáng, `@media (prefers-color-scheme)` cho
-  neutral, box vuông góc, mũi tên chỉ ngang hoặc dọc. Lưu `Diagram/<Tên note>/<tên>.svg`, nhúng
-  `![[tên.svg]]` — **tên file phải duy nhất toàn vault**.
+  Mỗi khu có 1 trang chỉ mục cùng tên nằm trong chính khu đó (`docs/ly_thuyet/ly_thuyet.html`).
+- **Tên thư mục + tên file HTML: không dấu, chữ thường, `_` giữa các từ** (`ly_thuyet/khai_niem/paging.html`,
+  `steps/step_05_virtual_memory_paging.html`). Tiêu đề hiển thị (h1, sidebar `t` trong site.js) vẫn tiếng Việt có dấu.
+  Tiếng Việt cho nội dung; thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
+- **KHÔNG dùng emoji/icon.** Mũi tên `→`, ký tự vẽ bảng `├─►`, tick `✓ ✗` không tính là icon.
+- **Sơ đồ là SVG inline trong trang, không dùng ASCII art.** Vẽ theo style skill `dark-native-diagrams`
+  (box vuông góc, mũi tên ngang/dọc, chữ sáng trên nền tối) nhưng **không lưu file `Diagram/` và không
+  nhúng `![[...]]`** — dán thẳng `<svg>` vào `<figure class="diagram">`. Mỗi SVG: `id` gốc riêng
+  (`svg-<tên>`), mọi id bên trong có tiền tố đó, CSS `<style>` scope dưới `#svg-<tên>`, chỉ dùng màu nền tối
+  (xem mục figure trong SKILL.md của `dark-noir-docs`).
 - **Chữ trong sơ đồ để TIẾNG ANH** (title, label, caption) dù note viết tiếng Việt.
-- **Giữ nguyên dạng text**: cây thư mục (`├── └──`), code fence, bảng markdown, và block output thật.
-  Chỉ chuyển sơ đồ thật (flow, memory map, bit layout, layer stack, cây box).
-- Vẽ xong **mở SVG trong browser xem bằng mắt** trước khi báo xong — lỗi hay gặp là nhãn mũi tên đè lên
-  box và chữ tràn ra ngoài khung.
+- **Giữ nguyên dạng text**: cây thư mục (`├── └──`), code, bảng, và block output thật.
+  Chỉ chuyển sơ đồ thật (flow, memory map, bit layout, layer stack, cây box). Còn ~39 khối `text` cũ, một
+  phần là sơ đồ ASCII chưa vẽ lại — vẽ lại khi sửa tới trang đó.
+- Sửa trang xong **mở trong browser xem bằng mắt** (chạy `py -3 -m http.server` trong vault rồi mở `/docs/`, preview
+  `file://` của pane chỉ là snapshot không có CSS) và chạy bộ kiểm tra trong SKILL.md: không tràn ngang
+  ở 375px, không anchor hỏng, không trùng id — lỗi hay gặp là nhãn mũi tên đè box và chữ tràn khung SVG.
 
 ## Quy ước viết note
-- **Đọc code** trong WSL. **Ghi note** vào vault trên D:.
-- Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật note step (`status: done`), cập nhật bảng Step
-  trong [[Lý thuyết]] và mục "Tiến độ học" bên dưới.
-- **Mỗi note step có 2 mục cố định gần đầu:** `## Mục đích` (step này để làm gì, link chéo step phụ thuộc)
-  và `## Nói thật đơn giản` — tóm tắt **toàn bài** bằng ngôn ngữ đời thường, có ẩn dụ, lướt chỗ quá kỹ
-  thuật. Đọc riêng mục này là hiểu step làm gì và vì sao.
-- **Mọi mục `##` mở đầu bằng 1 câu in nghiêng đời thường** (`> _…_`) trước khi vào code/chi tiết —
-  user là người mới, mỗi mục phải đọc-là-hiểu. Chi tiết kỹ thuật để bên dưới.
+- **Đọc code** trong WSL. **Ghi note** vào vault (ổ Windows).
+- Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật trang step (chip `Status` = `done`), cập nhật bảng
+  Step trong `docs/ly_thuyet/ly_thuyet.html` và mục "Tiến độ học" bên dưới.
+- **Mỗi trang step có 2 mục cố định gần đầu:** `<h2>Mục đích</h2>` (step này để làm gì, link chéo step phụ
+  thuộc) và `<h2 class="card-head">Nói thật đơn giản</h2>` — tóm tắt **toàn bài** bằng ngôn ngữ đời thường,
+  có ẩn dụ, lướt chỗ quá kỹ thuật. Đọc riêng mục này là hiểu step làm gì và vì sao.
+- **Mọi mục `h2` mở đầu bằng 1 câu đời thường** `<p class="lede"><em>…</em></p>` trước khi vào code/chi
+  tiết — user là người mới, mỗi mục phải đọc-là-hiểu. Chi tiết kỹ thuật để bên dưới.
+- Code viết dạng text đã escape trong `.code > .code-bar(c|bash|asm|ld|make|text) + pre > code`; `noir.js` tự tô màu.
 
 ## Quy ước lab
-- **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (bảng trong [[Thực hành]]).
+- **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (bảng trong `docs/thuc_hanh/thuc_hanh.html`).
 - **Build + boot QEMU thật rồi mới chép output vào note** — KHÔNG bịa output/bài học
-  (đã từng sai, xem [[Lab 0x03 - PMM & VMM]] "Ghi chú trung thực").
+  (đã từng sai, xem `docs/thuc_hanh/lab_0x03_pmm_vmm.html` "Ghi chú trung thực"). Log đầy đủ để ở `lab/outputs/`.
 - **Tách module ngay từ Lab 0x00**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}` +
   `kernel.c` chỉ orchestrate; `GNUmakefile` khai `SRCS := ...`. **String in ra để tiếng Anh**, comment
   tiếng Việt. Bám cách cavOS thật làm, KHÔNG tự chế khác (vd `mmTotal` = cộng dồn length ≠ RESERVED).
-- **Sửa code xong chép ngược** về `Thực hành/src/oskernel-lab/` rồi commit + push. Vault là thứ duy nhất
+- **Sửa code xong chép ngược** về `lab/src/oskernel-lab/` rồi commit + push. Vault là thứ duy nhất
   lên GitHub → cái gì không nằm trong vault thì không có bản sao nào.
 
 ## Tiến độ học
-- [x] [[Step 00 - Boot & Limine]] — link.ld, _start, Limine protocol
-- [x] [[Step 01 - Serial UART]] — 16550, COM1
-- [x] [[Step 02 - Bootloader Parser]] — 6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP
-- [x] [[Step 03 - Framebuffer & Console]] — Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ
-- [x] [[Step 04 - Physical Memory Manager]] — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
-- [x] [[Step 05 - Virtual Memory & Paging]] — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
-- [x] [[Step 06 - GDT & TSS]] — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
-- [ ] [[Step 07 - ACPI]] ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
+Trang step nằm ở `docs/ly_thuyet/steps/` (tên file dạng `step_05_virtual_memory_paging.html`).
+- [x] Step 00 - Boot & Limine — link.ld, _start, Limine protocol
+- [x] Step 01 - Serial UART — 16550, COM1
+- [x] Step 02 - Bootloader Parser — 6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP
+- [x] Step 03 - Framebuffer & Console — Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ
+- [x] Step 04 - Physical Memory Manager — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
+- [x] Step 05 - Virtual Memory & Paging — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
+- [x] Step 06 - GDT & TSS — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
+- [ ] Step 07 - ACPI ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
 - [ ] Step 08 → 17: khung sẵn trong vault, điền dần.
 
-> Nạp trước Step 03: [[Paging]] — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
+> Nạp trước Step 03: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 
 ## Quyết định đã chốt
-- Nội dung học ở **vault Obsidian**; **context + bộ nhớ gộp vào CLAUDE.md này** (1 file).
-- Vault trên **D: (Windows)**; code trong **WSL**.
-- **Source lab backup trong vault** (`Thực hành/src/`) và push GitHub.
+- Nội dung học là **site HTML dark noir** (chuyển từ vault Obsidian ngày 2026-09-30 bằng
+  `dark-noir-docs/scripts/obsidian_to_noir.py`; bản Markdown cũ còn trong lịch sử git).
+  **Context + bộ nhớ gộp vào CLAUDE.md này** (1 file, vẫn là Markdown).
+- Vault trên **ổ Windows**; code trong **WSL**.
+- **Source lab backup trong vault** (`lab/src/`) và push GitHub; docs HTML (`docs/`) tách riêng khỏi code.
 - Lab dùng **Limine v8.x-binary** + `limine.h` của cavOS (base revision 2), KHÔNG lên v9+.

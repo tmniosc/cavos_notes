@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cẩm nang build &amp; debug · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="cong_cu_va_moi_truong/cam_nang_build_debug.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span><a href="cong_cu_va_moi_truong.html">Công cụ và môi trường</a></div>
+    <h1>Cẩm nang build &amp; debug</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> reference, build</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p>Repo: <code>~/cavOS</code> (trong WSL native fs — <strong>không</strong> dùng <code>/mnt/d</code>).</p>
+<div class="callout note">
+<div class="label">Note này giả định môi trường đã dựng xong</div>
+</div>
+<div class="callout quote">
+<p>Cần <code>~/cavOS</code>, <code>~/oskernel-lab</code>, cross toolchain, qemu, mtools, Limine. Máy chưa có thì xem
+<a href="dung_moi_truong_chung.html">Dựng môi trường chung</a> rồi rẽ <a href="dung_moi_truong_cavos.html">Dựng môi trường cavOS</a> / <a href="dung_moi_truong_oskernel_lab.html">Dựng môi trường oskernel-lab</a>.</p>
+</div>
+<h2 id="build-chạy">Build &amp; chạy</h2>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/cavOS
+make tools          # build cross-compiler x86_64-cavos-gcc (1 LẦN duy nhất, lâu)
+make disk           # build disk.img (kernel + bootloader + userland). Cần sudo cho bước ports
+make qemu           # boot disk.img trong QEMU
+make kernel         # chỉ build kernel.bin
+make clean          # dọn .o</code></pre></div>
+<div class="callout quote">
+<p>Mẹo: chạy <code>sudo -v</code> ngay trước <code>make disk</code> để sudo không timeout ở bước <code>ports</code> (bootstrap Alpine).</p>
+</div>
+<h2 id="debug-gdb-qemu">Debug (GDB + QEMU)</h2>
+<div class="code"><div class="code-bar">bash</div><pre><code>make qemu_dbg       # QEMU mở gdb stub (thường cổng :1234, dừng chờ)
+make dev            # clean + build_dirty + qemu_dbg</code></pre></div>
+<p>GDB kết nối:</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>gdb src/kernel/kernel.bin
+(gdb) target remote :1234
+(gdb) break _start
+(gdb) continue</code></pre></div>
+<h2 id="output-debug-serial">Output debug serial</h2>
+<p><code>debugf()</code> (<a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>) in ra COM1 → QEMU hiển thị qua cờ <code>-serial</code> (xem <code>src/kernel/Makefile</code> mục <code>qemu</code>).</p>
+<h2 id="xem-code-bằng-zed-clangd-lsp">Xem code bằng Zed + clangd (LSP)</h2>
+<div class="callout quote">
+<p>Đọc/điều hướng code (jump-to-def, find-refs, hover type) dễ hơn nhiều khi clangd hiểu đúng flag kernel.
+Kernel freestanding dùng flag đặc thù (<code>-ffreestanding -mcmodel=kernel -I&lt;custom&gt;</code>...) → <strong>bắt buộc</strong> có
+<code>compile_commands.json</code>, không thì clangd báo đỏ "not found" khắp nơi.</p>
+</div>
+<p><strong>Cài 1 lần (cần sudo):</strong></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>sudo apt-get install -y bear clangd</code></pre></div>
+<p><strong>Sinh <code>compile_commands.json</code></strong> (mỗi khi đổi cấu trúc build / thêm file) — <code>common.mk</code> có target sẵn:</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/03-pmm-vmm
+make compdb         # = bear --output compile_commands.json -- make -B $(OBJS)</code></pre></div>
+<p><code>make clean</code> GIỮ lại <code>compile_commands.json</code> (để LSP còn chạy); <code>make distclean</code> mới xóa nó.</p>
+<div class="callout quote">
+<p>Lưu ý: <code>clangd --check=foo.c</code> có thể báo "N errors" dạng <code>tweak: SwapBinaryOperands FAIL</code> tại các macro —
+<strong>đó KHÔNG phải lỗi code</strong>, chỉ là clangd tự thử refactor nội bộ. Lỗi thật là dòng <code>error:</code> (grep nó → rỗng = OK).
+<strong><code>.clangd</code></strong> đặt ở gốc <code>~/oskernel-lab</code> (đã tạo) — gỡ vài flag GCC-only Clang không nuốt
+(<code>-mcmodel=kernel</code>, <code>-mno-red-zone</code>, <code>-fno-stack-clash-protection</code>) + tắt cảnh báo include nhiễu.
+Kiểm nhanh clangd hiểu đúng chưa: <code>clangd --check=pmm.c</code> (thấy "Indexing AST" + không lỗi include = OK;
+dòng <code>tweak: ... FAIL</code> chỉ là refactor nội bộ, bỏ qua).</p>
+</div>
+<p><strong>Mở Zed:</strong> code nằm trong WSL ext4. Sạch nhất là <strong>cài Zed bản Linux trong WSL</strong> (<code>zed ~/oskernel-lab</code>) để
+clangd chạy native + path khớp <code>compile_commands.json</code> (đường dẫn Linux <code>/home/tmnvi/...</code>). Mở qua
+<code>\\wsl.localhost\...</code> bằng Zed Windows cũng được nhưng path Win/Linux dễ lẫn → hay lỗi.</p>
+<div class="callout quote">
+<p>Cho <strong>cavOS thật</strong>: <code>cd ~/cavOS &amp;&amp; make clean &amp;&amp; bear -- make kernel</code> (chỉ phần kernel, nhanh; <code>make disk</code>
+lâu + cần sudo). <code>compile_commands.json</code> sinh ra ở gốc repo, Zed đọc được ngay.</p>
+</div>
+<h2 id="lab-kernel-oskernel-lab-build-artifacts-tự-sinh">Lab kernel (<code>~/oskernel-lab</code>) — build artifacts tự sinh</h2>
+<p>Các mini-project lab dùng chung <code>common.mk</code> (mỗi project chỉ khai <code>SRCS/KERNEL/IMG</code> rồi <code>include ../common.mk</code>).</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/01-bootloader-parser
+make            # build kernel.bin + 4 artifact (.map .dis .sym .elf.txt)
+make clean      # xoá .o, kernel.bin, 4 artifact, os.img
+make image      # tạo os.img bootable (cần mtools; mkimage.sh)
+make run        # boot QEMU (-serial stdio, headless)</code></pre></div>
+<p>Mỗi lần build kernel tự sinh kèm (tên dẫn xuất từ <code>KERNEL</code>, vd <code>kernel.bin</code> → <code>kernel.*</code>):</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>File</th>
+<th>Lệnh sinh</th>
+<th>Dùng để</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>kernel.map</code></td>
+<td>linker <code>-Wl,-Map=</code> (ngay trong bước link)</td>
+<td>layout section/symbol + địa chỉ load</td>
+</tr>
+<tr>
+<td><code>kernel.dis</code></td>
+<td><code>x86_64-cavos-objdump -d -M intel</code></td>
+<td>đối chiếu code ↔ asm khi học/debug</td>
+</tr>
+<tr>
+<td><code>kernel.sym</code></td>
+<td><code>x86_64-cavos-nm -n</code> (sort theo addr)</td>
+<td>tra địa chỉ hàm/biến</td>
+</tr>
+<tr>
+<td><code>kernel.elf.txt</code></td>
+<td><code>x86_64-cavos-readelf -a</code></td>
+<td>program/section headers mà Limine nạp</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout warn">
+<p>**<code>kernel.map</code> là sản phẩm của LINKER (<code>kernel.bin</code>), KHÔNG phải của <code>kernel.o</code>.** <code>.o</code> chưa link
+nên chưa có địa chỉ cuối để "map". <code>kernel.bin</code> link từ <strong>một mình <code>kernel.o</code></strong> + <code>linker.ld</code>, kiểu
+<strong>freestanding</strong> (<code>-nostdlib -static -no-pie</code>): không libc, không crt0 — Limine thay crt nhảy thẳng <code>kmain</code>.</p>
+</div>
+<div class="callout warn">
+<p>Cross tools (<code>objdump/readelf/nm</code>) không nằm trên <code>$PATH</code>. <code>common.mk</code> dò
+<code>$(HOME)/opt/cross/bin/x86_64-cavos-gcc</code>; <strong>chưa có thì tự lùi về <code>gcc</code> hệ thống</strong> (kernel freestanding vẫn
+build đúng). Xem toolchain đang dùng bằng <code>make info</code>.
+Trong Makefile, <strong>đừng</strong> để comment cùng dòng với <code>VAR := value</code> — Make nuốt cả khoảng trắng trước <code>#</code> vào giá trị → tên file dính space, hỏng build.</p>
+</div>
+<div class="callout quote">
+<p>Soi section/flag của <strong><code>.o</code></strong> (trước link): <code>readelf -S kernel.o</code> / <code>objdump -h kernel.o</code><br/>
+→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>/<code>.bss</code>=WA (gốc của W^X — xem <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2).</p>
+</div>
+<h2 id="ảnh-đĩa-osimg">Ảnh đĩa <code>os.img</code></h2>
+<p><code>os.img</code> không phải kernel mà là <strong>ảnh nguyên ổ đĩa</strong> (lab: 64 MiB): MBR + FAT32 @1 MiB + Limine.
+Bố cục từng vùng, hai đường boot BIOS/UEFI, mạch từ <code>kernel.c</code> tới lúc <code>kmain</code> chạy, và mấy lệnh soi
+ảnh đĩa: xem <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</p>
+<h2 id="dựng-lab-từ-bản-lưu-trong-vault">Dựng lab từ bản lưu trong vault</h2>
+<p class="lede"><em>Source lab giờ được cất trong chính vault (<code>lab/src/</code>). Máy mới chỉ cần chép sang WSL + cài vài gói.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>sudo apt install -y build-essential qemu-system-x86 mtools parted xorriso git
+git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
+make -C ~/opt/limine
+cp -r "/mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab" ~/oskernel-lab
+cd ~/oskernel-lab/00-hello-serial &amp;&amp; make info &amp;&amp; make run</code></pre></div>
+<ul>
+<li><strong><code>v8.x-binary</code>, KHÔNG v9+</strong>: từ Limine 9, <code>kernel_path</code> đổi tên và <code>LIMINE_KERNEL_ADDRESS_REQUEST</code> bị thay
+bằng <code>EXECUTABLE_ADDRESS</code> → lệch <code>limine.h</code> của cavOS và lệch mọi note đã viết.</li>
+<li><code>common.mk</code> đọc <code>LIMINE_DIR</code> (mặc định <code>~/opt/limine</code>) và <code>CROSS_PREFIX</code> — đổi bằng biến môi trường,
+không sửa file: <code>make run LIMINE_DIR=/duong/dan/khac</code>.</li>
+<li><code>make info</code> in ra đang dùng cross gcc hay gcc hệ thống.</li>
+<li>Chép <strong>1 chiều</strong> <code>/mnt/d</code> → <code>~</code>; <strong>không bao giờ build</strong> trên <code>/mnt</code> (9p + CRLF, xem lỗi bên dưới).</li>
+</ul>
+<h2 id="lỗi-thường-gặp-đã-trải-qua">Lỗi thường gặp (đã trải qua)</h2>
+<ul>
+<li><code>env: bash\r</code> → CRLF (do build trên ổ Windows). Build trong <code>~</code>, git Linux giữ LF.</li>
+<li><code>tar</code> thiếu file (<code>opcode/i386.h</code>) → giải nén trên <code>/mnt/</code> (9p). Build trong <code>~</code> (ext4).</li>
+<li><code>Error relocating /bin/bash</code> → rootfs <code>target/</code> hỏng do copy qua <code>/mnt/</code>. Clone sạch.</li>
+<li><code>sudo: timed out</code> → bước ports cần mật khẩu; chạy <code>sudo -v</code> trước.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Cẩm nang build &amp; debug</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

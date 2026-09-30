@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Boot Flow — _start() · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/boot_flow_start.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Boot Flow — <code>_start()</code></h1>
+    <div class="facts"><span class="fact"><b>Tags</b> moc, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p>Nguồn: <code>~/cavOS/src/kernel/entry/kernel.c :: _start()</code>.
+Hàm này gọi các bước khởi tạo <strong>đúng theo thứ tự phụ thuộc phần cứng</strong> → dùng làm giáo trình.</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[Nguồn] → Firmware (UEFI/BIOS) → Bootloader ([[Limine Protocol|Limine]]) → Kernel (_start)</code></pre></div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>#</th>
+<th>Bước trong <code>_start()</code></th>
+<th>File code</th>
+<th>Note</th>
+<th>Spec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>_start</code>, <code>LIMINE_BASE_REVISION(2)</code></td>
+<td><code>entry/kernel.c</code>, <code>link.ld</code></td>
+<td><a href="step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a></td>
+<td><a href="../khai_niem/limine_protocol.html">Limine Protocol</a></td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>initiateSerial()</code></td>
+<td><code>drivers/serial.c</code></td>
+<td><a href="step_01_serial_uart.html">Step 01 - Serial UART</a></td>
+<td><a href="../tai_lieu_goc/uart_16550.html">UART 16550</a></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>initialiseBootloaderParser()</code></td>
+<td><code>entry/bootloader.c</code></td>
+<td><a href="step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+<td><a href="../khai_niem/limine_protocol.html">Limine Protocol</a></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>initiateVGA/Console()</code></td>
+<td><code>graphical/</code></td>
+<td><a href="step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a></td>
+<td>Limine FB, PSF</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>initiatePMM()</code></td>
+<td><code>memory/pmm.c</code></td>
+<td><a href="step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> §4</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>initiateVMM()</code>/<code>initiatePaging()</code></td>
+<td><code>memory/vmm.c</code>,<code>paging.c</code></td>
+<td><a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §4</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>initiateGDT()</code></td>
+<td><code>cpu/gdt.c</code></td>
+<td><a href="step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §3,§8</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>initiateACPI()</code></td>
+<td><code>acpi/</code></td>
+<td><a href="step_07_acpi.html">Step 07 - ACPI</a></td>
+<td>ACPI Spec</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>initiateISR()</code></td>
+<td><code>cpu/idt.c,isr.*</code></td>
+<td><a href="step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §6</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>initiateApicTimer()</code></td>
+<td><code>cpu/apic.c,timer.c</code></td>
+<td><a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §11</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>initiateKb/Mouse()</code></td>
+<td><code>drivers/</code></td>
+<td><a href="step_10_ps2_keyboard_mouse.html">Step 10 - PS2 Keyboard &amp; Mouse</a></td>
+<td>8042 datasheet</td>
+</tr>
+<tr>
+<td>11</td>
+<td><code>initiateTasks()</code> + sched</td>
+<td><code>multitasking/</code></td>
+<td><a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §8</td>
+</tr>
+<tr>
+<td>12</td>
+<td><code>initiateNetworking()</code></td>
+<td><code>networking/</code></td>
+<td><a href="step_12_networking.html">Step 12 - Networking</a></td>
+<td>lwIP, RFC</td>
+</tr>
+<tr>
+<td>13</td>
+<td><code>initiatePCI()</code></td>
+<td><code>drivers/</code></td>
+<td><a href="step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a></td>
+<td>PCI Spec</td>
+</tr>
+<tr>
+<td>14</td>
+<td><code>fsMount</code> AHCI</td>
+<td><code>filesystems/</code>,<code>drivers/</code></td>
+<td><a href="step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a></td>
+<td>AHCI Spec</td>
+</tr>
+<tr>
+<td>15</td>
+<td><code>initiateSyscall*()</code></td>
+<td><code>cpu/fastSyscall.c</code>,<code>syscalls/</code></td>
+<td><a href="step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol2</td>
+</tr>
+<tr>
+<td>16</td>
+<td><code>initiateSSE()</code></td>
+<td><code>cpu/sse.asm</code></td>
+<td><a href="step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a></td>
+<td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol1</td>
+</tr>
+<tr>
+<td>17</td>
+<td><code>run("/bin/bash")</code></td>
+<td><code>entry/</code>, <code>multitasking/</code></td>
+<td><a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a></td>
+<td>ELF64 ABI</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="trạng-thái-cpu-khi-start-chạy">Trạng thái CPU khi <code>_start</code> chạy</h2>
+<p>Limine đã lo sẵn (xem <a href="../khai_niem/limine_protocol.html">Limine Protocol</a> mục 5): <a href="../khai_niem/long_mode.html">Long Mode</a> bật, paging bật, <a href="../khai_niem/hhdm.html">HHDM</a> đã map,
+kernel ở <a href="../khai_niem/higher_half_kernel.html">higher-half</a>, stack sẵn sàng, các <code>response</code> đã điền.</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Boot Flow (_start)</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

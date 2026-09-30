@@ -1,0 +1,689 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GDT — Global Descriptor Table · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/gdt.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>GDT — Global Descriptor Table</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, cpu, segmentation</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Bảng mô tả đoạn (segment) toàn cục</strong> của CPU x86. Mỗi dòng (descriptor) mô tả một "vùng" bộ nhớ:
+nằm đâu, to bao nhiêu, ai được chạy (ring 0/3), là code hay data. CPU <strong>bắt buộc</strong> có bảng này ở
+protected mode &amp; long mode. Note này giảng GDT <strong>theo spec x86</strong> (góc nhìn nền tảng); cách cavOS dùng
+cụ thể xem <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</p>
+</div>
+<h3 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h3>
+<div class="callout quote">
+<p><em>Tưởng tượng RAM là một toà nhà lớn. Ngày xưa CPU chia toà nhà thành nhiều "phòng" (segment) và mỗi
+phòng có một <strong>tấm thẻ mô tả</strong>: phòng này từ tầng nào tới tầng nào, ai được vào (sếp hay nhân viên),
+được làm gì (đọc/ghi/chạy). <strong>GDT chính là tập tấm thẻ đó</strong> — một danh sách, mỗi dòng = 1 tấm thẻ
+(gọi là descriptor). CPU giữ trong tay một "số ghế" (selector) để biết đang dùng tấm thẻ nào.</em></p>
+<p><em>Thời 32-bit, mấy tấm thẻ này nói rõ "phòng ở đâu, to bao nhiêu" — phân vùng bộ nhớ thật sự. Sang
+64-bit (long mode), người ta thấy cách chia phòng này lỗi thời (đã có <a href="paging.html">Paging</a> lo việc đó tốt hơn),
+nên CPU <strong>gần như bỏ qua phần "phòng ở đâu, to bao nhiêu"</strong> — mọi phòng coi như phủ cả toà nhà (phẳng).
+Nhưng CPU <strong>vẫn đòi có bảng thẻ</strong>, vì nó cần đọc 2 thứ còn ý nghĩa: tấm thẻ này là <strong>code hay data</strong>, và
+<strong>ai được cầm</strong> (kernel ring 0 hay user ring 3). Giống thẻ ra vào công ty: không còn quan trọng "phòng
+nào" nữa, chỉ còn quan trọng "cấp bậc người cầm thẻ".</em></p>
+<p><em>Ngoài ra trong bảng còn vài tấm thẻ "hệ thống" đặc biệt, quan trọng nhất là <a href="../steps/step_06_gdt_tss.html">TSS</a>
+— chỗ CPU cất sẵn địa chỉ stack của kernel để dùng khi user gọi vào kernel.</em></p>
+</div>
+<hr/>
+<h2 id="0-gdt-thao-tác-ở-tầng-địa-chỉ-nào-chống-hiểu-lầm-cốt-lõi">0. GDT thao tác ở <strong>tầng địa chỉ nào</strong>? (chống hiểu lầm cốt lõi)</h2>
+<p class="lede"><em>Câu hỏi hay gặp: "GDT là cho RAM hay cho toàn bộ physical memory?" → <strong>Không phải cái nào cả.</strong> GDT
+thao tác trên <strong>không gian địa chỉ tuyến tính (linear/virtual)</strong> — một khái niệm logic, KHÔNG phải bản
+đồ bộ nhớ vật lý. Nó không biết và không quan tâm máy có bao nhiêu RAM hay RAM nằm đâu.</em></p>
+<p>Một địa chỉ trên x86 đi qua <strong>2 tầng dịch</strong> trước khi chạm RAM thật:
+<figure class="diagram">
+<svg id="svg-addr-translation-stages" role="img" aria-label="addr translation stages" style="max-width:1083px" width="100%" viewBox="0 0 700 412" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-addr-translation-stages-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-addr-translation-stages .lbl{fill:#5c5a52;} #svg-addr-translation-stages .mono{font-family:'SF Mono',Consolas,monospace;} #svg-addr-translation-stages .tline{stroke:#c7c4ba;} #svg-addr-translation-stages .flow{stroke:#8C8A82;} #svg-addr-translation-stages .lbl{fill:#c2c0b6;} #svg-addr-translation-stages .tline{stroke:rgba(222,220,209,0.3);} #svg-addr-translation-stages .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="350" y="20" text-anchor="middle" class="lbl" font-size="10">two independent stages, in this order — an address passes through both</text>
+<rect x="150" y="30" width="400" height="46" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="350" y="52" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">logical address</text>
+<text x="350" y="68" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">segment : offset</text>
+<line x1="350" y1="76" x2="350" y2="102" class="flow" stroke-width="1.4" marker-end="url(#svg-addr-translation-stages-arrow)"/>
+<rect x="150" y="102" width="400" height="52" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="350" y="124" text-anchor="middle" fill="#CECBF6" font-size="11.5" font-weight="600">SEGMENTATION — this is where the GDT works</text>
+<text x="350" y="142" text-anchor="middle" fill="#AFA9EC" font-size="9">linear = segment.base + offset, then check limit and privilege</text>
+<line x1="350" y1="154" x2="350" y2="180" class="flow" stroke-width="1.4" marker-end="url(#svg-addr-translation-stages-arrow)"/>
+<rect x="150" y="180" width="400" height="46" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="350" y="202" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">linear address</text>
+<text x="350" y="218" text-anchor="middle" fill="#85B7EB" font-size="9">also called the virtual address</text>
+<line x1="350" y1="226" x2="350" y2="252" class="flow" stroke-width="1.4" marker-end="url(#svg-addr-translation-stages-arrow)"/>
+<rect x="150" y="252" width="400" height="52" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="350" y="274" text-anchor="middle" fill="#CECBF6" font-size="11.5" font-weight="600">PAGING — page tables reached through CR3</text>
+<text x="350" y="292" text-anchor="middle" fill="#AFA9EC" font-size="9">walk four levels to find the frame</text>
+<line x1="350" y1="304" x2="350" y2="330" class="flow" stroke-width="1.4" marker-end="url(#svg-addr-translation-stages-arrow)"/>
+<rect x="150" y="330" width="400" height="46" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="350" y="352" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600">physical address</text>
+<text x="350" y="368" text-anchor="middle" fill="#8FC79A" font-size="9">real RAM, or MMIO, or ROM</text>
+<text x="350" y="396" text-anchor="middle" class="lbl" font-size="9">in long mode the base is forced to 0, so stage one only checks privilege — paging does the real work</text>
+</svg>
+</figure></p>
+<ul>
+<li><strong>GDT ở tầng segmentation</strong> → <code>base</code>/<code>limit</code> của descriptor mô tả một "cửa sổ" trong <strong>không gian địa chỉ
+tuyến tính</strong> (ảo), KHÔNG phải trong RAM vật lý.</li>
+<li>Thứ ánh xạ địa chỉ ảo → physical là <strong><a href="paging.html">Paging</a></strong> (page table, <code>cr3</code>); thứ biết "RAM nằm đâu, bao nhiêu,
+vùng nào reserved" là <strong>memmap từ bootloader</strong> (<a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>) + <a href="../steps/step_04_physical_memory_manager.html">PMM</a>.
+<strong>Không phải GDT.</strong></li>
+</ul>
+<div class="callout warn">
+<p>Khi note này nói segment long mode "phẳng, <strong>phủ cả bộ nhớ</strong>", nghĩa là <code>base=0, limit=∞</code> → segment
+trùm <strong>toàn bộ không gian địa chỉ tuyến tính</strong> (mọi offset ảo đều hợp lệ) — <strong>không</strong> phải "phủ toàn bộ
+RAM vật lý". Hai thứ khác tầng, đừng lẫn.</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Bảng / cấu trúc</th>
+<th>Trả lời câu hỏi gì</th>
+<th>Tầng</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>GDT</strong></td>
+<td>"Địa chỉ <em>ảo</em> này là code/data? Ai (ring 0/3) được đụng?"</td>
+<td>logic (segmentation)</td>
+</tr>
+<tr>
+<td><strong>Page table</strong></td>
+<td>"Địa chỉ <em>ảo</em> này ánh xạ tới <em>frame vật lý</em> nào?"</td>
+<td>virtual → physical (paging)</td>
+</tr>
+<tr>
+<td><strong>memmap (bootloader)</strong></td>
+<td>"Vùng <em>vật lý</em> nào là RAM dùng được / reserved?"</td>
+<td>mô tả physical thật</td>
+</tr>
+</tbody>
+</table></div>
+<p>→ Gọn: <strong>GDT là bảng <em>phân loại &amp; cấp quyền</em> trên địa chỉ ảo, KHÔNG phải bảng "chỗ nào có RAM".</strong> Ở 32-bit
+nó còn dùng <code>limit</code> chặn "đoạn ảo này tới đâu", nhưng vẫn là không gian tuyến tính; rồi paging mới quyết
+địa chỉ đó có thật trong RAM không. Ở long mode segmentation gần như tắt → mọi việc "ở đâu trong RAM" do
+paging lo trọn.</p>
+<hr/>
+<h2 id="1-vì-sao-có-segmentation-lịch-sử">1. Vì sao có segmentation? (lịch sử)</h2>
+<div class="callout quote">
+<p><em>Segmentation ra đời để CPU 16-bit "với" tới nhiều RAM hơn khả năng của một thanh ghi; rồi tiến hoá
+thành cơ chế bảo vệ; rồi gần như biến mất khi paging lên ngôi.</em> (Bản gỡ rối đầy đủ + 3 chế độ:
+<a href="x86_segmentation.html">x86 Segmentation</a>.)</p>
+</div>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Đời CPU</th>
+<th>Vai trò segmentation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>8086</strong> (1978, 16-bit)</td>
+<td>Thanh ghi 16-bit chỉ địa chỉ được 64KiB. Mẹo: <code>địa chỉ = segment×16 + offset</code> → với tới 1MiB. Segment lúc này chỉ là <strong>số nhân</strong>, không có bảo vệ.</td>
+</tr>
+<tr>
+<td><strong>80286</strong> (1982)</td>
+<td>Thêm <strong>protected mode</strong>: segment không còn là số nhân thô mà là <strong>selector</strong> trỏ vào một bảng descriptor (GDT/LDT). Bắt đầu có base/limit/quyền truy cập.</td>
+</tr>
+<tr>
+<td><strong>80386</strong> (1985, 32-bit)</td>
+<td>Descriptor 32-bit đầy đủ (base 32-bit, limit 20-bit + granularity). Đồng thời thêm <strong><a href="paging.html">Paging</a></strong> → từ đây segmentation và paging cùng tồn tại.</td>
+</tr>
+<tr>
+<td><strong>x86-64 / long mode</strong></td>
+<td>Paging thắng tuyệt đối. Segmentation <strong>gần như bị vô hiệu</strong>: base=0, limit=∞ cho hầu hết segment. Chỉ còn giữ lại phần "loại + đặc quyền" → xem <a href="long_mode.html">Long Mode</a>.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout quote">
+<p>Ý lớn: <strong>GDT không biến mất, nó teo lại.</strong> Ở long mode nó từ "công cụ phân vùng bộ nhớ" thành "tấm
+bảng khai báo ring 0/ring 3 + code/data" — tối thiểu để CPU chịu chạy.</p>
+</div>
+<h2 id="2-gdt-đứng-ở-đâu-giữa-các-bảng-descriptor">2. GDT đứng ở đâu giữa các bảng descriptor?</h2>
+<p class="lede"><em>x86 có 3 bảng descriptor; đừng lẫn lộn chúng.</em></p>
+<ul>
+<li><strong>GDT</strong> (Global Descriptor Table) — bảng <strong>toàn cục</strong>, dùng chung mọi tác vụ. Chứa segment code/data,
+TSS, LDT-descriptor. Đây là note này.</li>
+<li><strong>LDT</strong> (Local Descriptor Table) — bảng <strong>cục bộ</strong> cho từng task (di sản, gần như không OS hiện đại nào
+dùng). Bản thân LDT được trỏ tới bởi 1 descriptor <em>nằm trong</em> GDT.</li>
+<li><strong><a href="../steps/step_08_idt_interrupts.html">IDT</a></strong> (Interrupt Descriptor Table) — bảng <strong>trình xử lý ngắt</strong>. Khác hẳn
+GDT về nội dung (gate descriptor), nhưng các gate này lại <strong>tham chiếu selector trong GDT</strong> (kernel code).</li>
+</ul>
+<figure class="diagram">
+<svg id="svg-gdt-table-layout" role="img" aria-label="gdt table layout" width="100%" viewBox="0 0 760 316" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-gdt-table-layout-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-gdt-table-layout .lbl{fill:#5c5a52;} #svg-gdt-table-layout .mono{font-family:'SF Mono',Consolas,monospace;} #svg-gdt-table-layout .tline{stroke:#c7c4ba;} #svg-gdt-table-layout .flow{stroke:#8C8A82;} #svg-gdt-table-layout .lbl{fill:#c2c0b6;} #svg-gdt-table-layout .tline{stroke:rgba(222,220,209,0.3);} #svg-gdt-table-layout .flow{stroke:#7d7b73;}</style>
+</defs>
+<!-- GDTR -->
+<rect x="30" y="40" width="170" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="115" y="62" text-anchor="middle" fill="#D3D1C7" font-size="11.5" font-weight="600" class="mono">GDTR</text>
+<text x="115" y="77" text-anchor="middle" fill="#B4B2A9" font-size="8.5">loaded once by lgdt</text>
+<!-- GDTR operand -->
+<rect x="30" y="110" width="44" height="36" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="52" y="132" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">limit</text>
+<rect x="74" y="110" width="126" height="36" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="137" y="132" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">base 64-bit</text>
+<text x="52" y="160" text-anchor="middle" class="lbl" font-size="8.5">2 B</text>
+<text x="137" y="160" text-anchor="middle" class="lbl" font-size="8.5">8 B</text>
+<text x="30" y="182" class="lbl" font-size="8.5">limit = size − 1</text>
+<text x="30" y="196" class="lbl" font-size="8.5">base = where the table lives</text>
+<line x1="200" y1="128" x2="244" y2="128" class="flow" stroke-width="1.4" marker-end="url(#svg-gdt-table-layout-arrow)"/>
+<!-- the table -->
+<rect x="244" y="40" width="256" height="34" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="258" y="61" fill="#D3D1C7" font-size="10" class="mono">null descriptor</text>
+<rect x="244" y="74" width="256" height="34" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="258" y="95" fill="#B5D4F4" font-size="10" class="mono">kernel code — ring 0</text>
+<line x1="500" y1="91" x2="518" y2="91" class="flow" stroke-width="1.2"/>
+<text x="524" y="94" class="lbl" font-size="9">CS while running in ring 0</text>
+<rect x="244" y="108" width="256" height="34" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="258" y="129" fill="#B5D4F4" font-size="10" class="mono">kernel data — ring 0</text>
+<line x1="500" y1="125" x2="518" y2="125" class="flow" stroke-width="1.2"/>
+<text x="524" y="128" class="lbl" font-size="9">DS / SS in ring 0</text>
+<rect x="244" y="142" width="256" height="34" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="258" y="163" fill="#C6E7CC" font-size="10" class="mono">user code — ring 3</text>
+<line x1="500" y1="159" x2="518" y2="159" class="flow" stroke-width="1.2"/>
+<text x="524" y="162" class="lbl" font-size="9">CS in ring 3</text>
+<rect x="244" y="176" width="256" height="34" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="258" y="197" fill="#C6E7CC" font-size="10" class="mono">user data — ring 3</text>
+<line x1="500" y1="193" x2="518" y2="193" class="flow" stroke-width="1.2"/>
+<text x="524" y="196" class="lbl" font-size="9">DS / SS in ring 3</text>
+<rect x="244" y="210" width="256" height="34" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="258" y="231" fill="#F0DBAE" font-size="10" class="mono">TSS descriptor</text>
+<line x1="500" y1="227" x2="518" y2="227" class="flow" stroke-width="1.2"/>
+<text x="524" y="230" class="lbl" font-size="9">points at the TSS: RSP0, IST</text>
+<text x="380" y="272" text-anchor="middle" class="lbl" font-size="9">the first entry must be null — a selector of 0 has to be invalid, so a forgotten segment register faults</text>
+<text x="380" y="288" text-anchor="middle" class="lbl" font-size="9">in long mode base and limit are ignored for code/data; the entry still carries ring and the L flag</text>
+</svg>
+</figure>
+<h2 id="3-gdtr-thanh-ghi-trỏ-tới-bảng">3. GDTR — thanh ghi trỏ tới bảng</h2>
+<p class="lede"><em>CPU không giữ cả bảng trong người; nó chỉ giữ một con trỏ + độ dài, gọi là GDTR. Nạp bằng lệnh <code>lgdt</code>.</em></p>
+<p>GDTR là thanh ghi <strong>10 byte</strong> (ở long mode): 2 byte <code>limit</code> + 8 byte <code>base</code> — vẽ ở sơ đồ mục 2 bên trên.</p>
+<ul>
+<li><strong>limit</strong> = <em>kích thước bảng tính theo byte − 1</em>. Vì mỗi descriptor 8 byte, bảng N entry → <code>limit = N*8 − 1</code>.</li>
+<li><strong>base</strong> = địa chỉ bắt đầu bảng (32-bit ở protected mode, 64-bit ở long mode).</li>
+<li>Nạp: <code>lgdt [gdtr]</code>. Đọc lại: <code>sgdt</code>.</li>
+<li>Nạp <code>lgdt</code> <strong>chưa làm gì ngay</strong> — selector trong các thanh ghi đoạn vẫn là giá trị cũ. Phải <strong>reload
+segment register</strong> (đặc biệt CS) thì descriptor mới có hiệu lực → xem mục 8.</li>
+</ul>
+<h2 id="4-định-dạng-một-descriptor-8-byte-bóc-từng-bit">4. Định dạng một descriptor (8 byte) — bóc từng bit</h2>
+<p class="lede"><em>Đây là trái tim của GDT. Một descriptor đoạn code/data dài đúng 8 byte, nhồi nhét base/limit/quyền vào
+các vị trí "rải rác" vì lý do tương thích ngược với 80286.</em></p>
+<p>Sơ đồ 8 byte (đọc theo little-endian, byte 0 ở địa chỉ thấp):</p>
+<figure class="diagram">
+<svg id="svg-gdt-descriptor-8byte" role="img" aria-label="gdt descriptor 8byte" width="100%" viewBox="0 0 760 168" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-gdt-descriptor-8byte-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-gdt-descriptor-8byte .lbl{fill:#5c5a52;} #svg-gdt-descriptor-8byte .mono{font-family:'SF Mono',Consolas,monospace;} #svg-gdt-descriptor-8byte .tline{stroke:#c7c4ba;} #svg-gdt-descriptor-8byte .flow{stroke:#8C8A82;} #svg-gdt-descriptor-8byte .lbl{fill:#c2c0b6;} #svg-gdt-descriptor-8byte .tline{stroke:rgba(222,220,209,0.3);} #svg-gdt-descriptor-8byte .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">one GDT entry = 8 bytes, byte 7 on the left down to byte 0 on the right</text>
+<text x="86" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">7</text>
+<text x="170" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">6</text>
+<text x="254" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">5</text>
+<text x="338" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">4</text>
+<text x="464" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">3 · 2</text>
+<text x="632" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">1 · 0</text>
+<rect x="44" y="50" width="84" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="86" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9" class="mono">base 24:31</text>
+<rect x="128" y="50" width="84" height="50" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="170" y="73" text-anchor="middle" fill="#CECBF6" font-size="9" class="mono">flags</text>
+<text x="170" y="87" text-anchor="middle" fill="#AFA9EC" font-size="8" class="mono">+ limit 16:19</text>
+<rect x="212" y="50" width="84" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="254" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9" class="mono">base 16:23</text>
+<rect x="296" y="50" width="84" height="50" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="338" y="80" text-anchor="middle" fill="#F0DBAE" font-size="9.5" font-weight="600" class="mono">access</text>
+<rect x="380" y="50" width="168" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="464" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9" class="mono">base 0:15</text>
+<rect x="548" y="50" width="168" height="50" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="632" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9" class="mono">limit 0:15</text>
+<text x="380" y="124" text-anchor="middle" class="lbl" font-size="9">base and limit are chopped into non-adjacent pieces — a leftover from 286 and 386 keeping backward compatibility</text>
+<text x="380" y="142" text-anchor="middle" class="lbl" font-size="9">long mode ignores both for code/data; only the access byte and the flags nibble still decide anything</text>
+</svg>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Trường</th>
+<th>Rộng</th>
+<th>Ý nghĩa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>limit</strong> 0:15</td>
+<td>16 bit</td>
+<td>16 bit thấp của giới hạn đoạn</td>
+</tr>
+<tr>
+<td><strong>base</strong> 0:15</td>
+<td>16 bit</td>
+<td>16 bit thấp của địa chỉ nền</td>
+</tr>
+<tr>
+<td><strong>base</strong> 16:23</td>
+<td>8 bit</td>
+<td>byte tiếp của base</td>
+</tr>
+<tr>
+<td><strong>access</strong></td>
+<td>8 bit</td>
+<td>byte quyền truy cập (mục 5)</td>
+</tr>
+<tr>
+<td><strong>limit</strong> 16:19 + <strong>flags</strong></td>
+<td>4+4 bit</td>
+<td>nibble thấp = 4 bit cao của limit; nibble cao = flags (mục 6)</td>
+</tr>
+<tr>
+<td><strong>base</strong> 24:31</td>
+<td>8 bit</td>
+<td>byte cao nhất của base (đủ base 32-bit)</td>
+</tr>
+</tbody>
+</table></div>
+<p>→ Ghép lại: <strong>base 32-bit</strong> (4 mảnh: 0:15, 16:23, 24:31) + <strong>limit 20-bit</strong> (2 mảnh: 0:15, 16:19).</p>
+<div class="callout quote">
+<p>Vì sao base/limit bị xé lẻ? Tương thích nhị phân với descriptor 80286 cũ (chỉ có base 24-bit, limit
+16-bit nằm ở 4 byte đầu). 80386 nhét thêm các bit vào byte 6-7 mà không phá layout cũ.</p>
+</div>
+<h3 id="granularity-limit-thực-tế">Granularity &amp; limit thực tế</h3>
+<ul>
+<li>Bit <strong>G</strong> (granularity, trong flags): G=0 → limit tính theo <strong>byte</strong> (tối đa 1MiB). G=1 → limit nhân
+4KiB → đoạn tới <strong>4GiB</strong> (<code>limit=0xFFFFF</code> × 4KiB).</li>
+<li>Đó là cách 32-bit phủ toàn bộ 4GiB bằng một segment "phẳng" (base=0, limit=0xFFFFF, G=1).</li>
+</ul>
+<h2 id="5-byte-access-bảo-vệ-loại-đoạn">5. Byte <code>access</code> — bảo vệ &amp; loại đoạn</h2>
+<p class="lede"><em>Một byte này quyết định: đoạn có tồn tại không, ai được dùng (ring), là hệ thống hay code/data, code
+hay data, đọc/ghi được không. Đây là byte hay tra cứu nhất.</em></p>
+<figure class="diagram">
+<svg id="svg-gdt-access-byte" role="img" aria-label="gdt access byte" width="100%" viewBox="0 0 620 168" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-gdt-access-byte-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-gdt-access-byte .lbl{fill:#5c5a52;} #svg-gdt-access-byte .mono{font-family:'SF Mono',Consolas,monospace;} #svg-gdt-access-byte .tline{stroke:#c7c4ba;} #svg-gdt-access-byte .flow{stroke:#8C8A82;} #svg-gdt-access-byte .lbl{fill:#c2c0b6;} #svg-gdt-access-byte .tline{stroke:rgba(222,220,209,0.3);} #svg-gdt-access-byte .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="310" y="22" text-anchor="middle" class="lbl" font-size="10">access byte — byte 4 of the descriptor, the one you look up most often</text>
+<text x="72" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">7</text>
+<text x="140" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">6 5</text>
+<text x="207" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">4</text>
+<text x="252" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">3</text>
+<text x="297" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">2</text>
+<text x="342" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">1</text>
+<text x="387" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">0</text>
+<rect x="50" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="72" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">P</text>
+<rect x="95" y="50" width="90" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="140" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">DPL</text>
+<rect x="185" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="207" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">S</text>
+<rect x="230" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="252" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">E</text>
+<rect x="275" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="297" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">DC</text>
+<rect x="320" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="342" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">RW</text>
+<rect x="365" y="50" width="45" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="387" y="76" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">A</text>
+<text x="426" y="66" class="lbl" font-size="9">P present · DPL = ring</text>
+<text x="426" y="80" class="lbl" font-size="9">S = 1 → code/data</text>
+<text x="426" y="94" class="lbl" font-size="9">E = 1 → code segment</text>
+<text x="50" y="122" class="lbl mono" font-size="9">10011010 → kernel code: P=1, DPL=0, S=1, E=1, RW=1</text>
+<text x="50" y="140" class="lbl mono" font-size="9">11110010 → user data:   P=1, DPL=3, S=1, E=0, RW=1</text>
+</svg>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Bit</th>
+<th>Tên</th>
+<th>Ý nghĩa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>7 P</strong></td>
+<td>Present</td>
+<td>1 = descriptor hợp lệ (đoạn có mặt). P=0 → dùng tới sẽ #NP fault.</td>
+</tr>
+<tr>
+<td><strong>6-5 DPL</strong></td>
+<td>Descriptor Privilege Level</td>
+<td>Ring yêu cầu để dùng đoạn: <code>00</code>=ring0 (kernel), <code>11</code>=ring3 (user).</td>
+</tr>
+<tr>
+<td><strong>4 S</strong></td>
+<td>System</td>
+<td>1 = đoạn <strong>code/data thường</strong>; 0 = đoạn <strong>hệ thống</strong> (TSS, LDT, gate) → layout khác (mục 7).</td>
+</tr>
+<tr>
+<td><strong>3 E</strong></td>
+<td>Executable</td>
+<td>1 = <strong>code</strong>; 0 = <strong>data</strong>.</td>
+</tr>
+<tr>
+<td><strong>2 DC</strong></td>
+<td>Direction/Conforming</td>
+<td><em>Data:</em> hướng lớn lên (0) / xuống (1, dùng cho stack). <em>Code:</em> conforming (1 = ring thấp hơn được gọi).</td>
+</tr>
+<tr>
+<td><strong>1 RW</strong></td>
+<td>Read/Write</td>
+<td><em>Code:</em> 1 = đọc được (code không bao giờ ghi). <em>Data:</em> 1 = ghi được.</td>
+</tr>
+<tr>
+<td><strong>0 A</strong></td>
+<td>Accessed</td>
+<td>CPU tự set khi đoạn được dùng. OS thường khai 0.</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Ví dụ giải mã</strong> (khớp với cavOS, xem <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>10011010 = P=1, DPL=00, S=1, E=1, DC=0, RW=1, A=0  → kernel code (ring0, code, readable)
+10010010 = P=1, DPL=00, S=1, E=0, DC=0, RW=1, A=0  → kernel data (ring0, data, writable)
+11111010 = P=1, DPL=11, S=1, E=1, DC=0, RW=1, A=0  → user   code (ring3, code, readable)
+11110010 = P=1, DPL=11, S=1, E=0, DC=0, RW=1, A=0  → user   data (ring3, data, writable)</code></pre></div>
+<h2 id="6-nibble-flags-kích-thước-long-mode">6. Nibble <code>flags</code> — kích thước &amp; long mode</h2>
+<p class="lede"><em>4 bit cao của byte 6 quyết định đoạn là 16/32/64-bit và đơn vị limit.</em></p>
+<figure class="diagram">
+<svg id="svg-gdt-flags-nibble" role="img" aria-label="gdt flags nibble" width="100%" viewBox="0 0 560 158" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-gdt-flags-nibble-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-gdt-flags-nibble .lbl{fill:#5c5a52;} #svg-gdt-flags-nibble .mono{font-family:'SF Mono',Consolas,monospace;} #svg-gdt-flags-nibble .tline{stroke:#c7c4ba;} #svg-gdt-flags-nibble .flow{stroke:#8C8A82;} #svg-gdt-flags-nibble .lbl{fill:#c2c0b6;} #svg-gdt-flags-nibble .tline{stroke:rgba(222,220,209,0.3);} #svg-gdt-flags-nibble .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="280" y="22" text-anchor="middle" class="lbl" font-size="10">flags nibble — high 4 bits of byte 6: segment size and long mode</text>
+<text x="72" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">3</text>
+<text x="117" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">2</text>
+<text x="162" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">1</text>
+<text x="207" y="44" text-anchor="middle" class="lbl mono" font-size="8.5">0</text>
+<rect x="50" y="50" width="45" height="42" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="72" y="76" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600" class="mono">G</text>
+<rect x="95" y="50" width="45" height="42" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="117" y="76" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600" class="mono">D/B</text>
+<rect x="140" y="50" width="45" height="42" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="162" y="76" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600" class="mono">L</text>
+<rect x="185" y="50" width="45" height="42" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="207" y="76" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600" class="mono">AVL</text>
+<text x="248" y="62" class="lbl" font-size="9">G — limit counted in bytes (0) or 4 KiB units (1)</text>
+<text x="248" y="76" class="lbl" font-size="9">D/B — 16-bit (0) or 32-bit (1) segment</text>
+<text x="248" y="90" class="lbl" font-size="9">L — 1 marks a 64-bit code segment</text>
+<text x="280" y="126" text-anchor="middle" class="lbl" font-size="9">L and D/B cannot both be 1 — a 64-bit code segment must have D/B = 0</text>
+<text x="280" y="142" text-anchor="middle" class="lbl" font-size="9">AVL is left for the OS; the CPU never reads it</text>
+</svg>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Bit</th>
+<th>Tên</th>
+<th>Ý nghĩa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>G</strong></td>
+<td>Granularity</td>
+<td>limit × 1 byte (0) hay × 4KiB (1).</td>
+</tr>
+<tr>
+<td><strong>D/B</strong></td>
+<td>Default size</td>
+<td>0 = đoạn 16-bit, 1 = đoạn 32-bit. <strong>Ở code 64-bit phải = 0</strong> (vì L=1).</td>
+</tr>
+<tr>
+<td><strong>L</strong></td>
+<td>Long</td>
+<td>1 = <strong>đoạn code 64-bit</strong> (chỉ có nghĩa cho code segment ở long mode).</td>
+</tr>
+<tr>
+<td><strong>AVL</strong></td>
+<td>Available</td>
+<td>bit tự do cho OS dùng.</td>
+</tr>
+</tbody>
+</table></div>
+<div class="callout warn">
+<p>Ràng buộc long mode: với code segment 64-bit phải <strong>L=1 và D/B=0</strong>. <code>L=1, D/B=1</code> là <strong>bất hợp lệ</strong>
+(dành cho mở rộng tương lai). Đây là lý do descriptor code 64-bit của cavOS có <code>granularity = 0b00100000</code>
+(chỉ bit L) chứ không phải <code>0b11001111</code> như code 32-bit.</p>
+</div>
+<h2 id="7-descriptor-hệ-thống-s0-tss-ldt-dài-16-byte">7. Descriptor hệ thống (S=0) — TSS, LDT dài 16 byte</h2>
+<p class="lede"><em>Khi S=0, descriptor không còn là code/data mà là "đoạn hệ thống". Ở long mode, TSS/LDT cần địa chỉ
+64-bit nên descriptor phình lên <strong>16 byte</strong> (gấp đôi).</em></p>
+<ul>
+<li>Khi <strong>S=0</strong>, 4 bit <code>E/DC/RW/A</code> của byte access đổi nghĩa thành <strong>Type 4-bit</strong>:
+<ul>
+<li><code>0x9</code> = TSS 64-bit <em>available</em>, <code>0xB</code> = TSS 64-bit <em>busy</em>, <code>0x2</code> = LDT, <code>0xC/0xE/0xF</code> = call/interrupt/trap gate.</li>
+</ul>
+</li>
+<li><strong>TSS descriptor (long mode) = 16 byte</strong>: 8 byte đầu giống layout thường, 8 byte sau chứa <strong>base 32:63</strong>
+(nửa cao địa chỉ 64-bit) + reserved. Vì vậy trong cavOS bảng khai <code>descriptors[11]</code> (8 byte mỗi cái) <strong>+
+1 ô <code>tss</code> riêng 16 byte</strong> → xem <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a> §6.1.</li>
+<li><strong>TSS dùng để làm gì ở 64-bit?</strong> Hầu như rỗng nghĩa, chỉ giữ <code>RSP0</code> (stack kernel khi user→kernel) và
+<strong>IST</strong> (Interrupt Stack Table — stack riêng cho fault hiểm: double fault, NMI, machine check). Chi tiết
+ở Step 06 §6.5 và <a href="../steps/step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a>.</li>
+<li>Nạp TSS: <code>ltr &lt;selector&gt;</code> (load task register), trỏ vào TSS descriptor trong GDT.</li>
+</ul>
+<h2 id="8-segment-selector-số-ghế-trỏ-vào-bảng">8. Segment selector — "số ghế" trỏ vào bảng</h2>
+<p class="lede"><em>Thanh ghi đoạn (CS, DS, SS...) không chứa descriptor, chúng chứa một <strong>selector 16-bit</strong> = "lấy dòng
+thứ mấy trong bảng, ở ring nào". CPU dùng selector để tra ra descriptor.</em></p>
+<figure class="diagram">
+<svg id="svg-segment-selector-bits" role="img" aria-label="segment selector bits" width="100%" viewBox="0 0 620 218" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-segment-selector-bits-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-segment-selector-bits .lbl{fill:#5c5a52;} #svg-segment-selector-bits .mono{font-family:'SF Mono',Consolas,monospace;} #svg-segment-selector-bits .tline{stroke:#c7c4ba;} #svg-segment-selector-bits .flow{stroke:#8C8A82;} #svg-segment-selector-bits .lbl{fill:#c2c0b6;} #svg-segment-selector-bits .tline{stroke:rgba(222,220,209,0.3);} #svg-segment-selector-bits .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="310" y="22" text-anchor="middle" class="lbl" font-size="10">segment selector — the 16-bit value you load into CS, DS, SS…</text>
+<text x="225" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">15 .. 3</text>
+<text x="420" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">2</text>
+<text x="495" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">1 0</text>
+<rect x="60" y="52" width="330" height="46" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="225" y="72" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">Index</text>
+<text x="225" y="88" text-anchor="middle" fill="#85B7EB" font-size="8.5">13 bits — which entry of the table</text>
+<rect x="390" y="52" width="60" height="46" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="420" y="72" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600" class="mono">TI</text>
+<text x="420" y="88" text-anchor="middle" fill="#D8A54A" font-size="8.5">table</text>
+<rect x="450" y="52" width="90" height="46" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="495" y="72" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600" class="mono">RPL</text>
+<text x="495" y="88" text-anchor="middle" fill="#8FC79A" font-size="8.5">2 bits</text>
+<text x="60" y="126" class="lbl" font-size="9">Index × 8 = byte offset into the table — entries are 8 bytes, so the low 3 bits are free for TI and RPL</text>
+<text x="60" y="144" class="lbl" font-size="9">TI = 0 selects the GDT, TI = 1 selects the LDT</text>
+<text x="60" y="162" class="lbl" font-size="9">RPL = requested privilege level, checked against the descriptor's DPL</text>
+<text x="310" y="196" text-anchor="middle" class="lbl mono" font-size="9">kernel CS = 0x08 → index 1, TI 0, RPL 0</text>
+</svg>
+</figure>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Trường</th>
+<th>Ý nghĩa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Index</strong></td>
+<td>Thứ tự descriptor trong bảng (13 bit → tối đa 8192 entry).</td>
+</tr>
+<tr>
+<td><strong>TI</strong></td>
+<td>Table Indicator: 0 = tra GDT, 1 = tra LDT.</td>
+</tr>
+<tr>
+<td><strong>RPL</strong></td>
+<td>Requested Privilege Level (mục 9).</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Mẹo quan trọng:</strong> vì mỗi descriptor 8 byte và Index nằm từ bit 3, <strong>giá trị selector = offset byte của
+descriptor trong bảng</strong>. Ví dụ descriptor thứ 5 (offset 40 byte) → selector kernel code = <code>0x28</code> = 40 (với
+RPL=0, TI=0). Đây là vì sao cavOS dùng <code>push $0x28</code> để nạp CS = kernel code 64. Selector <strong>0x00 = null</strong> →
+luôn vô hiệu (truy cập sẽ #GP), nên dòng đầu GDT bắt buộc là null descriptor.</p>
+<h2 id="9-cpl-dpl-rpl-cơ-chế-bảo-vệ-theo-ring">9. CPL / DPL / RPL — cơ chế bảo vệ theo ring</h2>
+<p class="lede"><em>Ba chữ "PL" dễ lẫn. Chúng cùng phối hợp để CPU quyết định: "lệnh đang chạy này có được đụng vào đoạn
+kia không?". Quy tắc lõi: <strong>số càng nhỏ càng nhiều quyền</strong> (ring 0 = toàn quyền).</em></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Viết tắt</th>
+<th>Là gì</th>
+<th>Ở đâu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>CPL</strong></td>
+<td><em>Current</em> Privilege Level — ring hiện tại CPU đang chạy.</td>
+<td>2 bit thấp của <strong>CS</strong> (và SS).</td>
+</tr>
+<tr>
+<td><strong>DPL</strong></td>
+<td><em>Descriptor</em> Privilege Level — ring tối thiểu cần để dùng đoạn.</td>
+<td>byte access của descriptor.</td>
+</tr>
+<tr>
+<td><strong>RPL</strong></td>
+<td><em>Requested</em> Privilege Level — ring "tự khai" của selector khi truy cập.</td>
+<td>2 bit thấp của selector.</td>
+</tr>
+</tbody>
+</table></div>
+<ul>
+<li><strong>x86 có 4 ring (0–3)</strong> nhưng thực tế OS chỉ dùng <strong>ring 0 (kernel)</strong> và <strong>ring 3 (user)</strong>; ring 1/2 bỏ.</li>
+<li>Quy tắc thô khi nạp data segment: yêu cầu <strong>max(CPL, RPL) ≤ DPL</strong> thì mới cho. RPL tồn tại để kernel
+không bị lừa truy cập hộ user vào vùng cấm (tự hạ quyền bằng cách set RPL=3).</li>
+<li>Chuyển ring (user↔kernel) <strong>không</strong> làm bằng <code>mov</code> thường — phải qua <strong>interrupt/<code>iretq</code></strong>, <strong><code>syscall</code>/
+<code>sysret</code></strong> (<a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a>), hay call gate. Khi user→kernel, CPU lấy stack ring 0 từ
+<strong><code>RSP0</code> trong TSS</strong>.</li>
+</ul>
+<div class="callout quote">
+<p>Ở long mode, <strong>CPL = 2 bit thấp của CS</strong> là cách duy nhất CPU biết "đang là kernel hay user" — và đó
+chính là lý do GDT <em>không thể bỏ hẳn</em> dù base/limit vô dụng.</p>
+</div>
+<h2 id="10-segment-register-phần-ẩn-shadow">10. Segment register &amp; phần "ẩn" (shadow)</h2>
+<p class="lede"><em>Mỗi thanh ghi đoạn thực ra có 2 phần: phần nhìn thấy (selector 16-bit) và một phần ẩn CPU tự nạp.</em></p>
+<ul>
+<li>6 thanh ghi đoạn: <strong>CS</strong> (code), <strong>DS</strong> (data), <strong>SS</strong> (stack), <strong>ES/FS/GS</strong> (data phụ).</li>
+<li>Khi nạp selector vào thanh ghi, CPU <strong>đọc descriptor 1 lần</strong> rồi cache base/limit/quyền vào <strong>phần ẩn
+(hidden/descriptor cache)</strong>. Truy cập sau đó dùng cache, không tra GDT lại → nhanh. (Đổi GDT sau khi nạp
+mà không reload segment ⇒ vẫn dùng giá trị cũ.)</li>
+<li><strong>Ở long mode:</strong> CS/DS/SS/ES base bị ép = 0, limit bỏ qua. <strong>Nhưng FS/GS đặc biệt</strong>: base của chúng
+<strong>vẫn dùng được</strong> và lấy từ MSR <code>IA32_FS_BASE</code> / <code>IA32_GS_BASE</code> (chứ không từ descriptor). OS dùng GS base
+để trỏ tới per-CPU/per-thread data (<code>swapgs</code> khi vào kernel). → liên quan <a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a>.</li>
+</ul>
+<h2 id="11-nạp-gdt-trong-thực-tế-vì-sao-phải-nhảy-xa">11. Nạp GDT trong thực tế — vì sao phải "nhảy xa"</h2>
+<p class="lede"><em>Nạp <code>lgdt</code> xong, CS vẫn trỏ descriptor cũ. CS là thanh ghi đặc biệt: KHÔNG <code>mov</code> thẳng được. Phải dùng
+một cú "far jump"/"far return" để CPU nạp lại CS từ selector mới.</em></p>
+<p>Quy trình chuẩn (khớp cavOS <code>gdt_reload</code>, xem <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a> §6.4):</p>
+<div class="code"><div class="code-bar">asm</div><pre><code>lgdt [gdtr]            ; 1. nạp địa chỉ + limit bảng
+                      ; 2. reload CS bằng far return:
+push 0x28             ;    selector kernel code 64 (= offset 40)
+lea  rax, [rip+1f]    ;    địa chỉ đích
+push rax
+lretq                 ;    "far return" → pop RIP + CS → CS = 0x28
+1:                    ; 3. reload các segment data thường (mov được)
+mov ax, 0x30          ;    kernel data 64
+mov ds, ax            ;    ds/es/fs/gs/ss</code></pre></div>
+<ul>
+<li><strong>CS chỉ đổi được qua control-flow xa</strong>: <code>ljmp</code>/<code>lcall</code>/<code>lretq</code>/<code>iretq</code>. Mẹo <code>push selector; push rip; lretq</code> là cách phổ biến trong code 64-bit (không có <code>ljmp</code> tiện như 32-bit).</li>
+<li>DS/ES/SS/... thì <code>mov</code> trực tiếp được. Ở long mode chúng gần như vô nghĩa nhưng vẫn nên set cho sạch
+(tránh selector rác gây #GP khi <code>iretq</code>).</li>
+</ul>
+<h2 id="12-gdt-32-bit-vs-64-bit-bảng-đối-chiếu-nhanh">12. GDT 32-bit vs 64-bit — bảng đối chiếu nhanh</h2>
+<p class="lede"><em>Tóm cái khác biệt cốt lõi để khỏi nhầm khi đọc code/spec.</em></p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Khía cạnh</th>
+<th>Protected mode (32-bit)</th>
+<th>Long mode (64-bit)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>base/limit code/data</td>
+<td><strong>Có hiệu lực</strong> (phân vùng thật)</td>
+<td><strong>Bỏ qua</strong> (base=0, limit=∞ — phẳng)</td>
+</tr>
+<tr>
+<td>Cờ quyết định size</td>
+<td>D/B (16/32-bit)</td>
+<td><strong>L=1</strong> cho code 64-bit (D/B=0)</td>
+</tr>
+<tr>
+<td>GDTR base</td>
+<td>32-bit</td>
+<td>64-bit</td>
+</tr>
+<tr>
+<td>TSS descriptor</td>
+<td>8 byte</td>
+<td><strong>16 byte</strong> (cần base 64-bit)</td>
+</tr>
+<tr>
+<td>FS/GS base</td>
+<td>từ descriptor</td>
+<td>từ <strong>MSR</strong> (<code>IA32_FS/GS_BASE</code>), descriptor bỏ</td>
+</tr>
+<tr>
+<td>Còn dùng để làm gì</td>
+<td>phân vùng + bảo vệ + ring</td>
+<td>chủ yếu <strong>khai báo ring (CPL) + code/data</strong></td>
+</tr>
+<tr>
+<td>Vẫn bắt buộc?</td>
+<td>Có</td>
+<td><strong>Có</strong> (CPU không chạy không có GDT)</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="liên-hệ-trong-vault">Liên hệ trong vault</h2>
+<ul>
+<li>Cách cavOS dựng &amp; dùng GDT (code cụ thể): <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</li>
+<li>Vì sao long mode làm segmentation teo lại: <a href="long_mode.html">Long Mode</a>.</li>
+<li>Cơ chế thay thế segmentation để phân vùng/bảo vệ bộ nhớ: <a href="paging.html">Paging</a>.</li>
+<li>IDT tham chiếu selector GDT + dùng IST/RSP0: <a href="../steps/step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a>.</li>
+<li>syscall/sysret + GS base per-CPU: <a href="../steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a>.</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3A:
+<ul>
+<li>§3 <em>Protected-Mode Memory Management</em> — segment descriptor, selector, GDTR/LDTR.</li>
+<li>§5 <em>Protection</em> — CPL/DPL/RPL, privilege checks, conforming code.</li>
+<li>§7 <em>Task Management</em> — TSS, TSS descriptor, IST (long mode).</li>
+<li>§3.x / Vol.3A §5.x — <em>IA-32e mode</em> (flat segmentation, bit L, FS/GS base MSR).</li>
+</ul>
+</li>
+<li>AMD64 APM Vol.2 §4 (Segmented Virtual Memory) — bản mô tả long mode rõ ràng, dễ đọc song song SDM.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · GDT</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

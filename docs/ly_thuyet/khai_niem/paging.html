@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Paging — đủ dùng để đọc cavOS · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/paging.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>Paging — đủ dùng để đọc cavOS</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> cavos, paging, mmu, x86_64, nen-tang</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Note nền tảng "just-in-time": nạp <strong>5 ý cốt lõi</strong> để đọc <code>link.ld</code>, <code>memmap</code>, <code>HHDM</code> không bị bí.
+KHÔNG đào sâu Intel SDM ở đây — để dành tới step VMM/paging thật trong cavOS.
+Liên kết: <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>, <a href="hhdm.html">HHDM</a>, <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../../index.html">Home</a>.</p>
+</div>
+<p>Tiến độ: <a href="../../index.html">Home</a> · phục vụ cho <a href="../steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a> và các step sau.</p>
+<hr/>
+<h2 id="tldr-học-gì-để-dành-gì">TL;DR — học gì, để dành gì</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Nên nạp NGAY (1–2 buổi)</th>
+<th>Để DÀNH (tới step VMM)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5 ý cốt lõi bên dưới</td>
+<td>Toàn bộ Intel SDM Vol.3 Ch.4</td>
+</tr>
+<tr>
+<td>OSDev "Paging" (lướt)</td>
+<td>Chi tiết từng bit PTE, PAT, global page</td>
+</tr>
+<tr>
+<td>OSTEP ch. Address Translation/Paging</td>
+<td>TLB shootdown, hugepage 2M/1G</td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Nguyên tắc:</strong> đọc code cavOS trước → gặp khái niệm lạ → tra đúng lúc → ghi vào vault. Đừng học trọn môn HĐH trước.</p>
+<hr/>
+<h2 id="1-địa-chỉ-ảo-vật-lý-cpu-tự-dịch-qua-một-bảng">1. Địa chỉ ảo → vật lý: CPU tự dịch qua một bảng</h2>
+<p>Mọi địa chỉ kernel chạm vào là <strong>địa chỉ ảo (virtual address — VA)</strong>. Phần cứng MMU dịch sang <strong>địa chỉ vật lý (physical — PA)</strong> bằng cách tra <strong>page table</strong>. Thanh ghi <strong>CR3</strong> trỏ tới gốc bảng.</p>
+<figure class="diagram">
+<svg id="svg-mmu-translation-flow" role="img" aria-label="mmu translation flow" style="max-width:1083px" width="100%" viewBox="0 0 700 190" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-mmu-translation-flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-mmu-translation-flow .lbl{fill:#5c5a52;} #svg-mmu-translation-flow .mono{font-family:'SF Mono',Consolas,monospace;} #svg-mmu-translation-flow .tline{stroke:#c7c4ba;} #svg-mmu-translation-flow .flow{stroke:#8C8A82;} #svg-mmu-translation-flow .lbl{fill:#c2c0b6;} #svg-mmu-translation-flow .tline{stroke:rgba(222,220,209,0.3);} #svg-mmu-translation-flow .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="350" y="24" text-anchor="middle" class="lbl" font-size="10">every memory access the kernel makes goes through this translation</text>
+<rect x="30" y="44" width="180" height="62" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="120" y="70" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">code uses a VA</text>
+<text x="120" y="88" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">0xffff800000060000</text>
+<text x="248" y="68" text-anchor="middle" class="lbl" font-size="9">lookup</text>
+<line x1="210" y1="75" x2="284" y2="75" class="flow" stroke-width="1.4" marker-end="url(#svg-mmu-translation-flow-arrow)"/>
+<rect x="290" y="44" width="200" height="62" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="390" y="70" text-anchor="middle" fill="#CECBF6" font-size="11.5" font-weight="600">MMU — hardware</text>
+<text x="390" y="88" text-anchor="middle" fill="#AFA9EC" font-size="9">walks the page tables, root in CR3</text>
+<text x="524" y="68" text-anchor="middle" class="lbl" font-size="9">result</text>
+<line x1="490" y1="75" x2="558" y2="75" class="flow" stroke-width="1.4" marker-end="url(#svg-mmu-translation-flow-arrow)"/>
+<rect x="564" y="44" width="106" height="62" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="617" y="70" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600">RAM</text>
+<text x="617" y="88" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">PA</text>
+<text x="350" y="140" text-anchor="middle" class="lbl" font-size="9">the kernel never touches RAM directly — there is always a translation layer in between</text>
+<text x="350" y="156" text-anchor="middle" class="lbl" font-size="9">that is exactly why HHDM has to exist: a ready-made VA for every physical byte</text>
+</svg>
+</figure>
+<p>Ý nghĩa: kernel <strong>không</strong> sờ thẳng RAM — luôn qua một lớp dịch. Đây là lý do có HHDM (ý 5).</p>
+<h2 id="2-trang-page-4-kib-đơn-vị-nhỏ-nhất">2. Trang (page) = 4 KiB — đơn vị nhỏ nhất</h2>
+<p>VA và PA đều chia thành các <strong>trang 4 KiB (0x1000)</strong>. Dịch địa chỉ = "trang ảo nào → khung vật lý (frame) nào", phần offset 12 bit thấp giữ nguyên.</p>
+<div class="code"><div class="code-bar">text</div><pre><code>VA = [ số trang ảo (52 bit cao) ][ offset 12 bit ]
+                  │ dịch qua bảng        │ giữ nguyên
+                  ▼                      ▼
+PA = [ khung vật lý           ][ offset 12 bit ]</code></pre></div>
+<p>→ Vì đơn vị là 4 KiB nên <code>MAXPAGESIZE = 0x1000</code>, và <code>ALIGN(0x1000)</code> trong <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> chính là làm tròn lên biên trang.</p>
+<h2 id="3-mỗi-trang-có-quyền-riêng-r-w-x-nx-giải-thích-wx">3. Mỗi trang có quyền riêng: R / W / X (NX) → giải thích W^X</h2>
+<p>Mỗi entry trong bảng mang các bit quyền:</p>
+<ul>
+<li><strong>P</strong> (Present) — trang có map không</li>
+<li><strong>R/W</strong> — cho ghi không (tắt = chỉ đọc)</li>
+<li><strong>U/S</strong> — user hay supervisor</li>
+<li><strong>NX</strong> (No-eXecute, bit 63) — cấm thực thi</li>
+</ul>
+<p>Vì phân quyền chỉ ở <strong>mức nguyên 1 trang</strong>, hai vùng khác quyền không được chung trang → đó là lý do <code>link.ld</code> chèn <code>. = ALIGN(MAXPAGESIZE)</code> giữa các segment:</p>
+<figure class="diagram">
+<svg id="svg-wx-page-split" role="img" aria-label="wx page split" style="max-width:1083px" width="100%" viewBox="0 0 720 274" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-wx-page-split-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-wx-page-split .lbl{fill:#5c5a52;} #svg-wx-page-split .mono{font-family:'SF Mono',Consolas,monospace;} #svg-wx-page-split .tline{stroke:#c7c4ba;} #svg-wx-page-split .flow{stroke:#8C8A82;} #svg-wx-page-split .lbl{fill:#c2c0b6;} #svg-wx-page-split .tline{stroke:rgba(222,220,209,0.3);} #svg-wx-page-split .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="360" y="22" text-anchor="middle" class="lbl" font-size="10">permissions are granted per page — so a section boundary must land on a page boundary</text>
+<text x="180" y="46" text-anchor="middle" class="lbl" font-size="10">sections share one page</text>
+<text x="540" y="46" text-anchor="middle" class="lbl" font-size="10">each section gets its own page</text>
+<!-- bad -->
+<rect x="40" y="56" width="280" height="86" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="180" y="82" text-anchor="middle" fill="#F0C9C9" font-size="10.5" font-weight="600" class="mono">one page: .text + .rodata</text>
+<text x="180" y="104" text-anchor="middle" fill="#EEC2C2" font-size="9">the page needs R + W + X to satisfy both</text>
+<text x="180" y="122" text-anchor="middle" fill="#EEC2C2" font-size="9">code becomes writable, data becomes executable</text>
+<!-- good -->
+<rect x="400" y="56" width="280" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="75" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 1: .text — R + X</text>
+<rect x="400" y="84" width="280" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="103" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 2: .rodata — R, NX</text>
+<rect x="400" y="112" width="280" height="30" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="540" y="132" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">page 3: .data — R + W, NX</text>
+<text x="180" y="166" text-anchor="middle" class="lbl" font-size="9">an attacker who can write anywhere</text>
+<text x="180" y="180" text-anchor="middle" class="lbl" font-size="9">can now write code and run it</text>
+<text x="540" y="166" text-anchor="middle" class="lbl" font-size="9">writable and executable never overlap —</text>
+<text x="540" y="180" text-anchor="middle" class="lbl" font-size="9">this is what W^X means</text>
+<text x="360" y="216" text-anchor="middle" class="lbl" font-size="9">this is why the linker script inserts ALIGN(CONSTANT(MAXPAGESIZE)) between segments:</text>
+<text x="360" y="232" text-anchor="middle" class="lbl" font-size="9">without it two sections land in one page and the kernel has to weaken that page's permissions</text>
+<text x="360" y="254" text-anchor="middle" class="lbl mono" font-size="8.5">alignment is not cosmetic — it is what makes per-section permissions possible at all</text>
+</svg>
+</figure>
+<p><strong>W^X</strong> = Write XOR eXecute: không trang nào vừa ghi-được vừa chạy-được.</p>
+<h2 id="4-x86-64-dùng-4-cấp-bảng-cr3-trỏ-gốc">4. x86_64 dùng 4 cấp bảng, CR3 trỏ gốc</h2>
+<p>VA 48 bit được cắt thành 4 chỉ số 9-bit + offset 12-bit, đi qua 4 tầng:</p>
+<figure class="diagram">
+<svg id="svg-paging-4-levels-overview" role="img" aria-label="paging 4 levels overview" style="max-width:1083px" width="100%" viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-paging-4-levels-overview-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-paging-4-levels-overview .lbl{fill:#5c5a52;} #svg-paging-4-levels-overview .mono{font-family:'SF Mono',Consolas,monospace;} #svg-paging-4-levels-overview .tline{stroke:#c7c4ba;} #svg-paging-4-levels-overview .flow{stroke:#8C8A82;} #svg-paging-4-levels-overview .lbl{fill:#c2c0b6;} #svg-paging-4-levels-overview .tline{stroke:rgba(222,220,209,0.3);} #svg-paging-4-levels-overview .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="380" y="26" text-anchor="middle" class="lbl" font-size="10">the shape to memorise: at most four levels, CR3 holds the root</text>
+<rect x="25" y="44" width="100" height="50" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="75" y="68" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600" class="mono">CR3</text>
+<text x="75" y="84" text-anchor="middle" fill="#B4B2A9" font-size="8">a register</text>
+<line x1="125" y1="69" x2="145" y2="69" class="flow" stroke-width="1.3" marker-end="url(#svg-paging-4-levels-overview-arrow)"/>
+<rect x="147" y="44" width="100" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="197" y="74" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">PML4</text>
+<line x1="247" y1="69" x2="267" y2="69" class="flow" stroke-width="1.3" marker-end="url(#svg-paging-4-levels-overview-arrow)"/>
+<rect x="269" y="44" width="100" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="319" y="74" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">PDPT</text>
+<line x1="369" y1="69" x2="389" y2="69" class="flow" stroke-width="1.3" marker-end="url(#svg-paging-4-levels-overview-arrow)"/>
+<rect x="391" y="44" width="100" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="441" y="74" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">PD</text>
+<line x1="491" y1="69" x2="511" y2="69" class="flow" stroke-width="1.3" marker-end="url(#svg-paging-4-levels-overview-arrow)"/>
+<rect x="513" y="44" width="100" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="563" y="74" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">PT</text>
+<line x1="613" y1="69" x2="633" y2="69" class="flow" stroke-width="1.3" marker-end="url(#svg-paging-4-levels-overview-arrow)"/>
+<rect x="635" y="44" width="100" height="50" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="685" y="68" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600" class="mono">frame</text>
+<text x="685" y="84" text-anchor="middle" fill="#8FC79A" font-size="8">4 KiB</text>
+<!-- bracket over the four tables -->
+<line x1="147" y1="114" x2="613" y2="114" class="tline" stroke-width="1.2"/>
+<line x1="147" y1="108" x2="147" y2="114" class="tline" stroke-width="1.2"/>
+<line x1="613" y1="108" x2="613" y2="114" class="tline" stroke-width="1.2"/>
+<text x="380" y="132" text-anchor="middle" class="lbl" font-size="9">every table is 512 entries × 8 B = exactly one 4 KiB page</text>
+<text x="380" y="160" text-anchor="middle" class="lbl" font-size="9">that is why each index is 9 bits — 2^9 = 512 — and why the PMM can hand out a page table as one plain frame</text>
+<text x="380" y="182" text-anchor="middle" class="lbl" font-size="9">"four levels" is the maximum: a hugepage entry stops early and skips the levels below it</text>
+</svg>
+</figure>
+<p>Cần nhớ ở mức này: <strong>"TỐI ĐA 4 tầng, CR3 trỏ gốc, mỗi bảng 512 entry"</strong>. ("Tối đa" vì có thể dừng sớm bằng
+hugepage — xem #4c.) Chi tiết duyệt bảng để dành tới step VMM.</p>
+<h3 id="vì-sao-mỗi-bảng-đúng-512-entry-và-vừa-khít-1-trang-4-kib">Vì sao mỗi bảng đúng 512 entry và vừa khít 1 trang 4 KiB?</h3>
+<p><strong>Cố ý thiết kế cho mỗi bảng = đúng 1 trang.</strong> Mỗi entry là con trỏ 64-bit = <strong>8 byte</strong>. Một trang 4 KiB chứa được <code>4096 / 8 = 512</code> entry → cần <strong>9 bit</strong> để đánh số (2⁹ = 512). Đó chính là lý do VA cắt thành các nhóm <strong>9-bit</strong>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>1 trang = 4096 byte ÷ 8 byte/entry = 512 entry = 2^9  →  chỉ số mỗi tầng = 9 bit</code></pre></div>
+<p>Nhờ vậy bản thân page table cũng được cấp phát gọn bằng <strong>một frame 4 KiB</strong> (giống mọi trang khác) — PMM ở <a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a> chỉ việc cấp 1 frame là có 1 bảng.</p>
+<h2 id="4b-ví-dụ-chạy-số-va-4-bảng-pa">4b. Ví dụ chạy số: VA → 4 bảng → PA</h2>
+<p>Lấy <code>VA = 0x0000008080604A30</code>. Chẻ 48 bit thành 4 chỉ số 9-bit + offset 12-bit:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>VA = 0x0000_0080_8060_4A30
+
+ [ 9 bit ][ 9 bit ][ 9 bit ][ 9 bit ][  12 bit  ]
+   001      002      003      004      A30
+  PML4i    PDPTi     PDi      PTi      offset
+   = 1      = 2      = 3      = 4      = 0xA30</code></pre></div>
+<p>Đi qua 4 bảng — <strong>bảng giữa chỉ "chỉ đường tới bảng sau", riêng PT cho ra khung vật lý thật + bit quyền</strong>:</p>
+<figure class="diagram">
+<svg id="svg-page-walk-4-level" role="img" aria-label="page walk 4 level" style="max-width:1083px" width="100%" viewBox="0 0 760 496" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-page-walk-4-level-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-page-walk-4-level .lbl{fill:#5c5a52;} #svg-page-walk-4-level .mono{font-family:'SF Mono',Consolas,monospace;} #svg-page-walk-4-level .tline{stroke:#c7c4ba;} #svg-page-walk-4-level .flow{stroke:#8C8A82;} #svg-page-walk-4-level .lbl{fill:#c2c0b6;} #svg-page-walk-4-level .tline{stroke:rgba(222,220,209,0.3);} #svg-page-walk-4-level .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="380" y="20" text-anchor="middle" class="lbl" font-size="10">one address translation = four table reads, each one physical memory access</text>
+<!-- CR3 -->
+<rect x="230" y="32" width="300" height="50" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="380" y="54" text-anchor="middle" fill="#D3D1C7" font-size="11.5" font-weight="600" class="mono">CR3 = 0x1000</text>
+<text x="380" y="71" text-anchor="middle" fill="#B4B2A9" font-size="9">register holding the root table address</text>
+<line x1="380" y1="82" x2="380" y2="104" class="flow" stroke-width="1.4" marker-end="url(#svg-page-walk-4-level-arrow)"/>
+<!-- PML4 -->
+<rect x="230" y="104" width="300" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="380" y="126" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600" class="mono">PML4 @0x1000</text>
+<text x="380" y="143" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">entry[1] -&gt; 0x2000</text>
+<text x="548" y="128" class="lbl mono" font-size="9">index from VA[47:39]</text>
+<line x1="380" y1="154" x2="380" y2="176" class="flow" stroke-width="1.4" marker-end="url(#svg-page-walk-4-level-arrow)"/>
+<!-- PDPT -->
+<rect x="230" y="176" width="300" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="380" y="198" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600" class="mono">PDPT @0x2000</text>
+<text x="380" y="215" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">entry[2] -&gt; 0x3000</text>
+<text x="548" y="200" class="lbl mono" font-size="9">index from VA[38:30]</text>
+<line x1="380" y1="226" x2="380" y2="248" class="flow" stroke-width="1.4" marker-end="url(#svg-page-walk-4-level-arrow)"/>
+<!-- PD -->
+<rect x="230" y="248" width="300" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="380" y="270" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600" class="mono">PD @0x3000</text>
+<text x="380" y="287" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">entry[3] -&gt; 0x4000</text>
+<text x="548" y="272" class="lbl mono" font-size="9">index from VA[29:21]</text>
+<line x1="380" y1="298" x2="380" y2="320" class="flow" stroke-width="1.4" marker-end="url(#svg-page-walk-4-level-arrow)"/>
+<!-- PT -->
+<rect x="230" y="320" width="300" height="58" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="380" y="342" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600" class="mono">PT @0x4000</text>
+<text x="380" y="359" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">entry[4] -&gt; PFN 0x0FFB2 · R X</text>
+<text x="380" y="373" text-anchor="middle" fill="#85B7EB" font-size="8.5">the leaf entry is where permissions live</text>
+<text x="548" y="344" class="lbl mono" font-size="9">index from VA[20:12]</text>
+<line x1="380" y1="378" x2="380" y2="400" class="flow" stroke-width="1.4" marker-end="url(#svg-page-walk-4-level-arrow)"/>
+<!-- frame -->
+<rect x="250" y="400" width="260" height="50" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="380" y="422" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600" class="mono">frame 0x0FFB2</text>
+<text x="380" y="439" text-anchor="middle" fill="#8FC79A" font-size="9">4 KiB of real memory</text>
+<text x="380" y="478" text-anchor="middle" class="lbl" font-size="9">the TLB caches the finished result — without it every access would cost five reads instead of one</text>
+</svg>
+</figure>
+<p>Ghép khung + offset (offset <strong>chép thẳng</strong> từ VA, không tra bảng):</p>
+<div class="code"><div class="code-bar">text</div><pre><code> PA = (PFN &lt;&lt; 12) | offset
+    =  0x0FFB2000 | 0xA30
+    =  0x0FFB2A30   ◄── địa chỉ vật lý tuyệt đối, hết dịch</code></pre></div>
+<p>Toàn cảnh — cái gì đổi, cái gì giữ nguyên:</p>
+<figure class="diagram">
+<svg id="svg-va-split-to-pa" role="img" aria-label="va split to pa" style="max-width:1083px" width="100%" viewBox="0 0 760 306" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-va-split-to-pa-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-va-split-to-pa .lbl{fill:#5c5a52;} #svg-va-split-to-pa .mono{font-family:'SF Mono',Consolas,monospace;} #svg-va-split-to-pa .tline{stroke:#c7c4ba;} #svg-va-split-to-pa .flow{stroke:#8C8A82;} #svg-va-split-to-pa .lbl{fill:#c2c0b6;} #svg-va-split-to-pa .tline{stroke:rgba(222,220,209,0.3);} #svg-va-split-to-pa .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="60" y="28" class="lbl" font-size="10">virtual address — 48 bits split into five fields</text>
+<!-- VA fields -->
+<rect x="60" y="38" width="110" height="42" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="115" y="58" text-anchor="middle" fill="#B5D4F4" font-size="10.5" font-weight="600" class="mono">PML4i</text>
+<text x="115" y="72" text-anchor="middle" fill="#85B7EB" font-size="8.5" class="mono">47:39</text>
+<rect x="170" y="38" width="110" height="42" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="225" y="58" text-anchor="middle" fill="#B5D4F4" font-size="10.5" font-weight="600" class="mono">PDPTi</text>
+<text x="225" y="72" text-anchor="middle" fill="#85B7EB" font-size="8.5" class="mono">38:30</text>
+<rect x="280" y="38" width="110" height="42" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="335" y="58" text-anchor="middle" fill="#B5D4F4" font-size="10.5" font-weight="600" class="mono">PDi</text>
+<text x="335" y="72" text-anchor="middle" fill="#85B7EB" font-size="8.5" class="mono">29:21</text>
+<rect x="390" y="38" width="110" height="42" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="445" y="58" text-anchor="middle" fill="#B5D4F4" font-size="10.5" font-weight="600" class="mono">PTi</text>
+<text x="445" y="72" text-anchor="middle" fill="#85B7EB" font-size="8.5" class="mono">20:12</text>
+<rect x="500" y="38" width="200" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="600" y="58" text-anchor="middle" fill="#F0DBAE" font-size="10.5" font-weight="600" class="mono">offset</text>
+<text x="600" y="72" text-anchor="middle" fill="#D8A54A" font-size="8.5" class="mono">11:0 — 12 bits</text>
+<!-- four indexes fan into the walk -->
+<line x1="115" y1="80" x2="115" y2="104" class="flow" stroke-width="1.4"/>
+<line x1="225" y1="80" x2="225" y2="104" class="flow" stroke-width="1.4"/>
+<line x1="335" y1="80" x2="335" y2="104" class="flow" stroke-width="1.4"/>
+<line x1="445" y1="80" x2="445" y2="104" class="flow" stroke-width="1.4"/>
+<line x1="115" y1="104" x2="445" y2="104" class="flow" stroke-width="1.4"/>
+<line x1="280" y1="104" x2="280" y2="136" class="flow" stroke-width="1.4" marker-end="url(#svg-va-split-to-pa-arrow)"/>
+<rect x="130" y="136" width="300" height="46" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="280" y="157" text-anchor="middle" fill="#CECBF6" font-size="11" font-weight="600">four table lookups</text>
+<text x="280" y="173" text-anchor="middle" fill="#AFA9EC" font-size="8.5" class="mono">PML4 -&gt; PDPT -&gt; PD -&gt; PT</text>
+<!-- elbow from walk result into the PFN cell -->
+<line x1="280" y1="182" x2="280" y2="206" class="flow" stroke-width="1.4"/>
+<line x1="280" y1="206" x2="350" y2="206" class="flow" stroke-width="1.4"/>
+<line x1="350" y1="206" x2="350" y2="232" class="flow" stroke-width="1.4" marker-end="url(#svg-va-split-to-pa-arrow)"/>
+<!-- offset passes straight through -->
+<line x1="600" y1="80" x2="600" y2="232" class="flow" stroke-width="1.4" marker-end="url(#svg-va-split-to-pa-arrow)"/>
+<text x="614" y="150" class="lbl" font-size="9">copied verbatim,</text>
+<text x="614" y="164" class="lbl" font-size="9">never translated</text>
+<!-- PA -->
+<text x="60" y="228" class="lbl" font-size="10">physical address</text>
+<rect x="200" y="232" width="300" height="42" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="350" y="252" text-anchor="middle" fill="#C6E7CC" font-size="10.5" font-weight="600" class="mono">PFN 0x0FFB2</text>
+<text x="350" y="266" text-anchor="middle" fill="#8FC79A" font-size="8.5">which 4 KiB frame</text>
+<rect x="500" y="232" width="200" height="42" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="600" y="252" text-anchor="middle" fill="#F0DBAE" font-size="10.5" font-weight="600" class="mono">offset</text>
+<text x="600" y="266" text-anchor="middle" fill="#D8A54A" font-size="8.5">same 12 bits as above</text>
+<text x="380" y="296" text-anchor="middle" class="lbl" font-size="9">the untranslated 12 bits are exactly why a page is 4 KiB — 2^12 bytes addressable inside one frame</text>
+</svg>
+</figure>
+<ul>
+<li><strong>36 bit trên của VA</strong> (4 nhóm 9-bit) → qua 4 bảng → thành <strong>PFN</strong> của PA.</li>
+<li><strong>12 bit offset</strong> → <strong>không tra bảng, chép nguyên</strong> sang PA.</li>
+<li>Một byte có thể có <strong>nhiều VA</strong> trỏ về <strong>cùng 1 PA</strong> (vd kernel: qua HHDM và qua kernel mapping — xem <a href="hhdm.html">HHDM</a>), nhưng PA luôn <strong>duy nhất</strong>.</li>
+</ul>
+<h2 id="4c-hugepage-không-phải-va-nào-cũng-đi-đủ-4-tầng">4c. Hugepage: KHÔNG phải VA nào cũng đi đủ 4 tầng</h2>
+<p class="lede"><em>"4-level" = <strong>tối đa</strong> 4 tầng, không phải luôn 4. Một entry có thể <strong>dừng sớm</strong> và phủ thẳng vùng lớn.</em></p>
+<p>Mỗi entry ở PDPT/PD có bit <strong>PS (Page Size)</strong>. Bật <code>PS=1</code> → entry đó là <strong>lá</strong> (trỏ thẳng vùng nhớ), bỏ
+các tầng dưới. Bỏ 1 tầng = offset dài thêm 9 bit = vùng phủ to lên <strong>512 lần</strong>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Dừng ở tầng</th>
+<th>Offset dài</th>
+<th>Một entry phủ</th>
+<th>Số tầng phải đi</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PT (không có bit PS)</td>
+<td>12 bit</td>
+<td>2^12 = <strong>4 KiB</strong></td>
+<td>4 — trang thường</td>
+</tr>
+<tr>
+<td>PD với <code>PS=1</code></td>
+<td>21 bit</td>
+<td>2^21 = <strong>2 MiB</strong></td>
+<td>3 — bỏ PT</td>
+</tr>
+<tr>
+<td>PDPT với <code>PS=1</code></td>
+<td>30 bit</td>
+<td>2^30 = <strong>1 GiB</strong></td>
+<td>2 — bỏ cả PD lẫn PT</td>
+</tr>
+<tr>
+<td>Tức <strong>1 entry "nhân" lên</strong>: PD entry hugepage = 512 × 4 KiB = 2 MiB (gộp 512 trang con thành 1).</td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table></div>
+<p><strong>Số tầng là per-NHÁNH, không per-bảng</strong> — cùng 1 PML4 trộn được:
+<figure class="diagram">
+<svg id="svg-pml4-branches-huge-vs-4k" role="img" aria-label="pml4 branches huge vs 4k" style="max-width:1083px" width="100%" viewBox="0 0 760 268" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-pml4-branches-huge-vs-4k-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-pml4-branches-huge-vs-4k .lbl{fill:#5c5a52;} #svg-pml4-branches-huge-vs-4k .mono{font-family:'SF Mono',Consolas,monospace;} #svg-pml4-branches-huge-vs-4k .tline{stroke:#c7c4ba;} #svg-pml4-branches-huge-vs-4k .flow{stroke:#8C8A82;} #svg-pml4-branches-huge-vs-4k .lbl{fill:#c2c0b6;} #svg-pml4-branches-huge-vs-4k .tline{stroke:rgba(222,220,209,0.3);} #svg-pml4-branches-huge-vs-4k .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">one PML4, three branches — depth differs because the page size differs</text>
+<!-- root -->
+<rect x="30" y="90" width="110" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="85" y="114" text-anchor="middle" fill="#D3D1C7" font-size="11.5" font-weight="600" class="mono">PML4</text>
+<text x="85" y="130" text-anchor="middle" fill="#B4B2A9" font-size="8.5">root, from CR3</text>
+<!-- bus -->
+<line x1="140" y1="118" x2="164" y2="118" class="flow" stroke-width="1.3"/>
+<line x1="164" y1="60" x2="164" y2="212" class="flow" stroke-width="1.3"/>
+<line x1="164" y1="60" x2="196" y2="60" class="flow" stroke-width="1.3" marker-end="url(#svg-pml4-branches-huge-vs-4k-arrow)"/>
+<line x1="164" y1="136" x2="196" y2="136" class="flow" stroke-width="1.3" marker-end="url(#svg-pml4-branches-huge-vs-4k-arrow)"/>
+<line x1="164" y1="212" x2="196" y2="212" class="flow" stroke-width="1.3" marker-end="url(#svg-pml4-branches-huge-vs-4k-arrow)"/>
+<!-- HHDM branch -->
+<rect x="202" y="38" width="520" height="44" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="216" y="58" fill="#C6E7CC" font-size="10.5" font-weight="600" class="mono">[256] HHDM</text>
+<text x="216" y="74" fill="#8FC79A" font-size="9" class="mono">PDPT -&gt; PD -&gt;(PS=1) 2 MiB page — three levels, no PT at all</text>
+<text x="712" y="58" text-anchor="end" fill="#8FC79A" font-size="9">huge pages</text>
+<!-- kernel branch -->
+<rect x="202" y="114" width="520" height="44" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="216" y="134" fill="#B5D4F4" font-size="10.5" font-weight="600" class="mono">[511] kernel</text>
+<text x="216" y="150" fill="#85B7EB" font-size="9" class="mono">PDPT -&gt; PD -&gt; PT -&gt; 4 KiB page — four levels</text>
+<text x="712" y="134" text-anchor="end" fill="#85B7EB" font-size="9">fine-grained W^X</text>
+<!-- test branch -->
+<rect x="202" y="190" width="520" height="44" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="216" y="210" fill="#CECBF6" font-size="10.5" font-weight="600" class="mono">[192] test mapping</text>
+<text x="216" y="226" fill="#AFA9EC" font-size="9" class="mono">PDPT -&gt; PD -&gt; PT -&gt; 4 KiB page — four levels</text>
+<text x="712" y="210" text-anchor="end" fill="#AFA9EC" font-size="9">built by vmap</text>
+<text x="380" y="258" text-anchor="middle" class="lbl" font-size="9">a 2 MiB page covers 512× more with one entry — cheap for mapping all of RAM, too coarse for per-section permissions</text>
+</svg>
+</figure>
+MMU walk <strong>từng VA độc lập</strong>, gặp <code>PS=1</code> thì dừng. (Lưu ý: bản thân <strong>bảng</strong> PML4/PDPT/PD vẫn 4 KiB; "2 MiB"
+là vùng <em>một entry</em> phủ, không phải cỡ bảng.)</p>
+<p><strong>Lợi ích (vì sao HHDM dùng hugepage 2M)</strong>: map 256 MB chỉ cần 128 entry PD (1 bảng) thay vì 65536 entry PT
+(128 bảng) → ít RAM page table; walk 3 tầng + TLB phủ 2 MiB/entry → nhanh hơn. HHDM map "nguyên khối RAM"
+không cần quyền mịn từng 4 KiB nên rất hợp. Kernel thì dùng 4 KiB để áp <strong>W^X</strong> riêng từng section (ý #3).<br/>
+→ Đo thật ở <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>paging_dump_walk</code>): HHDM dừng ở PD (2MB), kernel đủ 4 tầng.</p>
+<h2 id="5-hhdm-higher-half-kernel-sống-ở-nửa-cao-địa-chỉ-ảo">5. HHDM &amp; higher-half: kernel sống ở nửa cao địa chỉ ảo</h2>
+<p>Limine map sẵn <strong>toàn bộ RAM vật lý</strong> vào một vùng VA cố định ở <strong>nửa cao</strong> (higher half), gọi là <strong>HHDM</strong> (Higher Half Direct Map). Công thức:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>VA = PA + hhdm_offset      (hhdm_offset lấy từ Limine, xem [[Step 02 - Bootloader Parser]])</code></pre></div>
+<p>Nhờ vậy kernel muốn đọc PA bất kỳ chỉ cần cộng offset → ra VA dùng được ngay, <strong>không phải tự dựng page table</strong> lúc đầu. <code>kernel_addr</code>, <code>memmap</code> trong Step 02 đều xoay quanh ý này.</p>
+<div class="code"><div class="code-bar">text</div><pre><code>  Không gian VA 64-bit:
+  0x0000...          (nửa thấp = user, sau này)
+  ───────────────────────────  ← canonical hole
+  0xFFFF_8000_...   HHDM: PA + offset (toàn bộ RAM map ở đây)
+  0xFFFF_FFFF_8000_0000  kernel image (.text/.rodata/.data)</code></pre></div>
+<hr/>
+<h2 id="móc-nối-vào-cavos">Móc nối vào cavOS</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Khái niệm paging</th>
+<th>Gặp ở đâu trong cavOS</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ALIGN biên trang, W^X</td>
+<td><a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> — <code>link.ld</code></td>
+</tr>
+<tr>
+<td>HHDM offset, kernel_addr</td>
+<td><a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+</tr>
+<tr>
+<td>memmap (vùng RAM usable)</td>
+<td><a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+</tr>
+<tr>
+<td>Dựng page table thật, CR3</td>
+<td>Step VMM (sau) — lúc đó mới mở Intel SDM Vol.3 Ch.4</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="tài-nguyên-ngắn-đúng-việc">Tài nguyên (ngắn, đúng việc)</h2>
+<ul>
+<li><strong>OSDev Wiki</strong> — <em>Paging</em> + <em>Setting Up Paging</em> (sát OS hobby x86_64 nhất).</li>
+<li><strong>OSTEP</strong> — chương <em>Address Translation</em> &amp; <em>Paging</em> (miễn phí, bottom-up).</li>
+<li><strong>Intel SDM Vol.3 Ch.4</strong> — ĐỂ DÀNH, chỉ tra khi cần bit cụ thể.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Paging</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

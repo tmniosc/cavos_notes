@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 13 — PCI &amp; NIC · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_13_pci_nic.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 13 — PCI &amp; NIC</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, pci, network</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiatePCI()</code> · <strong>Liên hệ:</strong> <a href="step_12_networking.html">Step 12 - Networking</a>, <a href="step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Tìm và nhận diện thiết bị cắm trên bus PCI</strong> (NIC, AHCI controller...). Enumerate config space → đọc
+vendor/device ID, class, BAR (vùng MMIO). Là "trình quản lý thiết bị" — bước bắt buộc trước khi điều khiển
+bất kỳ phần cứng PCIe nào: NIC (<a href="step_12_networking.html">Step 12 - Networking</a>), đĩa (<a href="step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a>).</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Enumerate PCI (bus/device/function), config space (port 0xCF8/0xCFC hoặc ECAM).</li>
+<li>Đọc vendor/device ID, class code, BAR.</li>
+<li>Tìm NIC, map MMIO, đọc MAC.</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] Legacy config (CF8/CFC) vs MMIO ECAM (từ ACPI MCFG)?</li>
+<li>[ ] NIC cụ thể nào (e1000/rtl8139)?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>PCI Local Bus Spec; datasheet NIC.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 13 - PCI &amp; NIC</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

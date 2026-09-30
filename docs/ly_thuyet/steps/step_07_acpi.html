@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 07 — ACPI · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_07_acpi.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 07 — ACPI</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, acpi, firmware</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiateACPI()</code> · <strong>Đầu vào:</strong> <code>rsdp</code> từ <a href="step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Đọc các bảng mô tả phần cứng do firmware cung cấp</strong> (qua RSDP từ <a href="step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>). ACPI là
+"danh bạ" của bo mạch: có bao nhiêu CPU, APIC ở đâu, HPET/PCIe ở đâu, cách tắt/sleep máy. Cụ thể cavOS cần
+<strong>MADT</strong> để biết Local/IO APIC → tiền đề bắt buộc cho <a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>.</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Từ RSDP → RSDT/XSDT → tìm các bảng (MADT/APIC, FADT, HPET…).</li>
+<li>Parse <strong>MADT</strong> lấy local APIC / IO APIC (chuẩn bị <a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>).</li>
+<li>Checksum bảng ACPI.</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] RSDT (32-bit ptr) vs XSDT (64-bit ptr) — dùng cái nào?</li>
+<li>[ ] MADT entry types nào cần?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li>ACPI Specification (RSDP, XSDT, MADT).</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 07 - ACPI</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

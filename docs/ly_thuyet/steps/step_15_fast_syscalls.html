@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 15 — Fast Syscalls (syscall/sysret) · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_15_fast_syscalls.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 15 — Fast Syscalls (syscall/sysret)</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, syscall, cpu</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiateSyscalls()</code> · <strong>Phụ thuộc:</strong> GDT từ <a href="step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a></p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Cho userspace (ring 3) gọi dịch vụ kernel (ring 0) nhanh.</strong> Cài MSR cho lệnh <code>syscall</code>/<code>sysret</code> (nhanh hơn
+ngắt). Khi user gọi syscall: chuyển sang stack kernel (<code>RSP0</code> từ TSS <a href="step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>), chạy handler,
+trả về. Là <strong>cầu nối</strong> giữa chương trình người dùng và kernel — bắt buộc cho <a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>.</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>MSR: <code>IA32_EFER.SCE</code>, <code>STAR</code>, <code>LSTAR</code>, <code>FMASK</code>.</li>
+<li>Entry <code>syscall</code> → lưu user context, đổi sang kernel stack (TSS RSP0).</li>
+<li>Quy ước ABI: số syscall ở RAX, tham số RDI/RSI/RDX/R10/R8/R9.</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] swapgs để lấy kernel GS base?</li>
+<li>[ ] Bảng dispatch syscall đặt ở đâu?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — SYSCALL/SYSRET, MSR STAR/LSTAR/FMASK.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 15 - Fast Syscalls</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UART 16550 · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/tai_lieu_goc/uart_16550.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Tài liệu gốc</div>
+    <h1>UART 16550</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> spec, driver, serial</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Chip giao tiếp serial. cavOS dùng cho debug qua COM1. Datasheet: <strong>PC16550D</strong> (National/TI).
+Dùng ở <a href="../steps/step_01_serial_uart.html">Step 01 - Serial UART</a>. Port COM1 = <code>0x3F8</code>, COM2 = <code>0x2F8</code>.</p>
+</div>
+<h2 id="bản-đồ-thanh-ghi-offset-so-với-base">Bản đồ thanh ghi (offset so với base)</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Off</th>
+<th>DLAB=0</th>
+<th>DLAB=1</th>
+<th>Ghi chú</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>+0</td>
+<td>THR(ghi)/RBR(đọc)</td>
+<td>DLL</td>
+<td>dữ liệu / divisor low</td>
+</tr>
+<tr>
+<td>+1</td>
+<td>IER</td>
+<td>DLM</td>
+<td>interrupt enable / divisor high</td>
+</tr>
+<tr>
+<td>+2</td>
+<td>IIR(đọc)/<strong>FCR</strong>(ghi)</td>
+<td></td>
+<td>FIFO control</td>
+</tr>
+<tr>
+<td>+3</td>
+<td><strong>LCR</strong></td>
+<td></td>
+<td>line control, bit7 = DLAB</td>
+</tr>
+<tr>
+<td>+4</td>
+<td><strong>MCR</strong></td>
+<td></td>
+<td>modem control</td>
+</tr>
+<tr>
+<td>+5</td>
+<td><strong>LSR</strong></td>
+<td></td>
+<td>line status</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="bit-quan-trọng">Bit quan trọng</h2>
+<ul>
+<li><strong>LCR.DLAB (bit7)</strong>: =1 để truy cập divisor latch (DLL/DLM), =0 để dùng dữ liệu/IER.</li>
+<li><strong>LSR bit0</strong> = Data Ready (có byte để đọc).</li>
+<li><strong>LSR bit5 (0x20)</strong> = THR Empty (gửi được byte mới).</li>
+<li><strong>MCR</strong>: DTR, RTS, <strong>OUT2</strong> (OUT2 cho phép IRQ UART tới PIC/APIC).</li>
+</ul>
+<h2 id="baud">Baud</h2>
+<p>Clock 1.8432 MHz / 16 = 115200 max. <code>baud = 115200 / divisor</code>.
+divisor = 3 → 38400 (cấu hình cavOS). <strong>8N1</strong> = 8 data, no parity, 1 stop.</p>
+<p>→ Giải mã <code>serial_enable()</code> từng dòng: xem <a href="../steps/step_01_serial_uart.html">Step 01 - Serial UART</a>.</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · UART 16550</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Step 16 — SSE &amp; FPU · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/steps/step_16_sse_fpu.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
+    <h1>Step 16 — SSE &amp; FPU</h1>
+    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, cpu, fpu</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Hàm:</strong> <code>initiateSSE()</code> · <strong>Spec:</strong> <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1/Vol.3</p>
+<h2 id="mục-đích">Mục đích</h2>
+<p><strong>Bật đơn vị tính dấu phẩy động / vector (SSE/FPU)</strong> để code dùng float/SIMD chạy được mà không fault. Mặc
+định long mode chưa bật; phải set CR0/CR4. Và phải lưu/khôi phục trạng thái FPU khi đổi task
+(<a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>) — bắt buộc trước khi chạy userspace dùng float (<a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>).</p>
+<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<ul>
+<li>Bật SSE: CR0 (clear EM, set MP), CR4 (OSFXSR, OSXMMEXCPT).</li>
+<li>(Tùy) AVX qua XCR0/XSAVE.</li>
+<li>Lưu/khôi phục trạng thái FPU/SSE khi context switch (<code>fxsave</code>/<code>fxrstor</code>).</li>
+</ul>
+<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+<ul>
+<li>[ ] Lazy FP save hay eager?</li>
+<li>[ ] XSAVE area kích thước (CPUID)?</li>
+</ul>
+<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1 — SSE/AVX; Vol.3 — control register, XSAVE.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Step 16 - SSE &amp; FPU</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

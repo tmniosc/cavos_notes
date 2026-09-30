@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Công cụ và môi trường · cavOS notes</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="cong_cu_va_moi_truong/cong_cu_va_moi_truong.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">cavOS notes</a><span class="sep">/</span>Công cụ và môi trường</div>
+    <h1>Công cụ và môi trường</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> moc, meta</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><em>Không phải kiến thức về hệ điều hành, mà là <strong>thứ phải có thì mới học được</strong>: máy dựng ra sao, build
+bằng lệnh gì, hỏng thì tra ở đâu.</em></p>
+</div>
+<p>Về trang chủ: <a href="../index.html">Home</a> · hai nửa nội dung: <a href="../ly_thuyet/ly_thuyet.html">Lý thuyết</a> · <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a></p>
+<h2 id="dựng-máy-từ-con-số-0">Dựng máy từ con số 0</h2>
+<p class="lede"><em>Làm theo thứ tự: nền chung trước, rồi mới rẽ nhánh. Hai nhánh độc lập, làm nhánh nào trước cũng được.</em></p>
+<ol>
+<li><a href="dung_moi_truong_chung.html">Dựng môi trường chung</a> — WSL nằm đâu, vault nằm đâu, <strong>quy tắc vàng build trong <code>~</code> chứ không <code>/mnt</code></strong>,
+gói <code>apt</code> cả hai nhánh đều cần.</li>
+<li><a href="dung_moi_truong_cavos.html">Dựng môi trường cavOS</a> — nhánh đọc code người ta: gói để đúc cross-compiler → <code>make tools</code> →
+<code>make disk</code> → <code>make qemu</code>.</li>
+<li><a href="dung_moi_truong_oskernel_lab.html">Dựng môi trường oskernel-lab</a> — nhánh code tự viết: <code>mtools</code> + Limine v8.x → chép source từ vault →
+<code>make run</code>. <strong>Không cần</strong> cross-compiler.</li>
+</ol>
+<h2 id="dùng-hằng-ngày">Dùng hằng ngày</h2>
+<ul>
+<li><a href="cam_nang_build_debug.html">Cẩm nang build &amp; debug</a> — lệnh build/QEMU/GDB, 4 file phân tích build (<code>.map/.dis/.sym/.elf.txt</code>),
+<code>compile_commands.json</code> cho clangd, và bảng lỗi thường gặp.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Công cụ và môi trường</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

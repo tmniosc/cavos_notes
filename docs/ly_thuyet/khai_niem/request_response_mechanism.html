@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Request-Response Mechanism · cavOS notes</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/request_response_mechanism.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">cavOS notes</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>Request-Response Mechanism</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Cách <a href="limine_protocol.html">Limine</a> truyền dữ liệu cho kernel. Ý tưởng: <strong>phong bì có nhãn</strong>.</p>
+</div>
+<h2 id="ẩn-dụ">Ẩn dụ</h2>
+<p>Kernel để sẵn các "phong bì có nhãn" trong file nhị phân ("tôi muốn biết X"). Nhãn = <strong>dãy số magic
+64-bit</strong> (gần như không trùng tình cờ). Limine quét nhị phân kernel, tìm nhãn, rồi nhét "tờ trả lời"
+(response) vào phong bì. Kernel chạy thì mở ra đọc.</p>
+<h2 id="ví-dụ-thật-hhdm-limineh">Ví dụ thật — HHDM (<code>limine.h</code>)</h2>
+<div class="code"><div class="code-bar">c</div><pre><code>#define LIMINE_COMMON_MAGIC 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b
+#define LIMINE_HHDM_REQUEST { LIMINE_COMMON_MAGIC, 0x48dcf1cb8ad2b852, 0x63984e959a98244b }
+
+struct limine_hhdm_request {
+    uint64_t id[4];        // nhãn (2 magic chung + 2 magic riêng)
+    uint64_t revision;
+    struct limine_hhdm_response *response;  // ban đầu NULL; Limine điền vào
+};
+struct limine_hhdm_response { uint64_t revision; uint64_t offset; };</code></pre></div>
+<p>Trong <code>entry/bootloader.c</code>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile struct limine_hhdm_request limineHHDMreq = {
+    .id = LIMINE_HHDM_REQUEST, .revision = 0};      // response còn NULL
+...
+struct limine_hhdm_response *res = limineHHDMreq.response;  // Limine đã điền
+bootloader.hhdmOffset = res-&gt;offset;</code></pre></div>
+<h2 id="dòng-thời-gian">Dòng thời gian</h2>
+<div class="code"><div class="code-bar">text</div><pre><code>Biên dịch : request có id=magic, response=NULL nằm trong nhị phân kernel
+Limine nạp: quét thấy magic → tạo response → gán địa chỉ vào request.response
+_start    : request.response đã trỏ dữ liệu thật → kernel đọc</code></pre></div>
+<h2 id="vì-sao-static-volatile">Vì sao <code>static volatile</code>?</h2>
+<p><code>volatile</code> báo compiler "biến bị bên ngoài (Limine) sửa" → không tối ưu/cache, không xóa code đọc
+<code>response</code>. <code>static</code> để biến tồn tại trong nhị phân cho Limine quét.</p>
+<p>→ Cùng cơ chế này áp dụng cho <a href="limine_protocol.html">base revision</a>.</p>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>cavOS notes · Request-Response Mechanism</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

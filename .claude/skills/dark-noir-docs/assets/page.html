@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{Page title}} · {{Site}}</title>
+<!-- Site: link the shared theme. Single page: replace this line with <style>…noir.css…</style>. -->
+<link rel="stylesheet" href="{{root}}assets/noir.css">
+</head>
+<!-- data-root: path back to the site root ("" at the root, "../" one folder down).
+     data-page: this page's path from the root, exactly as its "h" in assets/site.js. -->
+<body data-root="{{root}}" data-page="{{Folder/Page.html}}">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="{{root}}index.html">{{Site}}</a><span class="sep">/</span>{{Folder}}</div>
+    <h1>{{Page title}}</h1>
+    <p class="summary">{{Optional: one paragraph on what this page covers.}}</p>
+    <div class="facts">
+      <span class="fact done"><b>Status</b> done</span>
+      <span class="fact"><b>Tags</b> {{a, b}}</span>
+      <span class="fact"><b>Updated</b> {{YYYY-MM-DD}}</span>
+    </div>
+  </div>
+</header>
+
+<div class="layout">
+<aside class="side"></aside>
+<main>
+
+<h2 id="purpose">{{Purpose}}</h2>
+<p class="lede"><em>{{One plain-words sentence that says what this section is about.}}</em></p>
+<p>{{Body text. <strong>Bold</strong> the phrase to remember, <code>inline code</code>, and
+  <a href="{{Other.html}}">links to other pages</a>.}}</p>
+
+<!-- the one section a reader should start with: an inverted title card -->
+<h2 id="plain" class="card-head">{{In plain words}}</h2>
+<p>{{The whole page in everyday language, with a metaphor.}}</p>
+
+<h2 id="code">{{Code}}</h2>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiatePaging() {
+  uint64_t pdPhys;
+  asm volatile("movq %%cr3,%0" : "=r"(pdPhys));   // PA of the PML4
+  globalPagedir = (uint64_t *)(pdPhys + bootloader.hhdmOffset);
+}</code></pre></div>
+<div class="code"><div class="code-bar">bash · wsl</div><pre><code>cd ~/project &amp;&amp; make disk   # build
+make qemu --debug</code></pre></div>
+<div class="code"><div class="code-bar">text</div><pre><code>output that stays plain</code></pre></div>
+<div class="code"><div class="code-bar">tree</div><pre class="tree"><code><span class="d">project/</span>
+├── <span class="d">src/</span>        <span class="n">sources</span>
+└── README.html  <span class="n">this page</span></code></pre></div>
+
+<h3 id="table">{{A table}}</h3>
+<div class="table-wrap"><table>
+  <thead><tr><th>{{Field}}</th><th>{{Meaning}}</th></tr></thead>
+  <tbody>
+    <tr><td class="nowrap"><code>PF_PRESENT</code></td><td>{{bit 0 — the entry is valid}}</td></tr>
+    <tr><td class="nowrap"><code>PF_RW</code></td><td>{{bit 1 — writable}}</td></tr>
+  </tbody>
+</table></div>
+
+<h3 id="callouts">{{Callouts}}</h3>
+<div class="callout note"><div class="label">Note</div><p>{{A useful fact the reader would not guess.}}</p></div>
+<div class="callout warn"><div class="label">{{Gotcha}}</div><p>{{What catches people out, and the fix.}}</p></div>
+<div class="callout danger"><div class="label">{{Rule}}</div><p>{{The one thing that breaks everything when ignored.}}</p></div>
+<div class="callout quote"><p>{{An aside or a quoted remark, no label.}}</p></div>
+
+<h3 id="diagram">{{A diagram}}</h3>
+<figure class="diagram"><img src="{{Diagram/Page/name.svg}}" alt="{{what it shows}}">
+  <figcaption>{{Optional caption.}}</figcaption></figure>
+
+<div class="pair">
+  <div class="card"><h4>{{Option A}}</h4><p>{{What it is and when to pick it.}}</p></div>
+  <div class="card"><h4>{{Option B}}</h4><p>{{What it is and when to pick it.}}</p></div>
+</div>
+<p>Keys: <kbd>Ctrl</kbd>+<kbd>C</kbd>. <mark>{{Highlighted}}</mark> text.</p>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>{{Site}} · {{Page}}</footer>
+</main>
+</div>
+<!-- Site: the site map, then the runtime. Single page: drop site.js and inline noir.js. -->
+<script src="{{root}}assets/site.js"></script>
+<script src="{{root}}assets/noir.js"></script>
+</body>
+</html>
