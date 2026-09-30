@@ -14,25 +14,36 @@ datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_st
 ## Vị trí (RẤT QUAN TRỌNG)
 | Thứ | Đường dẫn |
 | --- | --- |
-| **Vault ghi chú** (file này) — Windows | `D:\tmniosc\cavos_notes` — CWD khi chạy `claude` |
+| **Vault ghi chú** (file này) — Windows | `<vault>` — CWD khi chạy `claude`, khác nhau theo máy (bảng dưới) |
 | Vault trên GitHub | `github.com/tmniosc/cavos_notes` (remote `origin`) |
-| **Bản lưu source lab** (backup/push, KHÔNG build ở đây) | `D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab` |
+| **Bản lưu source lab** (backup/push, KHÔNG build ở đây) | `<vault>\Thực hành\src\oskernel-lab` |
 | **Source cavOS** — trong WSL | `~/cavOS` — clone từ `github.com/malwarepad/cavOS` |
 | **Source lab** — trong WSL | `~/oskernel-lab` — chép từ `Thực hành/src/oskernel-lab` |
 | Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` (GCC 11.4.0, dựng bằng `make tools`) |
 | Limine binary | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
 
-WSL2 **Ubuntu-26.04**, user `tmniosc` → `/home/tmniosc`. Claude chạy phía Windows → vào WSL qua `wsl.exe`
-hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\tmniosc\...`.
+WSL2 **Ubuntu-26.04** trên cả 2 máy. Claude chạy phía Windows → vào WSL qua `wsl.exe`
+hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD lúc chạy `claude`:
+
+| Máy | Vault (`<vault>`) | OS | User WSL | KVM | Chạy QEMU cavOS |
+| --- | --- | --- | --- | --- | --- |
+| Máy 1 | `D:\tmniosc\cavos_notes` | Windows 10 | `tmniosc` | không | `~/cavos-qemu.sh` |
+| Máy 2 | `E:\tmniosc\#lab\computer_system\cavos_notes` | Windows 11 | `thinker` | **có** `/dev/kvm` | `make qemu` (sau khi `usermod -aG kvm`) |
+
+> Máy 2 dựng ngày 2026-09-30: cavOS clone `2ba0edb`, Limine v8.7.0. `#` trong đường dẫn vault phải
+> quote khi dùng trong shell (`"/mnt/e/tmniosc/#lab/..."`).
 
 ## Quy tắc chạy lệnh
-- **Build trong `~` (ext4), TUYỆT ĐỐI không trên `/mnt/c` `/mnt/d`** — `/mnt` là 9p nên `tar` rớt file,
+- **Build trong `~` (ext4), TUYỆT ĐỐI không trên `/mnt/*` (`c` `d` `e`)** — `/mnt` là 9p nên `tar` rớt file,
   và ổ Windows biến `.sh` thành CRLF (`env: bash\r`). Chép `/mnt` → `~` là 1 chiều, chỉ file text.
 - **`sudo` hỏi mật khẩu, cache gắn theo tty** → mọi lệnh `sudo` để user tự chạy; `sudo -v` gõ ở terminal
   khác không dùng chung được.
 - `make tools` chạy **1 lần**. Vòng lặp thường ngày: `make disk && make qemu`.
-- **Máy này không có KVM** (Windows 10 → WSL2 không có nested virt): `make qemu` chết với `ENODEV`,
-  dùng `~/cavos-qemu.sh` thay thế.
+- **`make tools` không chạy lại được**: `get_tools.sh` giải nén đè lên thư mục đã patch rồi patch lại →
+  hỏi "already exists! Assume -R?". Muốn chạy lại thì xoá `tools/toolchain/temporarydir/{binutils-2.38,gcc-11.4.0}`
+  trước (giữ tarball), đừng trả lời `y` cho câu hỏi của `patch`.
+- **Máy 1 không có KVM** (Windows 10 → WSL2 không có nested virt): `make qemu` chết với `ENODEV`,
+  dùng `~/cavos-qemu.sh` thay thế. Máy 2 có KVM, script đó vẫn tạo sẵn để dự phòng.
 - Bảng lỗi đầy đủ + cách dựng từ máy trắng: [[Dựng môi trường chung]] → [[Dựng môi trường cavOS]] /
   [[Dựng môi trường oskernel-lab]]. Lệnh hằng ngày: [[Cẩm nang build & debug]].
 
