@@ -377,7 +377,7 @@ không cần quyền mịn từng 4 KiB nên rất hợp. Kernel thì dùng 4 Ki
 → Đo thật ở <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>paging_dump_walk</code>): HHDM dừng ở PD (2MB), kernel đủ 4 tầng.</p>
 <h2 id="5-hhdm-higher-half-kernel-sống-ở-nửa-cao-địa-chỉ-ảo">5. HHDM &amp; higher-half: kernel sống ở nửa cao địa chỉ ảo</h2>
 <p>Limine map sẵn <strong>toàn bộ RAM vật lý</strong> vào một vùng VA cố định ở <strong>nửa cao</strong> (higher half), gọi là <strong>HHDM</strong> (Higher Half Direct Map). Công thức:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>VA = PA + hhdm_offset      (hhdm_offset lấy từ Limine, xem [[Step 02 - Bootloader Parser]])</code></pre></div>
+<div class="code"><div class="code-bar">text</div><pre><code>VA = PA + hhdm_offset      (hhdm_offset lấy từ Limine, xem Step 02 - Bootloader Parser)</code></pre></div>
 <p>Nhờ vậy kernel muốn đọc PA bất kỳ chỉ cần cộng offset → ra VA dùng được ngay, <strong>không phải tự dựng page table</strong> lúc đầu. <code>kernel_addr</code>, <code>memmap</code> trong Step 02 đều xoay quanh ý này.</p>
 <div class="code"><div class="code-bar">text</div><pre><code>  Không gian VA 64-bit:
   0x0000...          (nửa thấp = user, sau này)

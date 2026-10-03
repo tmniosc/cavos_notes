@@ -48,40 +48,28 @@ if (LIMINE_BASE_REVISION_SUPPORTED == false) panic();</code></pre></div>
 <tr>
 <th>Đã thiết lập</th>
 <th>Kernel KHỎI phải tự làm</th>
-<th></th>
-<th></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>CPU ở <a href="long_mode.html">Long Mode</a></td>
-<td>64-bit [[Long Mode</td>
-<td>long mode]]</td>
-<td>không cần code chuyển real→protected→long</td>
+<td>CPU ở 64-bit <a href="long_mode.html">long mode</a></td>
+<td>không cần code chuyển real → protected → long</td>
 </tr>
 <tr>
 <td>Paging đã bật (bảng trang tạm)</td>
 <td>đã chạy ở địa chỉ ảo</td>
-<td></td>
-<td></td>
 </tr>
 <tr>
 <td><a href="hhdm.html">HHDM</a>: map toàn bộ RAM vật lý vào nửa cao</td>
 <td>truy cập phys = <code>phys + hhdmOffset</code></td>
-<td></td>
-<td></td>
 </tr>
 <tr>
-<td>Kernel nạp <a href="higher_half_kernel.html">Higher-Half Kernel</a></td>
-<td>higher-half]], relocate (<a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a></td>
-<td>KASLR</td>
-<td>—</td>
+<td>Kernel nạp ở <a href="higher_half_kernel.html">higher-half</a>, relocate (<a href="kaslr_pie_kernel.html">KASLR</a>)</td>
+<td>không tự relocate, không tự map kernel</td>
 </tr>
 <tr>
 <td>Stack sẵn sàng; các <code>response</code> đã điền</td>
 <td>chỉ việc đọc</td>
-<td></td>
-<td></td>
 </tr>
 </tbody>
 </table></div>

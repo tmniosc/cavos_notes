@@ -129,6 +129,26 @@ window.SITE = {
       {
        "t": "x86 Segmentation",
        "h": "ly_thuyet/khai_niem/x86_segmentation.html"
+      },
+      {
+       "t": "ESP và cách UEFI tìm Limine",
+       "h": "ly_thuyet/khai_niem/esp_va_uefi_boot.html"
+      },
+      {
+       "t": "UEFI Runtime Services và biến",
+       "h": "ly_thuyet/khai_niem/uefi_runtime_services.html"
+      },
+      {
+       "t": "Secure Boot",
+       "h": "ly_thuyet/khai_niem/secure_boot.html"
+      },
+      {
+       "t": "PE, ELF và quy ước gọi hàm",
+       "h": "ly_thuyet/khai_niem/pe_elf_va_abi.html"
+      },
+      {
+       "t": "Limine hay tự viết loader UEFI",
+       "h": "ly_thuyet/khai_niem/limine_va_loader_tu_viet.html"
       }
      ]
     },

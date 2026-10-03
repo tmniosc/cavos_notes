@@ -166,6 +166,11 @@ Cột <strong>Lab</strong> là bài thực hành phụ trách step đó, chi ti�
 <li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — vì sao địa chỉ vật lý đổi mỗi lần boot</li>
 <li><a href="khai_niem/x86_segmentation.html">x86 Segmentation</a> — segment + 3 chế độ (real/protected/long)</li>
 <li><a href="khai_niem/gdt.html">GDT</a> — segment descriptor table, bổ trợ Step 06</li>
+<li><a href="khai_niem/esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a> — ESP, BootOrder và đường dẫn dự phòng; disk.img thật là MBR, Limine đọc kernel bằng driver FAT của nó</li>
+<li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI; cavOS không gọi firmware, tắt máy qua uACPI</li>
+<li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, shim và MOK; BOOTX64.EFI của Limine không ký nên OVMF Secure Boot trả Access Denied</li>
+<li><a href="khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a> — Limine là PE32+, kernel là ELF static-pie; Microsoft x64 vs System V, vì sao -mno-red-zone</li>
+<li><a href="khai_niem/limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a> — mỗi request của cavOS thay cho việc gì nếu tự viết loader UEFI</li>
 </ul>
 <h2 id="tài-liệu-gốc">Tài liệu gốc</h2>
 <p class="lede"><em>x86 PC không có một cuốn TRM duy nhất như SoC ARM — nó là tổ hợp nhiều spec rời.</em></p>
