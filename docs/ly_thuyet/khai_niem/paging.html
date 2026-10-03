@@ -20,9 +20,9 @@
 <div class="callout quote">
 <p>Note nền tảng "just-in-time": nạp <strong>5 ý cốt lõi</strong> để đọc <code>link.ld</code>, <code>memmap</code>, <code>HHDM</code> không bị bí.
 KHÔNG đào sâu Intel SDM ở đây — để dành tới step VMM/paging thật trong cavOS.
-Liên kết: <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>, <a href="hhdm.html">HHDM</a>, <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../../index.html">Home</a>.</p>
+Liên kết: <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>, <a href="hhdm.html">HHDM</a>, <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../../index.html">Home</a>.</p>
 </div>
-<p>Tiến độ: <a href="../../index.html">Home</a> · phục vụ cho <a href="../steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a> và các step sau.</p>
+<p>Tiến độ: <a href="../../index.html">Home</a> · phục vụ cho <a href="../bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a> và các step sau.</p>
 <hr/>
 <h2 id="tldr-học-gì-để-dành-gì">TL;DR — học gì, để dành gì</h2>
 <div class="table-wrap"><table>
@@ -84,7 +84,7 @@ Liên kết: <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Li
                   │ dịch qua bảng        │ giữ nguyên
                   ▼                      ▼
 PA = [ khung vật lý           ][ offset 12 bit ]</code></pre></div>
-<p>→ Vì đơn vị là 4 KiB nên <code>MAXPAGESIZE = 0x1000</code>, và <code>ALIGN(0x1000)</code> trong <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> chính là làm tròn lên biên trang.</p>
+<p>→ Vì đơn vị là 4 KiB nên <code>MAXPAGESIZE = 0x1000</code>, và <code>ALIGN(0x1000)</code> trong <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> chính là làm tròn lên biên trang.</p>
 <h2 id="3-mỗi-trang-có-quyền-riêng-r-w-x-nx-giải-thích-wx">3. Mỗi trang có quyền riêng: R / W / X (NX) → giải thích W^X</h2>
 <p>Mỗi entry trong bảng mang các bit quyền:</p>
 <ul>
@@ -171,7 +171,7 @@ hugepage — xem #4c.) Chi tiết duyệt bảng để dành tới step VMM.</p>
 <h3 id="vì-sao-mỗi-bảng-đúng-512-entry-và-vừa-khít-1-trang-4-kib">Vì sao mỗi bảng đúng 512 entry và vừa khít 1 trang 4 KiB?</h3>
 <p><strong>Cố ý thiết kế cho mỗi bảng = đúng 1 trang.</strong> Mỗi entry là con trỏ 64-bit = <strong>8 byte</strong>. Một trang 4 KiB chứa được <code>4096 / 8 = 512</code> entry → cần <strong>9 bit</strong> để đánh số (2⁹ = 512). Đó chính là lý do VA cắt thành các nhóm <strong>9-bit</strong>:</p>
 <div class="code"><div class="code-bar">text</div><pre><code>1 trang = 4096 byte ÷ 8 byte/entry = 512 entry = 2^9  →  chỉ số mỗi tầng = 9 bit</code></pre></div>
-<p>Nhờ vậy bản thân page table cũng được cấp phát gọn bằng <strong>một frame 4 KiB</strong> (giống mọi trang khác) — PMM ở <a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a> chỉ việc cấp 1 frame là có 1 bảng.</p>
+<p>Nhờ vậy bản thân page table cũng được cấp phát gọn bằng <strong>một frame 4 KiB</strong> (giống mọi trang khác) — PMM ở <a href="../bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a> chỉ việc cấp 1 frame là có 1 bảng.</p>
 <h2 id="4b-ví-dụ-chạy-số-va-4-bảng-pa">4b. Ví dụ chạy số: VA → 4 bảng → PA</h2>
 <p>Lấy <code>VA = 0x0000008080604A30</code>. Chẻ 48 bit thành 4 chỉ số 9-bit + offset 12-bit:</p>
 <div class="code"><div class="code-bar">text</div><pre><code>VA = 0x0000_0080_8060_4A30
@@ -377,8 +377,8 @@ không cần quyền mịn từng 4 KiB nên rất hợp. Kernel thì dùng 4 Ki
 → Đo thật ở <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>paging_dump_walk</code>): HHDM dừng ở PD (2MB), kernel đủ 4 tầng.</p>
 <h2 id="5-hhdm-higher-half-kernel-sống-ở-nửa-cao-địa-chỉ-ảo">5. HHDM &amp; higher-half: kernel sống ở nửa cao địa chỉ ảo</h2>
 <p>Limine map sẵn <strong>toàn bộ RAM vật lý</strong> vào một vùng VA cố định ở <strong>nửa cao</strong> (higher half), gọi là <strong>HHDM</strong> (Higher Half Direct Map). Công thức:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>VA = PA + hhdm_offset      (hhdm_offset lấy từ Limine, xem Step 02 - Bootloader Parser)</code></pre></div>
-<p>Nhờ vậy kernel muốn đọc PA bất kỳ chỉ cần cộng offset → ra VA dùng được ngay, <strong>không phải tự dựng page table</strong> lúc đầu. <code>kernel_addr</code>, <code>memmap</code> trong Step 02 đều xoay quanh ý này.</p>
+<div class="code"><div class="code-bar">text</div><pre><code>VA = PA + hhdm_offset      (hhdm_offset lấy từ Limine, xem Bài 3 - Bootloader Parser)</code></pre></div>
+<p>Nhờ vậy kernel muốn đọc PA bất kỳ chỉ cần cộng offset → ra VA dùng được ngay, <strong>không phải tự dựng page table</strong> lúc đầu. <code>kernel_addr</code>, <code>memmap</code> trong Bài 3 đều xoay quanh ý này.</p>
 <div class="code"><div class="code-bar">text</div><pre><code>  Không gian VA 64-bit:
   0x0000...          (nửa thấp = user, sau này)
   ───────────────────────────  ← canonical hole
@@ -396,15 +396,15 @@ không cần quyền mịn từng 4 KiB nên rất hợp. Kernel thì dùng 4 Ki
 <tbody>
 <tr>
 <td>ALIGN biên trang, W^X</td>
-<td><a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> — <code>link.ld</code></td>
+<td><a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> — <code>link.ld</code></td>
 </tr>
 <tr>
 <td>HHDM offset, kernel_addr</td>
-<td><a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+<td><a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a></td>
 </tr>
 <tr>
 <td>memmap (vùng RAM usable)</td>
-<td><a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
+<td><a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a></td>
 </tr>
 <tr>
 <td>Dựng page table thật, CR3</td>

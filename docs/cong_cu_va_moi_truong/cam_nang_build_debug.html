@@ -44,7 +44,7 @@ make dev            # clean + build_dirty + qemu_dbg</code></pre></div>
 (gdb) break _start
 (gdb) continue</code></pre></div>
 <h2 id="output-debug-serial">Output debug serial</h2>
-<p><code>debugf()</code> (<a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>) in ra COM1 → QEMU hiển thị qua cờ <code>-serial</code> (xem <code>src/kernel/Makefile</code> mục <code>qemu</code>).</p>
+<p><code>debugf()</code> (<a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>) in ra COM1 → QEMU hiển thị qua cờ <code>-serial</code> (xem <code>src/kernel/Makefile</code> mục <code>qemu</code>).</p>
 <h2 id="xem-code-bằng-zed-clangd-lsp">Xem code bằng Zed + clangd (LSP)</h2>
 <div class="callout quote">
 <p>Đọc/điều hướng code (jump-to-def, find-refs, hover type) dễ hơn nhiều khi clangd hiểu đúng flag kernel.
@@ -124,7 +124,7 @@ Trong Makefile, <strong>đừng</strong> để comment cùng dòng với <code>V
 </div>
 <div class="callout quote">
 <p>Soi section/flag của <strong><code>.o</code></strong> (trước link): <code>readelf -S kernel.o</code> / <code>objdump -h kernel.o</code><br/>
-→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>/<code>.bss</code>=WA (gốc của W^X — xem <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2).</p>
+→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>/<code>.bss</code>=WA (gốc của W^X — xem <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> §0.1.2).</p>
 </div>
 <h2 id="ảnh-đĩa-osimg">Ảnh đĩa <code>os.img</code></h2>
 <p><code>os.img</code> không phải kernel mà là <strong>ảnh nguyên ổ đĩa</strong> (lab: 64 MiB): MBR + FAT32 @1 MiB + Limine.

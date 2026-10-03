@@ -64,7 +64,7 @@ user". Cái lo việc phân vùng bộ nhớ thật bây giờ là <a href="pagi
 </tr>
 <tr>
 <td>ES / FS / GS</td>
-<td>data phụ (FS/GS đặc biệt ở long mode — xem <a href="gdt.html">GDT</a> §10)</td>
+<td>data phụ (FS/GS đặc biệt ở long mode — xem <a href="gdt.html#10-segment-register-phần-ẩn-shadow">GDT §10</a>)</td>
 </tr>
 </tbody>
 </table></div>
@@ -72,7 +72,7 @@ user". Cái lo việc phân vùng bộ nhớ thật bây giờ là <a href="pagi
 RAM cụ thể, mà là <strong>cơ chế CPU dùng để định địa chỉ</strong>. Cơ chế này <em>chưa bao giờ biến mất</em>, chỉ đổi ý nghĩa.</p>
 <div class="callout quote">
 <p>Phân biệt với <strong>ELF segment</strong>: trùng tên nhưng khác hẳn. ELF segment (<code>.text</code>/<code>.data</code>) là khối để nạp,
-quyền của nó do <strong><a href="paging.html">page table</a></strong> enforce — KHÔNG phải x86 segment / GDT. Xem <a href="../steps/step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>.</p>
+quyền của nó do <strong><a href="paging.html">page table</a></strong> enforce — KHÔNG phải x86 segment / GDT. Xem <a href="../bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</p>
 </div>
 <h2 id="2-ba-chế-độ-ba-thời-kỳ-của-cùng-một-segment">2. Ba chế độ = ba thời kỳ của cùng một segment</h2>
 <p class="lede"><em>Mỗi đời CPU thêm tính năng nhưng giữ tương thích ngược → trông như nhiều thứ, thật ra là một thứ chồng lớp.</em></p>
@@ -146,7 +146,7 @@ quyền của nó do <strong><a href="paging.html">page table</a></strong> enfor
 <h3 id="vì-sao-boot-phải-đi-qua-cả-3">Vì sao boot phải đi qua cả 3?</h3>
 <p>CPU x86 <strong>luôn khởi động ở real mode</strong> (tương thích 8086 từ 1978), rồi bootloader leo dần: real → bật A20,
 dựng GDT → protected → bật PAE + paging + <code>EFER.LME</code> → long. <strong><a href="limine_protocol.html">Limine</a> làm hết khúc này
-giùm cavOS</strong> → khi vào <code>_start</code> CPU đã ở long mode (xem <a href="../steps/boot_flow_start.html">Boot Flow (_start)</a>, <a href="long_mode.html">Long Mode</a>). Đó là lý do
+giùm cavOS</strong> → khi vào <code>_start</code> CPU đã ở long mode (xem <a href="../bai/bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>, <a href="long_mode.html">Long Mode</a>). Đó là lý do
 bạn <strong>không cần</strong> học sâu asm chuyển mode.</p>
 <h2 id="3-vì-sao-long-mode-khai-tử-segment">3. Vì sao long mode "khai tử" segment?</h2>
 <p class="lede"><em>Segment và paging cùng làm một việc — phân vùng &amp; bảo vệ bộ nhớ — nên giữ cả hai là thừa. Paging thắng vì
@@ -156,7 +156,7 @@ nó mịn hơn (từng trang 4KiB) và hợp với địa chỉ ảo per-tiến-
 có quyền R/W/NX/U-S riêng → linh hoạt hơn hẳn.</li>
 <li>Vậy nên ở long mode: <strong>base bị ép = 0, limit bỏ qua</strong> cho CS/DS/SS/ES. Segment thành "phẳng" (phủ cả không
 gian địa chỉ tuyến tính). Thứ duy nhất còn sống: <strong>CPL (ring 0/3) trong CS</strong> + cờ code/data.</li>
-<li>(Ngoại lệ: <strong>FS/GS base</strong> vẫn dùng được, lấy từ MSR — cho per-CPU/per-thread data. Xem <a href="gdt.html">GDT</a> §10.)</li>
+<li>(Ngoại lệ: <strong>FS/GS base</strong> vẫn dùng được, lấy từ MSR — cho per-CPU/per-thread data. Xem <a href="gdt.html#10-segment-register-phần-ẩn-shadow">GDT §10</a>.)</li>
 </ul>
 <h2 id="phần-bạn-thực-sự-cần-cho-cavos-đọc-cái-này-là-đủ">Phần bạn THỰC SỰ cần cho cavOS (đọc cái này là đủ)</h2>
 <p>cavOS chạy <strong>long mode</strong>, Limine đã đưa CPU qua real→protected→long sẵn. Nên:</p>
@@ -167,14 +167,14 @@ gian địa chỉ tuyến tính). Thứ duy nhất còn sống: <strong>CPL (rin
 <p><em>Segment gần như tắt; chỉ còn dùng để khai <strong>ring 0 (kernel) / ring 3 (user)</strong> + <strong>code/data</strong> thô, qua <a href="gdt.html">GDT</a>.</em></p>
 </div>
 </li>
-<li>Công sức nên đổ vào <strong><a href="paging.html">Paging</a></strong> (cái thay segment để quản bộ nhớ thật) — bạn đã học ở <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a> rồi.</li>
+<li>Công sức nên đổ vào <strong><a href="paging.html">Paging</a></strong> (cái thay segment để quản bộ nhớ thật) — bạn đã học ở <a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> rồi.</li>
 </ul>
 <h2 id="liên-hệ">Liên hệ</h2>
 <ul>
 <li>Bảng descriptor &amp; cách dùng segment ở 64-bit (từng bit): <a href="gdt.html">GDT</a>.</li>
 <li>Chế độ 64-bit &amp; các bit/MSR chuyển mode: <a href="long_mode.html">Long Mode</a>.</li>
 <li>Cái thay thế segment để phân vùng/bảo vệ: <a href="paging.html">Paging</a>.</li>
-<li>cavOS dựng GDT cụ thể: <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</li>
+<li>cavOS dựng GDT cụ thể: <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>.</li>
 </ul>
 <h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
 <ul>

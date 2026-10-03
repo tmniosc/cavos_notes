@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step 16 — SSE &amp; FPU · Học cavOS</title>
+<title>Bài 17 — SSE &amp; FPU · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
-<body data-root="../../" data-page="ly_thuyet/steps/step_16_sse_fpu.html">
+<body data-root="../../" data-page="ly_thuyet/bai/bai_17_sse_fpu.html">
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
-    <h1>Step 16 — SSE &amp; FPU</h1>
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 17 — SSE &amp; FPU</h1>
     <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, cpu, fpu</span></div>
   </div>
 </header>
@@ -21,7 +21,7 @@
 <h2 id="mục-đích">Mục đích</h2>
 <p><strong>Bật đơn vị tính dấu phẩy động / vector (SSE/FPU)</strong> để code dùng float/SIMD chạy được mà không fault. Mặc
 định long mode chưa bật; phải set CR0/CR4. Và phải lưu/khôi phục trạng thái FPU khi đổi task
-(<a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>) — bắt buộc trước khi chạy userspace dùng float (<a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>).</p>
+(<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>) — bắt buộc trước khi chạy userspace dùng float (<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
 <h2 id="mục-tiêu-học">Mục tiêu học</h2>
 <ul>
 <li>Bật SSE: CR0 (clear EM, set MP), CR4 (OSFXSR, OSXMMEXCPT).</li>
@@ -38,7 +38,7 @@
 <li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1 — SSE/AVX; Vol.3 — control register, XSAVE.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Step 16 - SSE &amp; FPU</footer>
+<footer>Học cavOS · Bài 17 - SSE &amp; FPU</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

@@ -19,7 +19,7 @@
 <main>
 <div class="callout quote">
 <p>Chip giao tiếp serial. cavOS dùng cho debug qua COM1. Datasheet: <strong>PC16550D</strong> (National/TI).
-Dùng ở <a href="../steps/step_01_serial_uart.html">Step 01 - Serial UART</a>. Port COM1 = <code>0x3F8</code>, COM2 = <code>0x2F8</code>.</p>
+Dùng ở <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>. Port COM1 = <code>0x3F8</code>, COM2 = <code>0x2F8</code>.</p>
 </div>
 <h2 id="bản-đồ-thanh-ghi-offset-so-với-base">Bản đồ thanh ghi (offset so với base)</h2>
 <div class="table-wrap"><table>
@@ -80,7 +80,7 @@ Dùng ở <a href="../steps/step_01_serial_uart.html">Step 01 - Serial UART</a>.
 <h2 id="baud">Baud</h2>
 <p>Clock 1.8432 MHz / 16 = 115200 max. <code>baud = 115200 / divisor</code>.
 divisor = 3 → 38400 (cấu hình cavOS). <strong>8N1</strong> = 8 data, no parity, 1 stop.</p>
-<p>→ Giải mã <code>serial_enable()</code> từng dòng: xem <a href="../steps/step_01_serial_uart.html">Step 01 - Serial UART</a>.</p>
+<p>→ Giải mã <code>serial_enable()</code> từng dòng: xem <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>.</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · UART 16550</footer>
 </main>

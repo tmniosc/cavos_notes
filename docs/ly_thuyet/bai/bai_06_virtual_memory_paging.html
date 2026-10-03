@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bài 6 - Virtual Memory &amp; Paging · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/bai/bai_06_virtual_memory_paging.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 6 - Virtual Memory &amp; Paging</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, memory, paging</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>PMM lo "có ô RAM hay không", VMM lo "ô RAM đó hiện ra ở địa chỉ ảo nào, với quyền gì".</em></p>
+<p>Bài này cho kernel khả năng <strong>nối một địa chỉ ảo bất kỳ với một frame vật lý</strong> và đặt quyền cho trang đó
+(<code>VirtualMap()</code>), cùng một hàm cấp RAM cho kernel (<code>VirtualAllocate()</code>). Mọi thứ phía sau đều dựa vào đây:
+heap <code>malloc</code> của kernel, <code>mmap</code>, và mỗi process một không gian địa chỉ riêng
+(<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>, <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>PMM (<a href="bai_05_physical_memory_manager.html">Bài 5</a>) đưa cho bạn <strong>một căn phòng trống</strong> (frame RAM, có địa chỉ vật lý).
+Nhưng code kernel chỉ đi lại bằng <strong>số nhà</strong> (địa chỉ ảo). Cần một cuốn sổ ghi "số nhà A → phòng B, được vào/được sửa hay không".
+Cuốn sổ đó là <em>page table</em>, và Bài 6 là người viết sổ.</p>
+<ul>
+<li><strong><code>VirtualMap</code> = dán số nhà</strong> lên một phòng. Nếu con đường dẫn tới số nhà đó chưa có thì xây thêm (xin phòng trống
+từ PMM làm trang sổ phụ). Dán xong phải dặn CPU quên bản ghi nhớ cũ (xoá <em>TLB</em>).</li>
+<li><strong><code>VirtualToPhysical</code> = tra ngược</strong>: từ số nhà tìm lại phòng thật.</li>
+<li><strong>Mỗi chương trình một cuốn sổ riêng</strong>: cùng số nhà ở hai chương trình dẫn tới hai phòng khác nhau (Bài 12).</li>
+<li><strong>Một phòng, nhiều số nhà</strong> (<em>aliasing</em>): một frame có thể có nhiều địa chỉ ảo cùng trỏ tới (xem <a href="../khai_niem/hhdm.html">HHDM</a>).</li>
+</ul>
+<p>Điều bất ngờ: lúc khởi động cavOS <strong>không tự viết cuốn sổ mới</strong>. Nó dùng luôn cuốn Limine đã viết sẵn, chỉ ghi thêm dòng khi cần.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Bốn ý về paging của x86_64, đủ để đọc code bên dưới.</em></p>
+<ul>
+<li><strong>Page table 4 tầng và CR3.</strong> CPU dịch địa chỉ ảo (VA) sang địa chỉ vật lý (PA) qua 4 bảng lồng nhau:
+PML4 → PDPT → PD → PT. Mỗi bảng có 512 entry × 8 byte = đúng 4 KiB. Thanh ghi <code>CR3</code> chứa PA của bảng gốc PML4.
+VA 48 bit được cắt thành 4 chỉ số 9 bit (mỗi chỉ số chọn 1 entry ở một tầng) và 12 bit offset trong trang 4 KiB.
+Đọc sâu: <a href="../khai_niem/paging.html#4-x86-64-dùng-4-cấp-bảng-cr3-trỏ-gốc">Paging §4</a>, ví dụ chạy số ở
+<a href="../khai_niem/paging.html#4b-ví-dụ-chạy-số-va-4-bảng-pa">§4b</a>.</li>
+<li><strong>Entry = PA + cờ.</strong> Mỗi entry chứa PA của bảng con (hoặc của frame dữ liệu, ở tầng cuối) trong bit 12–51,
+và các cờ ở bit thấp: <code>P</code> (present – có mặt), <code>RW</code> (được ghi), <code>US</code> (ring 3 được dùng), <code>PS</code> (trang lớn).
+Bit 63 là <code>NX</code> (cấm chạy code). Đọc sâu: <a href="../khai_niem/paging.html#3-mỗi-trang-có-quyền-riêng-r-w-x-nx-giải-thích-wx">Paging §3</a>;
+trang lớn 2 MiB ở <a href="../khai_niem/paging.html#4c-hugepage-không-phải-va-nào-cũng-đi-đủ-4-tầng">§4c</a>.</li>
+<li><strong>TLB.</strong> Đi 4 tầng cho mỗi lần truy cập thì chậm, nên CPU nhớ các bản dịch vừa dùng trong một cache gọi là TLB
+(Translation Lookaside Buffer). Sửa page table xong, CPU vẫn có thể dùng bản dịch cũ trong TLB. Lệnh <code>invlpg</code>
+xoá bản dịch của đúng một trang; nạp lại <code>CR3</code> thì xoá mọi bản dịch không đánh dấu global.</li>
+<li><strong>Địa chỉ canonical.</strong> CPU chỉ dùng 48 bit thấp của VA; bit 63–48 phải chép y bit 47. Vì vậy địa chỉ nửa cao có
+dạng <code>0xffff8...</code>. Muốn lấy chỉ số bảng thì bỏ 16 bit cao đó trước. Đọc sâu:
+<a href="../khai_niem/higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../khai_niem/long_mode.html">Long Mode</a>.</li>
+</ul>
+<p>Đã gặp: <strong>HHDM</strong> (VA = PA + <code>hhdmOffset</code>, cửa sổ nhìn toàn bộ RAM) ở <a href="bai_03_bootloader_parser.html">Bài 3</a>
+và <a href="../khai_niem/hhdm.html">HHDM</a>; <strong>frame và <code>PhysicalAllocate()</code></strong> ở <a href="bai_05_physical_memory_manager.html">Bài 5</a>.</p>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Bốn file, hai hàm khởi tạo; phần lớn công việc nằm ở <code>VirtualMap()</code>.</em></p>
+<p>File: <code>memory/vmm.c</code>, <code>memory/paging.c</code>, <code>include/paging.h</code>, <code>include/vmm.h</code>.
+Trong <code>entry/kernel.c:_start()</code>: <code>initiatePMM()</code> (dòng 56) → <code>initiateVMM()</code> (57) → <code>initiateGDT()</code> (59) →
+<code>initiateACPI()</code> → <code>initiateISR()</code> → <code>initiatePaging()</code> (63). VMM chạy <strong>trước</strong> paging vì nó chỉ cần HHDM
+(Limine đã map sẵn), chưa phải đụng page table.</p>
+
+<h3 id="vmm-virtualallocate">1. <code>initiateVMM()</code> và <code>VirtualAllocate()</code> (<code>vmm.c</code>)</h3>
+<p>Cấp RAM cho kernel rất mỏng: xin frame từ PMM rồi trả về VA HHDM của frame đó. HHDM đã map toàn bộ RAM nên
+không cần gọi <code>VirtualMap</code>.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>void *VirtualAllocate(int pages) {
+  size_t phys = PhysicalAllocate(pages);           // xin frame vật lý từ PMM
+  uint64_t output = phys + bootloader.hhdmOffset;  // PA -&gt; VA qua HHDM, dùng được ngay
+  return (void *)(output);
+}</code></pre></div>
+<ul>
+<li><code>VirtualAllocatePhysicallyContiguous()</code> chỉ gọi lại <code>VirtualAllocate()</code> (comment: <em>"it's all contiguous already!"</em>),
+vì PMM cấp các frame liền nhau và HHDM giữ nguyên thứ tự đó.</li>
+<li><code>VirtualFree(ptr, pages)</code> = <code>VirtualToPhysical(ptr)</code> rồi <code>PhysicalFree()</code>.</li>
+<li><code>initiateVMM()</code> dựng một bitmap <code>virtual</code> (cùng kiểu <code>DS_Bitmap</code> của Bài 5) cho một vùng VA động, đặt
+<code>mem_start</code> ngay dưới HHDM: <code>hhdmOffset - mmTotal - 1 GiB</code> (hằng <code>VMM_POS_ENSURE</code> = 1 GiB, vì HHDM có thể được map bằng entry 1 GiB).
+Bitmap này nằm trong RAM xin qua <code>VirtualAllocate</code>. Hiện chưa hàm nào dùng nó: grep toàn kernel chỉ thấy <code>virtual.</code> trong <code>vmm.c</code>.</li>
+<li>Heap kernel (<code>memory/malloc.c</code>) xây trên <code>VirtualAllocate</code>.</li>
+</ul>
+
+<h3 id="initiate-paging">2. <code>initiatePaging()</code>: dùng lại bảng của Limine (<code>paging.c</code>)</h3>
+<p>Nhiều người tưởng kernel sẽ tự dựng page table rồi <code>mov cr3</code>. cavOS không làm thế. Nó đọc <code>CR3</code> đang chạy
+(bảng Limine dựng), đổi PA đó sang VA qua HHDM và lưu vào <code>globalPagedir</code> để sửa về sau:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiatePaging() {
+  // I will keep on using limine's for the time being
+  uint64_t pdPhys = 0;
+  asm volatile("movq %%cr3,%0" : "=r"(pdPhys));     // PA của PML4 Limine đang dùng
+  if (!pdPhys) { debugf("[paging] Could not parse default pagedir!\n"); panic(); }
+  uint64_t pdVirt = pdPhys + bootloader.hhdmOffset; // PA -&gt; VA để kernel đọc/ghi được bảng
+  globalPagedir = (uint64_t *)pdVirt;
+}</code></pre></div>
+<p>Bảng Limine đã map sẵn kernel ở nửa cao, HHDM và framebuffer, nên kernel chỉ cần <strong>thêm/sửa entry</strong>. <code>CR3</code> vẫn trỏ bảng
+của Limine; ta chỉ đổi nội dung bảng (xem <a href="../khai_niem/hhdm.html#cr3-vs-hhdm-ai-làm-gì-đừng-nhầm">HHDM: CR3 vs HHDM</a>).
+<code>mov cr3</code> thật chỉ xảy ra về sau, khi đổi address space giữa các task (mục 6 bên dưới, Bài 12).</p>
+
+<h3 id="paging-h">3. Định dạng entry và macro cắt VA (<code>paging.h</code>)</h3>
+<p>Các cờ khớp bảng entry trong <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 §4.5:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>PF_PRESENT (1&lt;&lt;0)  PF_RW (1&lt;&lt;1)  PF_USER (1&lt;&lt;2)  PF_PWT (1&lt;&lt;3) PF_PCD (1&lt;&lt;4)
+PF_ACCESS (1&lt;&lt;5)   PF_DIRTY (1&lt;&lt;6) PF_PS (1&lt;&lt;7)  PF_GLOBAL (1&lt;&lt;8)
+PF_PAT (1&lt;&lt;7)      // cùng bit 7 với PS: ở tầng PT bit này là PAT
+PF_SHARED (1&lt;&lt;9)   // bit 9 CPU bỏ qua; cavOS dùng để đánh dấu trang user dùng chung
+PF_CACHE_WC = PF_PAT|PF_PWT   // write-combining cho VRAM</code></pre></div>
+<p><code>paging.h</code> <strong>không có cờ NX</strong> (bit 63), nên mọi trang cavOS tự map đều chạy được code. Chi tiết ở
+<a href="#nx-chua-dung">Đọc thêm: NX chưa dùng</a>.</p>
+<p>Cắt VA thành 4 chỉ số 9 bit:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>PML4E(a) = (a &gt;&gt; 39) &amp; 0x1ff      PDPTE(a) = (a &gt;&gt; 30) &amp; 0x1ff
+PDE(a)   = (a &gt;&gt; 21) &amp; 0x1ff      PTE(a)   = (a &gt;&gt; 12) &amp; 0x1ff
+PTE_GET_ADDR(v)     = v &amp; 0x000ffffffffff000   // lấy PA trong entry, bỏ cờ thấp và bit cao
+AMD64_MM_STRIPSX(a) = a &amp; 0xFFFFFFFFFFFF       // bỏ 16 bit sign-extend trước khi lấy chỉ số
+P_PHYS_ADDR(x)      = x &amp; ~0xFFF               // làm tròn PA xuống đầu trang</code></pre></div>
+
+<h3 id="virtualmap">4. <code>VirtualMap()</code>: map một trang VA → PA</h3>
+<p><code>VirtualMap(virt, phys, flags)</code> gọi <code>VirtualMapL(globalPagedir, ...)</code>. Hàm đi xuống 4 tầng; tầng nào thiếu thì dựng thêm:</p>
+<figure class="diagram">
+<svg id="svg-virtualmap-walk" role="img" aria-label="VirtualMap walks four table levels, allocating missing tables, then writes the leaf and runs invlpg" style="max-width:1083px" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-virtualmap-walk-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-virtualmap-walk .mono{font-family:'SF Mono',Consolas,monospace;} #svg-virtualmap-walk .lbl{fill:#c2c0b6;} #svg-virtualmap-walk .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="360" y="24" text-anchor="middle" class="lbl" font-size="10">VirtualMapL(pagedir, virt, phys, flags) — one 4 KiB page</text>
+<rect x="10" y="50" width="100" height="64" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="60" y="76" text-anchor="middle" fill="#D3D1C7" font-size="11.5" font-weight="600">CR3</text>
+<text x="60" y="96" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">globalPagedir</text>
+<rect x="130" y="50" width="100" height="64" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="180" y="76" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">PML4</text>
+<text x="180" y="96" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">VA[47:39]</text>
+<rect x="250" y="50" width="100" height="64" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="300" y="76" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">PDPT</text>
+<text x="300" y="96" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">VA[38:30]</text>
+<rect x="370" y="50" width="100" height="64" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="420" y="76" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">PD</text>
+<text x="420" y="96" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">VA[29:21]</text>
+<rect x="490" y="50" width="100" height="64" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="540" y="76" text-anchor="middle" fill="#B5D4F4" font-size="11.5" font-weight="600">PT</text>
+<text x="540" y="96" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">VA[20:12]</text>
+<rect x="610" y="50" width="100" height="64" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="660" y="76" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600">frame</text>
+<text x="660" y="96" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">phys | P | flags</text>
+<line x1="110" y1="82" x2="128" y2="82" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="230" y1="82" x2="248" y2="82" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="350" y1="82" x2="368" y2="82" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="470" y1="82" x2="488" y2="82" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="590" y1="82" x2="608" y2="82" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<rect x="250" y="170" width="340" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="420" y="193" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">entry not PRESENT? PagingPhysAllocate()</text>
+<text x="420" y="212" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">1 PMM frame, zeroed, linked as PRESENT|RW|USER</text>
+<line x1="300" y1="170" x2="300" y2="118" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="420" y1="170" x2="420" y2="118" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<line x1="540" y1="170" x2="540" y2="118" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<rect x="610" y="170" width="100" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="660" y="193" text-anchor="middle" fill="#D3D1C7" font-size="11.5" font-weight="600">invalidate</text>
+<text x="660" y="212" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">invlpg</text>
+<line x1="660" y1="114" x2="660" y2="166" class="flow" stroke-width="1.2" marker-end="url(#svg-virtualmap-walk-arrow)"/>
+<text x="360" y="258" text-anchor="middle" class="lbl" font-size="9">each entry holds a physical address — the kernel reads the next table at PA + hhdmOffset</text>
+<text x="360" y="276" text-anchor="middle" class="lbl" font-size="9">VA[11:0] is the byte offset inside the 4 KiB frame</text>
+</svg>
+</figure>
+<p>Code thật (rút gọn phần lặp, giữ thứ tự):</p>
+<div class="code"><div class="code-bar">c</div><pre><code>void VirtualMapL(uint64_t *pagedir, uint64_t virt_addr, uint64_t phys_addr, uint64_t flags) {
+  if (virt_addr % PAGE_SIZE) { debugf(...); panic(); }   // VA phải chia hết 4 KiB
+  virt_addr = AMD64_MM_STRIPSX(virt_addr);
+
+  uint32_t pml4_index = PML4E(virt_addr); ...            // 4 chỉ số
+
+  spinlockCntWriteAcquire(&amp;WLOCK_PAGING);                // mỗi lúc chỉ 1 người sửa bảng
+  if (!(pagedir[pml4_index] &amp; PF_PRESENT)) {
+    size_t target = PagingPhysAllocate();
+    pagedir[pml4_index] = target | PF_PRESENT | PF_RW | PF_USER;
+  }
+  size_t *pdp = (size_t *)(PTE_GET_ADDR(pagedir[pml4_index]) + HHDMoffset);
+  ... cùng mẫu cho pdp -&gt; pd -&gt; pt ...
+
+  if (pt[pt_index] &amp; PF_PRESENT &amp;&amp; !(trang cũ thuộc framebuffer))
+    PhysicalFree(PTE_GET_ADDR(pt[pt_index]), 1);         // ghi đè: trả frame cũ về PMM
+  if (!phys_addr)
+    pt[pt_index] = 0;                                    // phys = 0 nghĩa là bỏ map
+  else
+    pt[pt_index] = (P_PHYS_ADDR(phys_addr)) | PF_PRESENT | flags;
+
+  invalidate(virt_addr);                                 // invlpg
+  spinlockCntWriteRelease(&amp;WLOCK_PAGING);
+}</code></pre></div>
+<ul>
+<li><strong>Cấp bảng lười</strong> (<em>lazy</em>): PDPT/PD/PT chỉ được tạo khi lần đầu cần. <code>PagingPhysAllocate()</code> = <code>PhysicalAllocate(1)</code>
+rồi <code>memset 0</code> qua HHDM. Bảng mới phải sạch, nếu không rác trong đó sẽ trông như entry PRESENT.</li>
+<li><strong>Mọi lần chạm bảng đều qua HHDM</strong>: entry chứa PA của bảng con, kernel cộng <code>hhdmOffset</code> để có VA mà đọc/ghi.
+Đây là lý do VMM bắt buộc cần HHDM.</li>
+<li><strong>Bảng trung gian luôn có <code>PF_USER</code></strong>: CPU chỉ cho ring 3 vào trang khi <em>mọi</em> tầng đều có cờ US, nên quyền thật được
+quyết ở entry lá. Trang kernel không lộ cho user, miễn entry lá không có <code>PF_USER</code>.</li>
+<li><strong>Ghi đè trang đang map</strong> thì frame cũ được trả lại PMM, trừ frame thuộc framebuffer (đó là VRAM, PMM không quản).</li>
+<li><code>VirtualMapRegionByLength(virt, phys, length, flags)</code> chỉ gọi <code>VirtualMap</code> cho từng trang 4 KiB trong vùng.</li>
+<li><code>invalidate()</code> được viết là <code>asm volatile("invlpg %0" ::"m"(vaddr))</code>. Bản biên dịch xoá TLB của <em>trang stack chứa biến</em> chứ
+không phải trang <code>vaddr</code>; xem <a href="#bug-invlpg">Đọc thêm: invlpg trỏ nhầm</a>.</li>
+</ul>
+
+<h3 id="virtualtophysical">5. <code>VirtualToPhysical()</code>: tra ngược bằng phần mềm</h3>
+<p>Làm lại bằng C đúng việc MMU làm bằng phần cứng:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// đường tắt: VA nằm trong HHDM thì PA = VA - hhdmOffset, khỏi đi bảng
+if (virt_addr &gt;= HHDMoffset &amp;&amp;
+    virt_addr &lt;= (HHDMoffset + MAX(bootloader.mmTotal, UINT32_MAX)))
+  return virt_addr - HHDMoffset;
+// còn lại: đi PML4 -&gt; PDPT -&gt; PD -&gt; PT, tầng nào không PRESENT thì trả 0,
+// tới PT thì trả PTE_GET_ADDR(pt[i]) + (virt &amp; 0xFFF)</code></pre></div>
+<p>Hàm không xử lý trang lớn (đoạn kiểm <code>PF_PS</code> đã bị comment). Không sao, vì VA HHDM, nơi Limine dùng trang lớn, đã đi đường tắt ở trên.</p>
+
+<h3 id="page-directory-task">6. Page directory cho từng task (dùng ở Bài 12 và 18)</h3>
+<p>Mỗi chương trình cần cuốn sổ riêng để không giẫm lên nhau, nhưng phần kernel phải giống hệt ở mọi cuốn.</p>
+<ul>
+<li><code>PageDirectoryAllocate()</code>: cấp một PML4 mới qua <code>VirtualAllocate(1)</code>, <strong>chép 512 entry</strong> từ bảng của kernel task.
+Chép entry PML4 là chép con trỏ tới cùng các bảng con, nên mọi task <strong>dùng chung mapping kernel</strong> ở nửa cao, chỉ khác phần user ở nửa thấp
+(lý do của <a href="../khai_niem/higher_half_kernel.html">Higher-Half Kernel</a>). Hàm <code>panic()</code> nếu bị gọi trước khi có task.</li>
+<li><code>ChangePageDirectoryUnsafe()</code>: <strong>đây mới là <code>mov cr3</code> thật</strong>, đổi address space khi chuyển task.
+<code>ChangePageDirectory()</code> bọc thêm việc ghi nhớ vào task hiện tại.</li>
+<li><code>PageDirectoryUserDuplicate()</code> (dùng cho <code>fork</code>): duyệt các entry lá có <code>PF_USER</code>; trang có <code>PF_SHARED</code> thì dùng chung frame,
+còn lại cấp frame mới và chép nguyên trang (Bài 18).</li>
+<li><code>PageDirectoryFree()</code>: chỉ giải phóng entry lá có <code>PF_USER</code>, không đụng mapping kernel dùng chung.</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Tự viết <code>vmap</code> 4 tầng, map một VA mới rồi chứng minh hai VA khác nhau cùng chạm một frame.</em></p>
+<p>Lab: <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a>, phần VMM (file <code>paging.c</code>). Việc cần viết:</p>
+<ul>
+<li><code>paging_init()</code>: cấp một frame làm PML4 mới, chép 512 entry từ PML4 của Limine, rồi <code>mov cr3</code>. Khác cavOS (cavOS dùng lại bảng Limine);
+lab làm vậy để thấy tận mắt việc đổi address space, đúng thứ cavOS làm về sau cho từng task.</li>
+<li><code>vmap(va, pa, flags)</code>: đi 4 tầng, tầng thiếu thì xin frame từ PMM, ghi entry lá, rồi <code>invlpg</code>.</li>
+<li><code>vresolve(va)</code>: đi ngược để lấy PA.</li>
+<li>Kiểm tra: ghi <code>0xdeadbeefcafebabe</code> qua VA mới <code>0x600000000000</code>, đọc lại qua VA HHDM của cùng PA.</li>
+</ul>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/03-pmm-vmm &amp;&amp; make run</code></pre></div>
+<p>Output thật (trích <code>lab/outputs/lab-0x03-run-2026-09-03.txt</code>, QEMU <code>-M q35 -m 256M</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[vmm] built new PML4 + mov cr3
+[vmm] our pml4 (VA) = 0xffff800000056000
+[walk] HHDM    VA=0xffff800000000000
+       PML4 @0x0000000000056000 [idx 0x0000000000000100]
+       PDPT @0x000000000ff84000 [idx 0x0000000000000000]
+       PD   @0x000000000ff83000 [idx 0x0000000000000000]
+       PD entry = 2MB hugepage -&gt; PA 0x0000000000000000
+[walk] kernel  VA=0xffffffff80000000
+       PML4 @0x0000000000056000 [idx 0x00000000000001ff]
+       PDPT @0x000000000ff87000 [idx 0x00000000000001fe]
+       PD   @0x000000000ff86000 [idx 0x0000000000000000]
+       PT   @0x000000000ff85000 [idx 0x0000000000000000]
+[vmm] map VA 0x0000600000000000 -&gt; PA 0x0000000000057000
+[vmm] tables for VA: PDPT=0x0000000000058000 (new) PD=0x0000000000059000 (new) PT=0x000000000005a000 (new)
+[vmm] write via new VA, read via HHDM = 0xdeadbeefcafebabe  OK (same PA!)
+[vmm] vresolve(VA)  = 0x0000000000057000  OK</code></pre></div>
+<p>Đọc output:</p>
+<ul>
+<li>VA <code>0x600000000000</code> rơi vào một nhánh trống, nên <code>vmap</code> cấp mới cả 3 bảng trung gian (<code>(new)</code>), liền nhau vì PMM cấp tuần tự.</li>
+<li>HHDM đi PML4[0x100] và dừng ở PD (trang 2 MiB, 3 tầng). Kernel đi PML4[0x1ff] đủ 4 tầng tới PT (trang 4 KiB, để đặt quyền riêng cho từng section).</li>
+<li>Các bảng của HHDM/kernel nằm quanh <code>0x0ff8xxxx</code>: Limine dựng, PML4 mới chỉ mượn qua con trỏ đã chép.</li>
+</ul>
+<p>Thử thêm: lab viết <code>invlpg (%0)</code> với <code>"r"(va)</code>. So với cách cavOS viết ở mục 4, rồi chạy <code>objdump -d</code> trên file <code>.o</code> của lab để xem toán hạng của <code>invlpg</code> là gì.</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Trả lời được 5 câu này là nắm được bài.</em></p>
+<details class="quiz"><summary>Vì sao <code>initiateVMM()</code> chạy được trước <code>initiatePaging()</code>?</summary>
+<p><code>VirtualAllocate()</code> chỉ lấy frame từ PMM rồi cộng <code>hhdmOffset</code>. HHDM do Limine map sẵn, nên không cần đọc hay sửa page table.</p></details>
+<details class="quiz"><summary><code>VirtualMap</code> gặp entry PML4 chưa PRESENT thì làm gì? Vì sao bảng mới phải được xoá về 0?</summary>
+<p>Nó xin 1 frame từ PMM làm PDPT và ghi PA của frame đó kèm <code>PRESENT|RW|USER</code> vào entry. Bảng phải sạch vì frame cũ có thể chứa rác; một entry rác có bit 0 = 1 sẽ bị CPU coi là có mặt và dịch tới địa chỉ bừa.</p></details>
+<details class="quiz"><summary>Entry chứa PA của bảng con. Sao kernel không đọc thẳng địa chỉ đó?</summary>
+<p>Khi paging bật, mọi lệnh truy cập bộ nhớ đều dùng VA. Đọc thẳng PA thì CPU sẽ dịch nó như một VA, ra chỗ khác hoặc page fault. Phải cộng <code>hhdmOffset</code> để có VA trỏ đúng frame đó.</p></details>
+<details class="quiz"><summary>Remap một VA đang PRESENT sang frame khác mà TLB không được xoá đúng trang đó. Chuyện gì xảy ra?</summary>
+<p>CPU có thể tiếp tục dùng bản dịch cũ trong TLB, nên đọc/ghi vẫn rơi vào frame cũ, trong khi frame cũ đã bị <code>PhysicalFree</code> và có thể đã cấp cho việc khác. Lỗi kiểu này khó thấy vì chỉ xuất hiện khi bản dịch cũ còn nằm trong TLB.</p></details>
+<details class="quiz"><summary>Vì sao <code>PageDirectoryAllocate()</code> chép 512 entry PML4 của kernel, và vì sao <code>PageDirectoryFree()</code> chỉ giải phóng trang <code>PF_USER</code>?</summary>
+<p>Chép entry PML4 là chép con trỏ tới bảng con của kernel, nên sau <code>mov cr3</code> code kernel, HHDM và stack vẫn được map; thiếu chúng thì lệnh kế tiếp đã page fault. Các bảng đó dùng chung giữa mọi task, nên khi huỷ một task chỉ được trả các trang user của riêng nó.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Bug, lịch sử code và ánh xạ spec, không cần cho mạch chính.</em></p>
+
+<h3 id="bug-invlpg">invlpg trỏ nhầm trong <code>invalidate()</code></h3>
+<p><code>paging.c</code> viết <code>void invalidate(uint64_t vaddr) { asm volatile("invlpg %0" ::"m"(vaddr)); }</code>. Ràng buộc <code>"m"(vaddr)</code>
+đưa vào <em>ô nhớ chứa biến</em> <code>vaddr</code>, còn <code>invlpg</code> xoá bản dịch của trang chứa toán hạng bộ nhớ đó. Bản biên dịch
+<code>~/cavOS/src/kernel/memory/paging.o</code> (<code>objdump -d</code>) xác nhận:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>00000000000002a6 &lt;invalidate&gt;:
+     2ae:	48 89 7d f8          	mov    %rdi,-0x8(%rbp)
+     2b2:	0f 01 7d f8          	invlpg -0x8(%rbp)</code></pre></div>
+<p>Tức là CPU xoá TLB của trang stack, không phải trang vừa map. Cách đúng là <code>invlpg (%0)</code> với <code>"r"(vaddr)</code> (lab dùng cách này) hoặc
+<code>"m"(*(char *)vaddr)</code>. Bug ít lộ vì: map một VA đang không PRESENT thì không có gì cần xoá (CPU không giữ trong TLB bản dịch gây page fault,
+Intel SDM Vol.3 §4.10), và mỗi lần đổi task <code>mov cr3</code> xoá các bản dịch không global. Nó chỉ lộ khi remap một VA đang PRESENT rồi dùng lại ngay trong cùng address space.</p>
+
+<h3 id="nx-chua-dung">NX chưa dùng</h3>
+<p><code>paging.h</code> không định nghĩa <code>PF_NX</code>, nên W^X (trang ghi được thì không chạy được) <strong>chưa được bảo đảm</strong> cho các trang cavOS tự map.
+<code>link.ld</code> có tách section theo trang (xem <a href="bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>), và Limine có thể đặt quyền cho kernel image theo
+<code>p_flags</code> lúc nạp. Nhưng các lời gọi <code>VirtualMap</code> trong kernel (nạp ELF, stack, <code>mmap</code>, framebuffer...) đều truyền <code>PF_RW</code>, thường kèm <code>PF_USER</code>, và không cách nào cấm chạy code.</p>
+<p>CPU thì đã sẵn sàng: <code>info registers</code> trên cavOS đang chạy (xem <a href="bai_07_gdt_tss.html#tu-lam">Bài 7 - Tự làm</a>) cho <code>EFER=0000000000000d01</code>,
+tức bit 11 <code>NXE</code> = 1. cavOS chỉ tự bật bit 0 <code>SCE</code> (<code>cpu/fastSyscall.c</code>), nên NXE đã bật từ trước khi kernel chạy. Thêm <code>PF_NX (1ULL&lt;&lt;63)</code> cho các trang data là chỗ có thể siết sau.</p>
+
+<h3 id="lich-su-tu-dung-bang">Đoạn "tự dựng bảng" đã bị comment</h3>
+<p>Trong <code>initiatePaging()</code> còn nguyên một khối bị comment: map lại <code>.text</code>/<code>.rodata</code>/<code>.data</code> theo đúng <code>link.ld</code> bằng
+<code>VirtualMapRegionByLength</code>, map HHDM bằng trang 2 MiB (<code>VirtualMap2MB</code>, ít nhất 4 GiB), map framebuffer, rồi <code>ChangePageDirectory</code>.
+Tác giả ghi <em>"send help"</em> và để lại dòng <em>"I will keep on using limine's for the time being"</em>. Đầu <code>paging.c</code> còn một ghi chú: tầng nào cũng có thể
+là entry trang lớn, nên tác giả cố tình tránh map gần vùng HHDM của Limine.</p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Tách kernel/user address space thế nào?</strong> Mọi task chép 512 entry PML4 của kernel (nửa cao chung), chỉ thêm/bớt phần user ở nửa thấp;
+đổi task = <code>mov cr3</code> (<code>ChangePageDirectoryUnsafe</code>).</li>
+<li><strong>TLB invalidation?</strong> <code>invlpg</code> sau mỗi <code>VirtualMap</code> (nhưng xem bug ở trên); nạp lại CR3 khi đổi cả address space.</li>
+<li><strong>Kernel có tự dựng bảng không?</strong> Không, lúc boot dùng lại bảng Limine và chỉ sửa entry. Bảng riêng chỉ sinh ra cho từng task về sau.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Frame để làm bảng và để map: <a href="bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>.</li>
+<li><code>malloc</code>/heap kernel xây trên <code>VirtualAllocate</code> (<code>memory/malloc.c</code>).</li>
+<li>Đổi CR3 thật và page directory từng task: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>; fork và nạp ELF: <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</li>
+<li>Kernel image nằm ở địa chỉ ảo nào và có dời được không: <a href="../khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE kernel</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 Ch.4 - Paging: định dạng PML4E/PDPTE/PDE/PTE, bit P/RW/US/PS/PAT/NX, CR3, INVLPG, TLB (§4.10).</li>
+<li>AMD64 canonical sign-extension (bit 47): <code>AMD64_MM_STRIPSX</code>/<code>AMD64_MM_ADDRSX</code>.</li>
+<li>IA32_EFER.NXE (bit 11): phải bật thì bit NX trong entry mới có tác dụng.</li>
+</ul>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Bài 6 - Virtual Memory &amp; Paging</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

@@ -18,7 +18,7 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p><strong>Thực hành <a href="../ly_thuyet/steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a>.</strong> Lấy framebuffer từ Limine, tự vẽ pixel/hình/chữ —
+<p><strong>Thực hành <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a>.</strong> Lấy framebuffer từ Limine, tự vẽ pixel/hình/chữ —
 thấy tận mắt pixel format BGRX, pitch, và HHDM. Nối tiếp <a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a> (tái dùng serial).</p>
 </div>
 <p><strong>Vị trí:</strong> <code>~/oskernel-lab/02-framebuffer/</code> · base revision <strong>2</strong> (khớp cavOS).</p>
@@ -31,7 +31,7 @@ không đổi theo KASLR như <code>phys_base</code> của kernel (<a href="lab_
 </div>
 <h2 id="cấu-trúc-module-tách-từ-lab-0x02-trở-đi">Cấu trúc module (tách từ Lab 0x02 trở đi)</h2>
 <div class="code"><div class="code-bar">text</div><pre><code>io.h        — outb/inb (inline)
-serial.{h,c}— UART 16550 (Step 01)
+serial.{h,c}— UART 16550 (Bài 2)
 fb.{h,c}    — framebuffer: fb_init + put_pixel/fill_rect/draw_string + font 8×8
 kernel.c    — kmain: orchestrate + in thông số + vẽ</code></pre></div>
 <p><code>GNUmakefile</code>: <code>SRCS := kernel.c serial.c fb.c</code> (common.mk tự build từng <code>.o</code>). String output để <strong>tiếng Anh</strong>;
@@ -41,16 +41,16 @@ comment giải thích tiếng Việt.</p>
 <li><code>fb_init()</code> khai <code>LIMINE_FRAMEBUFFER_REQUEST</code>, lấy <code>framebuffers[0]</code> → <code>address/width/height/pitch/bpp</code>.</li>
 <li><code>put_pixel(x,y,r,g,b)</code>: ghi 4 byte <strong>BGRX</strong>, <strong>nhảy hàng bằng <code>pitch</code></strong> (không phải width*4).</li>
 <li>Vẽ: nền xám → 3 thanh màu R/G/B → ô vuông trắng → chữ <code>HELLO FB</code> (font 8×8 tự nhúng, scale 4).</li>
-<li>In thông số fb ra serial để đối chiếu Step 03.</li>
+<li>In thông số fb ra serial để đối chiếu Bài 4.</li>
 </ol>
-<h2 id="khác-với-cavos-step-03">Khác với cavOS (Step 03)</h2>
+<h2 id="khác-với-cavos-step-03">Khác với cavOS (Bài 4)</h2>
 <ul>
 <li>cavOS dùng macro <code>drawPixel</code> theo <code>fb.width</code> + font <strong>PSF1</strong> nạp từ <code>gohufont.h</code>. Lab dùng <code>put_pixel</code>
 theo <strong><code>pitch</code></strong> (đúng hơn khi có padding) + font 8×8 <strong>nhúng thẳng</strong> (vài ký tự, khỏi cần file PSF).</li>
 <li>Lab chỉ vẽ tĩnh; cavOS có cả console (con trỏ, scroll, <code>printf</code>→<code>putchar_</code>).</li>
 </ul>
 <h2 id="kết-quả-thật-qemu--m-q35--m-256m-2026-06-01">Kết quả thật (QEMU <code>-M q35 -m 256M</code>, 2026-06-01)</h2>
-<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x02 - Framebuffer (Step 03) ===
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x02 - Framebuffer (Bài 4) ===
 [fb] address(VA, qua HHDM) = 0xffff8000fd000000
 [fb] resolution = 1280 x 800
 [fb] pitch = 5120 bytes/row   (width*4 = 5120)
@@ -71,13 +71,13 @@ qua HHDM (<a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> mục "dùng VA n�
 <h2 id="tự-kiểm-tra">✓ Tự kiểm tra</h2>
 <ol>
 <li>Đổi <code>-m 256M</code> → <code>-m 512M</code>: địa chỉ fb có đổi không? (gợi ý: fb là MMIO, thường cố định ~<code>0xfd000000</code>).</li>
-<li>Vì sao <strong>phải</strong> dùng <code>pitch</code> mà không <code>width*4</code>? Khi nào hai cái khác nhau? (xem <a href="../ly_thuyet/steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a> §3.2 cạm bẫy pitch).</li>
+<li>Vì sao <strong>phải</strong> dùng <code>pitch</code> mà không <code>width*4</code>? Khi nào hai cái khác nhau? (xem <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html#struct-framebuffer">Bài 4 - Framebuffer &amp; Console, mục "Struct Framebuffer và macro drawPixel"</a>, đoạn "Bẫy pitch").</li>
 <li>Đảo thứ tự ghi <code>p[0]/p[1]/p[2]</code> (BGR→RGB) → màu 3 thanh đổi thế nào? (chứng minh format BGRX).</li>
 <li>Bỏ kẹp biên trong <code>put_pixel</code> rồi vẽ <code>y ≥ height</code> → ghi tràn ngoài VRAM, chuyện gì xảy ra?</li>
 </ol>
 <h2 id="liên-hệ">Liên hệ</h2>
 <ul>
-<li>Lý thuyết: <a href="../ly_thuyet/steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a> · nền tảng <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a> · nền tảng <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
 <li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>

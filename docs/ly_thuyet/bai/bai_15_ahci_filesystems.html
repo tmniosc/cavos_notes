@@ -3,25 +3,25 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step 14 — AHCI &amp; Filesystems · Học cavOS</title>
+<title>Bài 15 — AHCI &amp; Filesystems · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
-<body data-root="../../" data-page="ly_thuyet/steps/step_14_ahci_filesystems.html">
+<body data-root="../../" data-page="ly_thuyet/bai/bai_15_ahci_filesystems.html">
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
-    <h1>Step 14 — AHCI &amp; Filesystems</h1>
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 15 — AHCI &amp; Filesystems</h1>
     <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, storage, fs</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateAHCI()</code> · <strong>Phụ thuộc:</strong> PCI từ <a href="step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a></p>
+<p><strong>Hàm:</strong> <code>initiateAHCI()</code> · <strong>Phụ thuộc:</strong> PCI từ <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></p>
 <h2 id="mục-đích">Mục đích</h2>
 <p><strong>Đọc/ghi đĩa thật (SATA qua AHCI) và hiểu dữ liệu trên đĩa thành file.</strong> AHCI controller (tìm qua
-<a href="step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a>) cho phép DMA sector; filesystem biến sector thô thành cây thư mục/file. Nền để nạp
-chương trình userspace từ đĩa (<a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>).</p>
+<a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>) cho phép DMA sector; filesystem biến sector thô thành cây thư mục/file. Nền để nạp
+chương trình userspace từ đĩa (<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
 <h2 id="mục-tiêu-học">Mục tiêu học</h2>
 <ul>
 <li>AHCI controller (ABAR), port, command list, FIS, PRDT.</li>
@@ -38,7 +38,7 @@ chương trình userspace từ đĩa (<a href="step_17_userspace_elf_loader.html
 <li>AHCI 1.3.1 spec; SATA/ATA command set.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Step 14 - AHCI &amp; Filesystems</footer>
+<footer>Học cavOS · Bài 15 - AHCI &amp; Filesystems</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

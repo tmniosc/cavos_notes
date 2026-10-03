@@ -17,7 +17,7 @@
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p>Tự viết lại phần <strong>boot + serial</strong> từ số 0 (gộp <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> + <a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>).
+<p>Tự viết lại phần <strong>boot + serial</strong> từ số 0 (gộp <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> + <a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>).
 Vị trí: <code>~/oskernel-lab/00-hello-serial/</code> · source lưu ở <code>lab/src/oskernel-lab/00-hello-serial/</code>.</p>
 <h2 id="mục-tiêu">Mục tiêu</h2>
 <ul>
@@ -28,14 +28,14 @@ Vị trí: <code>~/oskernel-lab/00-hello-serial/</code> · source lưu ở <code
 <div class="callout quote">
 <p><strong>Base revision = 2</strong> (khớp cavOS gốc, không dùng 3) — <code>LIMINE_BASE_REVISION(2)</code> trong <code>kernel.c</code></p>
 <ul>
-<li>comment <code>linker.ld</code>. Đã rebuild + boot QEMU lại OK (2026-05-31). Xem <a href="../ly_thuyet/khai_niem/limine_protocol.html">Limine Protocol</a> §4.</li>
+<li>comment <code>linker.ld</code>. Đã rebuild + boot QEMU lại OK (2026-05-31). Xem <a href="../ly_thuyet/khai_niem/limine_protocol.html#4-base-revision-bắt-tay-phiên-bản">Limine Protocol §4</a>.</li>
 </ul>
 </div>
 <h2 id="các-mảnh-chính">Các mảnh chính</h2>
 <ul>
 <li><code>linker.ld</code>: <code>ENTRY(kmain)</code> (lab dùng <code>kmain</code> làm entry, không phải <code>_start</code>), <code>. = 0xffffffff80000000</code>,
 PHDRS (text/rodata/data = <code>PT_LOAD</code>, <strong>không ghi <code>FLAGS</code></strong> → ld tự suy W^X từ section flags — xem
-<a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2), <code>. = ALIGN(CONSTANT(MAXPAGESIZE))</code> giữa các segment
+<a href="../ly_thuyet/bai/bai_01_boot_limine.html#ld-tu-suy">Bài 1 - Boot &amp; Limine, "Không ghi FLAGS thì ld tự suy quyền"</a>), <code>. = ALIGN(CONSTANT(MAXPAGESIZE))</code> giữa các segment
 (xem <a href="../ly_thuyet/khai_niem/paging.html">Paging</a> ý #3).</li>
 <li><code>.limine_requests</code> gói trong <code>KEEP(*(.limine_requests))</code> (nằm trong <code>:rodata</code>) để Limine quét magic,
 <code>KEEP</code> chống linker GC bỏ section (chưa ai tham chiếu trực tiếp) — xem <a href="../ly_thuyet/khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>.</li>
@@ -82,7 +82,7 @@ dựng bằng <code>scripts/mkimage.sh</code>) — bố cục ảnh đĩa: <a hr
 <p><strong>Map file là sản phẩm của LINKER (<code>kernel.bin</code>), KHÔNG phải của <code>kernel.o</code>.</strong> <code>.o</code> chưa link nên
 chưa có địa chỉ cuối để "map". Muốn soi section/flag của riêng <code>.o</code> (trước link):
 <code>readelf -S kernel.o</code> (→ <code>kernel.o.sections.txt</code>) hoặc <code>objdump -h kernel.o</code> (→ <code>kernel.o.headers.txt</code>)<br/>
-→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>=WA (gốc của W^X, xem <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2).</p>
+→ thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>=WA (gốc của W^X, xem <a href="../ly_thuyet/bai/bai_01_boot_limine.html#ld-tu-suy">Bài 1 - Boot &amp; Limine, "Không ghi FLAGS thì ld tự suy quyền"</a>).</p>
 </div>
 <p><strong>Trích <code>kernel.map</code> (bằng chứng cho <a href="../ly_thuyet/khai_niem/paging.html">Paging</a> ý #3):</strong></p>
 <div class="code"><div class="code-bar">text</div><pre><code>.text    0xffffffff80000000   0xf3            ← kernel ở higher-half
@@ -94,7 +94,7 @@ chưa có địa chỉ cuối để "map". Muốn soi section/flag của riêng 
                 0xffffffff80000000                kmain     ← entry ngay đầu .text
 .rodata         0xffffffff80001000       0x4c               ← vẫn đúng biên trang 0x1000
 .data           0xffffffff80002000       0x18</code></pre></div>
-<p><code>readelf -lW kernel.bin</code> xác nhận <strong>W^X</strong> đúng như <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.2:</p>
+<p><code>readelf -lW kernel.bin</code> xác nhận <strong>W^X</strong> đúng như <a href="../ly_thuyet/bai/bai_01_boot_limine.html#ld-tu-suy">Bài 1 - Boot &amp; Limine, "Không ghi FLAGS thì ld tự suy quyền"</a>:</p>
 <div class="code"><div class="code-bar">text</div><pre><code>LOAD 0xffffffff80000000 ... R E     ← .text: đọc + THỰC THI, không ghi
 LOAD 0xffffffff80001000 ... R       ← .rodata: chỉ đọc
 LOAD 0xffffffff80002000 ... RW      ← .data/.bss: đọc + ghi, không thực thi</code></pre></div>
@@ -105,7 +105,7 @@ và link với <code>-Wl,-z,max-page-size=0x1000</code> — thiếu cờ này MA
 </div>
 <h2 id="liên-hệ">Liên hệ</h2>
 <ul>
-<li>Lý thuyết: <a href="../ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../ly_thuyet/steps/step_01_serial_uart.html">Step 01 - Serial UART</a>.</li>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>.</li>
 <li>Build/QEMU: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>

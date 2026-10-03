@@ -21,26 +21,165 @@
 <p>Chế độ hoạt động 64-bit của CPU x86_64. Khi <a href="limine_protocol.html">Limine</a> nhảy vào <code>_start</code>, CPU <strong>đã ở
 long mode</strong> và <strong>paging đã bật</strong> — kernel không phải tự chuyển chế độ.</p>
 </div>
+
 <h2 id="các-chế-độ-x86-lịch-sử">Các chế độ x86 (lịch sử)</h2>
+<p class="lede"><em>CPU x86 nào cũng thức dậy ở chế độ 16-bit cũ, rồi phải leo từng nấc lên 64-bit.</em></p>
 <div class="callout quote">
 <p>Gỡ rối đầy đủ "segment + 3 chế độ": <a href="x86_segmentation.html">x86 Segmentation</a>.</p>
 </div>
-<div class="code"><div class="code-bar">text</div><pre><code>Real mode (16-bit) → Protected mode (32-bit) → Long mode (64-bit)</code></pre></div>
+<p>Vì phải chạy được phần mềm của 40 năm trước, CPU x86_64 vẫn giữ cả ba chế độ. Mỗi chế độ là một "luật chơi" khác nhau cho địa chỉ và thanh ghi:</p>
+<ul>
+<li><strong>Real mode</strong> (16-bit): chế độ lúc bật nguồn. Địa chỉ = <code>segment × 16 + offset</code>, chỉ với tới khoảng 1 MiB. Không có bảo vệ bộ nhớ.</li>
+<li><strong>Protected mode</strong> (32-bit): có GDT, có privilege level (ring 0–3), paging là tuỳ chọn. Với tới 4 GiB.</li>
+<li><strong>Long mode</strong> — Intel gọi là <strong>IA-32e mode</strong>. Nó có hai chế độ con (submode):
+  <ul>
+  <li><strong>64-bit mode</strong>: thanh ghi 64-bit, địa chỉ ảo 64-bit. Kernel cavOS chạy ở đây.</li>
+  <li><strong>Compatibility mode</strong>: vẫn trong long mode (paging 4-level vẫn chạy), nhưng code 32-bit cũ chạy được như ở protected mode. Dùng cho chương trình 32-bit trên OS 64-bit.</li>
+  </ul></li>
+</ul>
+<p>Chế độ con nào đang chạy do <strong>bit L của code segment hiện tại</strong> (CS) quyết định: L = 1 là 64-bit mode, L = 0 là compatibility mode. Vì thế mỗi lần nạp CS là một lần có thể đổi chế độ con.</p>
+<figure class="diagram">
+<svg id="svg-mode-ladder" role="img" aria-label="x86 mode ladder with control bits" style="max-width:1083px" width="100%" viewBox="0 0 720 430" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-mode-ladder-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-mode-ladder .lbl{fill:#c2c0b6;} #svg-mode-ladder .mono{font-family:'SF Mono',Consolas,monospace;} #svg-mode-ladder .flow{stroke:#7d7b73;}</style>
+</defs>
+<!-- real mode -->
+<rect x="40" y="20" width="300" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="56" y="44" fill="#D3D1C7" font-size="12" font-weight="600">Real mode</text>
+<text x="56" y="63" fill="#B4B2A9" font-size="9.5">16-bit, segment:offset, ~1 MiB, power-on state</text>
+<line x1="190" y1="76" x2="190" y2="114" class="flow" stroke-width="1.5" marker-end="url(#svg-mode-ladder-arrow)"/>
+<text x="364" y="92" class="lbl mono" font-size="10">CR0.PE = 1</text>
+<text x="364" y="107" class="lbl" font-size="9.5">then far jmp to a 32-bit code segment</text>
+<!-- protected mode -->
+<rect x="40" y="116" width="300" height="56" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="56" y="140" fill="#B5D4F4" font-size="12" font-weight="600">Protected mode</text>
+<text x="56" y="159" fill="#85B7EB" font-size="9.5">32-bit, GDT + rings, paging optional</text>
+<line x1="190" y1="172" x2="190" y2="230" class="flow" stroke-width="1.5" marker-end="url(#svg-mode-ladder-arrow)"/>
+<text x="364" y="186" class="lbl mono" font-size="10">CR4.PAE = 1</text>
+<text x="364" y="200" class="lbl mono" font-size="10">CR3 = physical address of PML4</text>
+<text x="364" y="214" class="lbl mono" font-size="10">EFER.LME = 1</text>
+<text x="364" y="228" class="lbl mono" font-size="10">CR0.PG = 1  →  CPU sets EFER.LMA = 1</text>
+<!-- compatibility mode -->
+<rect x="40" y="232" width="300" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="56" y="256" fill="#C6E7CC" font-size="12" font-weight="600">IA-32e: compatibility mode</text>
+<text x="56" y="275" fill="#8FC79A" font-size="9.5">LMA = 1, CS.L = 0 — 32-bit code, 4-level paging</text>
+<line x1="190" y1="288" x2="190" y2="326" class="flow" stroke-width="1.5" marker-end="url(#svg-mode-ladder-arrow)"/>
+<text x="364" y="304" class="lbl" font-size="9.5">far jmp / retf to a code segment</text>
+<text x="364" y="319" class="lbl mono" font-size="10">with CS.L = 1, CS.D = 0</text>
+<!-- 64-bit mode -->
+<rect x="40" y="328" width="300" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="56" y="352" fill="#F0DBAE" font-size="12" font-weight="600">IA-32e: 64-bit mode</text>
+<text x="56" y="371" fill="#D8A54A" font-size="9.5">LMA = 1, CS.L = 1 — where cavOS _start runs</text>
+<text x="360" y="414" text-anchor="middle" class="lbl" font-size="9.5">Limine climbs this ladder before _start (BSP) and in its SMP trampoline (each AP)</text>
+</svg>
+</figure>
 <p>Bình thường bootloader phải đi qua từng nấc (bật A20, dựng GDT, bật PAE, set EFER.LME, bật paging,
 set CR0.PG...). <strong>Limine làm hết</strong> → cavOS bỏ qua phần asm phức tạp này.</p>
+
+<h2 id="bitmsr-liên-quan-để-tra-khi-cần">Bit/MSR liên quan (để tra khi cần)</h2>
+<p class="lede"><em>Một nhóm nhỏ bit trong CR0, CR4, EFER và CS quyết định CPU đang ở chế độ nào.</em></p>
+<p><code>CR0</code>, <code>CR4</code> là control register, đọc/ghi bằng <code>mov</code>. <code>EFER</code> (Extended Feature Enable Register) là một MSR (model-specific register) số <code>0xC0000080</code>, đọc/ghi bằng <code>rdmsr</code>/<code>wrmsr</code>.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr><th>Bit</th><th>Vị trí</th><th>Ý nghĩa</th><th>Ai bật cho cavOS</th></tr>
+</thead>
+<tbody>
+<tr><td><code>CR0.PE</code></td><td>bit 0</td><td>Protection Enable — rời real mode, vào protected mode</td><td>Limine</td></tr>
+<tr><td><code>CR0.WP</code></td><td>bit 16</td><td>Write Protect — ring 0 cũng không ghi được trang read-only</td><td>Limine</td></tr>
+<tr><td><code>CR0.PG</code></td><td>bit 31</td><td>Paging. Bật khi LME = 1 thì CPU vào long mode</td><td>Limine</td></tr>
+<tr><td><code>CR4.PAE</code></td><td>bit 5</td><td>Physical Address Extension — entry bảng trang 64-bit. Bắt buộc trước khi vào long mode</td><td>Limine</td></tr>
+<tr><td><code>CR4.LA57</code></td><td>bit 12</td><td>Paging 5-level. cavOS xin 4-level nên bit này = 0</td><td>không bật</td></tr>
+<tr><td><code>EFER.SCE</code></td><td>bit 0</td><td>cho phép lệnh <code>syscall</code>/<code>sysret</code></td><td>cavOS, <code>cpu/fastSyscall.c</code> (<a href="../bai/bai_16_fast_syscalls.html">Bài 16</a>)</td></tr>
+<tr><td><code>EFER.LME</code></td><td>bit 8</td><td>Long Mode Enable — "xin" vào long mode</td><td>Limine</td></tr>
+<tr><td><code>EFER.LMA</code></td><td>bit 10</td><td>Long Mode Active — chỉ đọc; CPU tự set khi LME = 1 và PG = 1</td><td>CPU</td></tr>
+<tr><td><code>EFER.NXE</code></td><td>bit 11</td><td>cho phép bit NX (không thực thi) trong entry bảng trang</td><td>Limine (nếu CPU có)</td></tr>
+<tr><td><code>CS.L</code></td><td>bit 53 của descriptor</td><td>1 = 64-bit mode, 0 = compatibility mode (khi LMA = 1)</td><td>GDT của Limine, sau đó GDT của cavOS (<a href="../bai/bai_07_gdt_tss.html">Bài 7</a>)</td></tr>
+</tbody>
+</table></div>
+<p>Thứ tự trong bảng không tuỳ ý. Intel SDM yêu cầu: bật PAE và nạp CR3 <strong>trước</strong>, set LME, rồi mới bật PG. Bật PG khi PAE = 0 mà LME = 1 sẽ gây #GP.</p>
+
+<h2 id="ai-chuyển-chế-độ-cho-cavos">Ai chuyển chế độ cho cavOS?</h2>
+<p class="lede"><em>Limine. Nó hứa trạng thái máy cụ thể lúc vào <code>_start</code>, và cavOS dựa hẳn vào lời hứa đó.</em></p>
+<p>Binary Limine mà cavOS thật sự boot là <strong>Limine 10.8.5</strong> (<code>src/bootloader/limine/BOOTX64.EFI</code> tự báo như vậy; <code>assert.sh</code> ghim "10.1.1" nhưng clone đầu nhánh <code>v10.x-binary</code>). Từ Limine 9, spec của protocol nằm ở repo riêng <code>limine-protocol</code>; Limine 10.8.5 ghim <a href="https://codeberg.org/Limine/limine-protocol/src/commit/e42d010a761e4e9ac6bad1b578110ba72c61e1d9/PROTOCOL.md">commit <code>e42d010</code> của <code>PROTOCOL.md</code></a>. Mục "Machine State at Entry → x86-64" ở đó viết:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>PE is enabled (cr0), ET is enabled (cr0), WP is enabled (cr0), PG is enabled (cr0),
+PAE is enabled (cr4), LME and LMA are enabled (EFER). NX is enabled (EFER)
+(if it is available).</code></pre></div>
+<p>Cùng mục đó còn hứa thêm:</p>
+<ul>
+<li>Mọi segment register đã nạp segment 64-bit; GDTR trỏ tới một GDT của Limine (null, code/data 16-bit, 32-bit, 64-bit).</li>
+<li>IDT ở trạng thái không xác định — kernel phải tự nạp IDT của mình.</li>
+<li>Cờ IF (ngắt), VM, DF bị xoá. A20 đã mở. PIC cũ bị mask hết; ở IO APIC, các entry có delivery mode Fixed hoặc Lowest Priority bị mask.</li>
+<li><code>rsp</code> trỏ tới đỉnh một stack ít nhất 64 KiB; các thanh ghi đa dụng khác bằng 0.</li>
+</ul>
+<p>Base revision 5 hứa thêm (IDTR, LDTR, TR rỗng; mọi bit khác của CR0/CR4/EFER bằng 0; Local APIC ở trạng thái xác định; IOMMU bị tắt). cavOS xin base revision 2 nên không được hứa những điều đó.</p>
+<p>Hệ quả cho code cavOS: <code>_start</code> (<code>entry/kernel.c</code>) là một hàm C bình thường. Không có <code>mov cr0</code>, không có <code>wrmsr EFER</code>, không có far jump nào trước nó. Dòng đầu tiên chỉ kiểm tra Limine có hiểu base revision mà kernel yêu cầu không:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile LIMINE_BASE_REVISION(2);
+void _start(void) {
+  systemDiskInit = false;
+
+  if (LIMINE_BASE_REVISION_SUPPORTED == false)
+    panic();
+
+  initiateSerial();
+  initialiseBootloaderParser();</code></pre></div>
+<p>Toàn bộ đường từ <code>_start</code> đọc ở <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>. Về sau cavOS chỉ <em>thêm</em> bit, không đổi chế độ: <code>EFER.SCE</code> cho syscall, và mấy bit CR0/CR4 cho FPU/SSE (<code>cpu/system.c</code>, <code>cpu/sse.asm</code>).</p>
+<p>Đọc thanh ghi CPU 0 (BSP — bootstrap processor, CPU chạy <code>_start</code>) bằng QEMU monitor <code>info registers</code> khi cavOS đã boot xong (máy 2, KVM, <code>-smp 2</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>RIP=ffffffff8008e368 RFL=00000046 [---Z-P-] CPL=0 II=0 A20=1 SMM=0 HLT=0
+CS =0028 0000000000000000 00000000 00209b00 DPL=0 CS64 [-RA]
+CR0=80010033 CR2=00005ffffffff000 CR3=000000000212b000 CR4=00000620
+EFER=0000000000000d01</code></pre></div>
+<ul>
+<li><code>EFER=0xd01</code> = SCE (bit 0) + LME (bit 8) + LMA (bit 10) + NXE (bit 11).</li>
+<li><code>CR0=0x80010033</code> = PG + WP + PE, cộng MP/ET/NE cho FPU.</li>
+<li><code>CR4=0x620</code> = PAE (bit 5) + OSFXSR/OSXMMEXCPT (bit 9, 10) cho SSE. LA57 = 0 → 4-level.</li>
+<li>Thuộc tính CS <code>00209b00</code> có bit 21 của dword cao (= bit 53 của descriptor) bằng 1 → L = 1. QEMU ghi luôn là <code>CS64</code>.</li>
+</ul>
+
 <h2 id="đặc-điểm-long-mode-liên-quan-code-cavos">Đặc điểm long mode (liên quan code cavOS)</h2>
+<p class="lede"><em>Bốn điều của long mode mà bạn sẽ gặp lại trong code cavOS.</em></p>
 <ul>
 <li>Địa chỉ ảo <strong>canonical</strong> 48-bit sign-extended → xem <a href="higher_half_kernel.html">Higher-Half Kernel</a>.</li>
-<li><strong>Paging luôn bật</strong>, dùng PAE 4-level (PML4) hoặc 5-level → xem <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>.</li>
-<li>Segmentation gần như "phẳng": base/limit bị bỏ qua cho hầu hết segment → ảnh hưởng <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</li>
+<li><strong>Paging luôn bật</strong>, dùng PAE 4-level (PML4) hoặc 5-level → xem <a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>. Tắt PG nghĩa là rời long mode, nên kernel không bao giờ làm vậy.</li>
+<li>Segmentation gần như "phẳng": base/limit bị bỏ qua cho hầu hết segment → ảnh hưởng <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>. GDT vẫn cần, vì CS mang bit L và mức đặc quyền (CPL).</li>
 <li>Thanh ghi 64-bit (RAX...R15); calling convention theo x86-64 psABI.</li>
 </ul>
-<h2 id="bitmsr-liên-quan-để-tra-khi-cần">Bit/MSR liên quan (để tra khi cần)</h2>
+
+<h2 id="cpu-phụ-ap-leo-thang-thế-nào">CPU phụ (AP) leo thang thế nào?</h2>
+<p class="lede"><em>cavOS không có trampoline riêng: Limine tự đưa từng CPU phụ lên long mode rồi cho nó ngồi chờ.</em></p>
+<p>Máy nhiều nhân có một BSP và các AP (application processor). Mỗi AP thức dậy bằng tín hiệu INIT-SIPI và bắt đầu ở <strong>real mode</strong>, giống lúc bật máy. Vì vậy ai khởi động AP thì phải có một đoạn code "trampoline" leo lại cả cái thang ở trên cho AP đó.</p>
+<p>Trong cavOS không có đoạn đó. Grep <code>trampoline</code>, <code>goto_address</code> trong <code>~/cavOS/src/kernel</code> không ra code nào; <code>entry/bootloader.c</code> chỉ gửi <code>limine_smp_request</code> và lưu kết quả. Theo <code>PROTOCOL.md</code>, chỉ cần request này có mặt là Limine sẽ tự bootstrap các AP. Trampoline nằm trong Limine (<code>common/sys/smp_trampoline.asm_x86</code>, bản 10.8.5), và leo đúng thứ tự trong sơ đồ:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Bước</th><th>Lệnh trong trampoline</th><th>Kết quả</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>lidt</code> (IDT rỗng), <code>lgdt</code>, <code>mov cr0, 0x11</code>, far jmp selector <code>0x18</code></td><td>PE = 1 (và ET), nhảy vào code 32-bit → protected mode</td></tr>
+<tr><td>2</td><td>xoá CR4, ghi MSR PAT (<code>0x277</code>) nếu CPU có PAT, chép MSR APIC base (<code>0x1b</code>) của BSP</td><td>AP bắt đầu từ trạng thái sạch, cùng kiểu APIC với BSP</td></tr>
+<tr><td>3</td><td><code>bts</code> bit 5 của CR4</td><td>PAE = 1</td></tr>
+<tr><td>4</td><td><code>wrmsr</code> MSR <code>0xc0000080</code> = <code>0x100</code>, thêm bit 11 nếu CPU có NX</td><td>EFER.LME = 1 (và NXE)</td></tr>
+<tr><td>5</td><td><code>mov cr3</code>; CR0 set bit 16 (nếu được yêu cầu) và bit 31</td><td>WP = 1, PG = 1 → CPU set LMA (compatibility mode)</td></tr>
+<tr><td>6</td><td><code>push 0x28</code>, <code>retf</code></td><td>CS = code 64-bit (L = 1) → 64-bit mode</td></tr>
+<tr><td>7</td><td>nạp segment <code>0x30</code>, <code>lgdt</code> lại bằng địa chỉ HHDM, <code>ltr 0x38</code>, nhảy tới <code>parking64</code> qua HHDM</td><td>AP chạy ở nửa cao, có TSS của Limine</td></tr>
+</tbody>
+</table></div>
+<p>Sau đó AP đứng chờ trong vòng lặp "parking" của Limine (dùng <code>monitor</code>/<code>mwait</code> nếu CPU có, không thì vòng <code>pause</code>). Nó chỉ chạy tiếp khi kernel ghi một địa chỉ hàm vào trường <code>goto_address</code> của nó; lúc đó Limine đổi sang stack của AP và <code>iretq</code> vào hàm đó. cavOS không bao giờ ghi trường này, và <code>cpu/apic.c</code> còn để <code>for (size_t i = 0; i &lt; 1; i++) { // todo: bootloader.smp-&gt;cpu_count</code>. Kết quả: cavOS chỉ chạy trên BSP; các AP đã ở long mode nhưng ngồi yên.</p>
+<p>Đo thật cùng lần boot ở trên, chuyển monitor sang CPU 1 (<code>cpu 1</code>, <code>info registers</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>RIP=ffff8000000601ac RFL=00000046 [---Z-P-] CPL=0 II=0 A20=1 SMM=0 HLT=0
+CS =0028 0000000000000000 00000000 00209b00 DPL=0 CS64 [-RA]
+CR0=80010011 CR2=0000000000000000 CR3=00000000bff8a000 CR4=00000020
+EFER=0000000000000d00</code></pre></div>
 <ul>
-<li><code>CR0.PG</code> (paging), <code>CR0.PE</code> (protected), <code>CR4.PAE</code>, <code>EFER.LME</code>/<code>LMA</code> (long mode enable/active).</li>
+<li>AP cũng ở 64-bit mode (<code>CS64</code>, <code>EFER=0xd00</code> = LME + LMA + NXE).</li>
+<li>Không có SCE, CR4 chỉ có PAE: đúng những gì trampoline của Limine bật, không có bit nào của cavOS.</li>
+<li><code>RIP</code> nằm trong <a href="hhdm.html">HHDM</a> (<code>0xffff8000…</code>): AP đang chạy vòng lặp parking ở vùng nhớ thấp, gọi qua HHDM.</li>
 </ul>
+
 <h2 id="spec">Spec</h2>
-<p><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §9 (mode switching), §4 (paging), §3.x (segmentation in IA-32e).</p>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §9 (mode switching; §9.8.5 Initializing IA-32e Mode), §4 (paging), §3.x (segmentation in IA-32e), §2.2.1 (EFER).</li>
+<li>Limine <code>PROTOCOL.md</code> (repo <code>limine-protocol</code>, commit <code>e42d010</code> mà Limine 10.8.5 ghim): "Machine State at Entry → x86-64", "Base Revision Changes Summary", "MP (Multiprocessor) Feature" (<code>goto_address</code>).</li>
+</ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Long Mode</footer>
 </main>

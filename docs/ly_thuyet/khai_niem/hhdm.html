@@ -105,8 +105,8 @@ bên trong</strong> page table mà CR3 trỏ tới.</p>
 <li>Khi kernel làm <code>*(phys + hhdmOffset)</code>: CPU <strong>không</strong> tự cộng offset — nó vẫn tra bảng qua CR3 như
 mọi VA. Công thức <code>+offset</code> đúng <strong>chỉ vì</strong> Limine đã điền entry: trang ảo <code>0xffff8000+N</code> → khung <code>N</code>.</li>
 <li>Limine "đơn giản hóa" = nó <strong>dựng bảng + nạp CR3 hộ</strong> trước <code>_start</code> → bạn không thấy <code>mov cr3</code> nào ở
-<a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, nhưng CR3 <em>đang</em> hoạt động.</li>
-<li><strong>Bạn tự đụng CR3</strong> ở <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>: dựng bảng riêng, nhớ map lại HHDM + kernel
+<a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, nhưng CR3 <em>đang</em> hoạt động.</li>
+<li><strong>Bạn tự đụng CR3</strong> ở <a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>: dựng bảng riêng, nhớ map lại HHDM + kernel
 vào bảng mới <strong>trước</strong> khi <code>mov cr3</code>, kẻo kernel "mất chân".</li>
 </ul>
 <p>Chi tiết cơ chế dịch: <a href="paging.html">Paging</a> (ý #1, #4 và ví dụ 4b).</p>
@@ -143,14 +143,14 @@ vào bảng mới <strong>trước</strong> khi <code>mov cr3</code>, kẻo kern
 // *(uint64_t*)pa = 1;   ✗ PA KHÔNG phải VA — kernel chạy với paging, mọi deref là VA
 uint64_t *p = (uint64_t*)((size_t)pa + hhdmOffset);  // ✓ đổi sang VA qua HHDM
 *p = 123;                               // giờ ghi được</code></pre></div>
-<p><strong>Khi nào cần HHDM</strong> (càng về sau càng nhiều): PMM ghi vào frame vừa cấp (<a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>);
-sửa page table — entry chứa PFN vật lý (<a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>); đọc RSDP/MADT (<a href="../steps/step_07_acpi.html">Step 07 - ACPI</a>);
-chạm MMIO/framebuffer (<a href="../steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a>).</p>
+<p><strong>Khi nào cần HHDM</strong> (càng về sau càng nhiều): PMM ghi vào frame vừa cấp (<a href="../bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>);
+sửa page table — entry chứa PFN vật lý (<a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>); đọc RSDP/MADT (<a href="../bai/bai_08_acpi.html">Bài 8 - ACPI</a>);
+chạm MMIO/framebuffer (<a href="../bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a>).</p>
 <div class="callout quote">
 <p>Quy tắc: <strong>code kernel sống ở kernel mapping (cần X); cầm một PA muốn đọc/ghi → qua HHDM (W, NX).</strong>
 Đó là lý do aliasing hữu ích: cùng byte, một cửa để <em>chạy</em>, một cửa để <em>ghi</em>.</p>
 </div>
-<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>, <a href="../steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>.</p>
+<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>, <a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>.</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · HHDM</footer>
 </main>

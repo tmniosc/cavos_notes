@@ -192,6 +192,14 @@ td.nowrap { white-space: nowrap; }
 .callout { margin: 16px 0; padding: 10px 14px; border: 1px solid var(--line); border-left-width: 3px; background: var(--panel); }
 .callout > :first-child { margin-top: 0; }
 .callout > :last-child { margin-bottom: 0; }
+
+/* "Tự kiểm tra": one question per <details class="quiz">, the answer hidden until opened */
+details.quiz { margin: 8px 0; padding: 6px 12px; border: 1px solid var(--line); border-left: 3px solid var(--line-strong); background: var(--panel); }
+details.quiz > summary { cursor: pointer; color: var(--head); list-style: none; }
+details.quiz > summary::-webkit-details-marker { display: none; }
+details.quiz > summary::before { content: "+"; display: inline-block; width: 16px; color: var(--muted); }
+details.quiz[open] > summary::before { content: "\2212"; }
+details.quiz > :not(summary) { margin: 8px 0 2px 16px; color: var(--text); }
 .callout p { margin: 6px 0; }
 .callout .label { font: 600 11.5px var(--display); letter-spacing: .16em; text-transform: uppercase; }
 .callout.note { border-left-color: var(--head); }

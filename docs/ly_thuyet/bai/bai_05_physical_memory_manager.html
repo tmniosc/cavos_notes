@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bài 5 — Physical Memory Manager (PMM) · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/bai/bai_05_physical_memory_manager.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 5 - Physical Memory Manager</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, memory</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<p><strong>Files:</strong> <code>memory/pmm.c</code>, <code>utilities/data_structures/bitmap.c</code>, <code>include/bitmap.h</code>, <code>include/pmm.h</code><br/>
+<strong>Đầu vào:</strong> <code>memmap</code> + <code>mmTotal</code> + <code>hhdmOffset</code> từ <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a><br/>
+<strong>Thực hành:</strong> <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (nửa PMM)</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Sau bài này kernel biết ô RAM vật lý nào còn trống, và cấp/thu hồi được từng ô.</em></p>
+<p>Memmap của Limine chỉ nói RAM nào <em>tồn tại</em>. PMM (Physical Memory Manager) theo dõi ô nào <em>đang có người dùng</em>. Mọi thứ cần bộ nhớ về sau đều bắt đầu bằng <code>PhysicalAllocate()</code>; việc đầu tiên là <a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> xin ô RAM để làm page table.</p>
+<figure class="diagram">
+<svg id="svg-pmm-role" role="img" aria-label="memmap feeds the PMM, the PMM serves allocate and free calls" width="100%" viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-pmm-role-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-pmm-role .lbl{fill:#c2c0b6;} #svg-pmm-role .mono{font-family:'SF Mono',Consolas,monospace;} #svg-pmm-role .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="20" y="30" width="210" height="70" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="125" y="54" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">memmap (Limine)</text>
+<text x="125" y="72" text-anchor="middle" fill="#B4B2A9" font-size="9">which RAM exists</text>
+<text x="125" y="87" text-anchor="middle" fill="#B4B2A9" font-size="9">static, read once at boot</text>
+<rect x="275" y="30" width="210" height="70" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="380" y="54" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">PMM</text>
+<text x="380" y="72" text-anchor="middle" fill="#D8A54A" font-size="9">which 4 KiB frames are free</text>
+<text x="380" y="87" text-anchor="middle" fill="#D8A54A" font-size="9">dynamic, one bit per frame</text>
+<rect x="530" y="30" width="210" height="70" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="635" y="54" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">callers</text>
+<text x="635" y="72" text-anchor="middle" fill="#B4B2A9" class="mono" font-size="9">PhysicalAllocate(n) → PA</text>
+<text x="635" y="87" text-anchor="middle" fill="#B4B2A9" class="mono" font-size="9">PhysicalFree(pa, n)</text>
+<line x1="230" y1="65" x2="273" y2="65" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-role-arrow)"/>
+<line x1="485" y1="65" x2="528" y2="65" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-role-arrow)"/>
+<text x="380" y="130" text-anchor="middle" class="lbl" font-size="9">callers: page tables (Bài 6), heap, per-task stack and page directory (Bài 12), driver and FS buffers</text>
+<text x="380" y="148" text-anchor="middle" class="lbl" font-size="9">the PMM deals only in physical addresses — choosing a virtual address is the VMM's job</text>
+</svg>
+</figure>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>PMM giống một <strong>quyển sổ giữ kho RAM</strong>. RAM được chia thành rất nhiều ô 4 KiB, gọi là <em>frame</em>. Sổ có một bit cho mỗi ô: 1 là đang dùng, 0 là trống. Cả quyển sổ gọi là <strong>bitmap</strong>. Ai cần bộ nhớ thì xin "một ô trống" (<code>PhysicalAllocate</code>), xong thì trả lại (<code>PhysicalFree</code>); PMM tra sổ, sửa bit, đưa địa chỉ.</p>
+<figure class="diagram">
+<svg id="svg-bitmap-frames" role="img" aria-label="six RAM frames with their bits; the first zero bit is frame 2" width="100%" viewBox="0 0 760 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-bitmap-frames .lbl{fill:#c2c0b6;} #svg-bitmap-frames .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bitmap-frames .tline{stroke:rgba(222,220,209,0.3);} #svg-bitmap-frames .fr{fill:#2C4E33;stroke:#8FC79A;stroke-width:1;} #svg-bitmap-frames .frt{fill:#C6E7CC;} #svg-bitmap-frames .frs{fill:#8FC79A;} #svg-bitmap-frames .bit{fill:#444441;stroke:#B4B2A9;stroke-width:1;} #svg-bitmap-frames .bitt{fill:#D3D1C7;}</style>
+</defs>
+<text x="120" y="62" text-anchor="end" class="lbl" font-size="10">RAM frames</text>
+<text x="120" y="134" text-anchor="end" class="lbl" font-size="10">bitmap bits</text>
+<rect x="130" y="34" width="95" height="48" class="fr"/><text x="177" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 0</text><text x="177" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x0000</text>
+<rect x="225" y="34" width="95" height="48" class="fr"/><text x="272" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 1</text><text x="272" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x1000</text>
+<rect x="320" y="34" width="95" height="48" class="fr"/><text x="367" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 2</text><text x="367" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x2000</text>
+<rect x="415" y="34" width="95" height="48" class="fr"/><text x="462" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 3</text><text x="462" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x3000</text>
+<rect x="510" y="34" width="95" height="48" class="fr"/><text x="557" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 4</text><text x="557" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x4000</text>
+<rect x="605" y="34" width="95" height="48" class="fr"/><text x="652" y="54" text-anchor="middle" class="frt" font-size="10" font-weight="600">frame 5</text><text x="652" y="70" text-anchor="middle" class="frs mono" font-size="8.5">PA 0x5000</text>
+<line x1="177" y1="82" x2="177" y2="112" class="tline" stroke-width="1"/>
+<line x1="272" y1="82" x2="272" y2="112" class="tline" stroke-width="1"/>
+<line x1="367" y1="82" x2="367" y2="112" class="tline" stroke-width="1"/>
+<line x1="462" y1="82" x2="462" y2="112" class="tline" stroke-width="1"/>
+<line x1="557" y1="82" x2="557" y2="112" class="tline" stroke-width="1"/>
+<line x1="652" y1="82" x2="652" y2="112" class="tline" stroke-width="1"/>
+<rect x="130" y="112" width="95" height="36" class="bit"/><text x="177" y="135" text-anchor="middle" class="bitt mono" font-size="12">1</text>
+<rect x="225" y="112" width="95" height="36" class="bit"/><text x="272" y="135" text-anchor="middle" class="bitt mono" font-size="12">1</text>
+<rect x="320" y="112" width="95" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/><text x="367" y="135" text-anchor="middle" fill="#F0DBAE" class="mono" font-size="12">0 → 1</text>
+<rect x="415" y="112" width="95" height="36" class="bit"/><text x="462" y="135" text-anchor="middle" class="bitt mono" font-size="12">1</text>
+<rect x="510" y="112" width="95" height="36" class="bit"/><text x="557" y="135" text-anchor="middle" class="bitt mono" font-size="12">0</text>
+<rect x="605" y="112" width="95" height="36" class="bit"/><text x="652" y="135" text-anchor="middle" class="bitt mono" font-size="12">0</text>
+<text x="130" y="176" class="lbl" font-size="9.5">PhysicalAllocate(1): scan from the left for the first 0 → bit 2 → set it to 1 → return PA 0x2000</text>
+<text x="130" y="192" class="lbl" font-size="9">1 = used, 0 = free; the bitmap stores state only, never the frame's contents</text>
+</svg>
+</figure>
+<p>Có một chuyện "con gà và quả trứng": bản thân quyển sổ cũng phải nằm trong RAM. Nên PMM tự tìm chỗ đặt sổ, rồi tự đánh dấu chỗ đó là "đang dùng" để không bao giờ cấp nó cho ai. Lúc khởi tạo, PMM đánh dấu <em>mọi</em> ô là đang dùng, rồi chỉ mở đúng những vùng Limine báo là dùng được. Ô nào lạ thì cứ coi là đang dùng, không bao giờ cấp nhầm.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Memmap và HHDM đã có từ Bài 3; mới ở đây là frame 4 KiB và cấu trúc bitmap.</em></p>
+<ul>
+<li><strong>Memmap, các loại vùng (USABLE, RESERVED, BOOTLOADER_RECLAIMABLE...) và <code>mmTotal</code></strong> — đã gặp ở <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</li>
+<li><strong>HHDM, địa chỉ vật lý (PA) và địa chỉ ảo (VA)</strong> — đã gặp ở <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>, dùng lại ở <a href="bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a>. Nhắc lại một dòng: CPU chỉ đọc/ghi qua VA; có PA trong tay thì cộng <code>hhdmOffset</code> để ra VA dùng được. Đọc sâu: <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
+<li><strong>Frame (khung trang) 4 KiB.</strong> Phần cứng paging của x86_64 chia bộ nhớ thành trang 4 KiB, nên RAM vật lý cũng được chia thành ô cùng cỡ, gọi là frame. Frame thứ k bắt đầu ở PA <code>k × 4096</code>. Đây là đơn vị nhỏ nhất PMM cấp ra. Đọc sâu: <a href="../khai_niem/paging.html#2-trang-page-4-kib-đơn-vị-nhỏ-nhất">Paging - trang 4 KiB</a>.</li>
+<li><strong>Bitmap (cấu trúc dữ liệu).</strong> Một mảng byte, dùng mỗi bit cho một phần tử. Phần tử k nằm ở byte <code>k / 8</code>, bit <code>k % 8</code>. Một byte theo dõi được 8 frame, nên 256 MiB RAM (65 536 frame) chỉ cần 8 KiB sổ. Code cavOS ở mục bên dưới.</li>
+</ul>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Từ con số tổng RAM, qua <code>initiatePMM()</code>, tới hai hàm cấp và trả frame.</em></p>
+<p>Trong <code>entry/kernel.c:_start()</code>, ngay sau phần màn hình của Bài 4:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// None of the two depend on paging
+initiatePMM();   // memory/pmm.c — bài này
+initiateVMM();   // memory/vmm.c — Bài 6</code></pre></div>
+
+<h3 id="mmtotal">1. Đầu vào: tổng RAM <code>mmTotal</code> (<code>entry/bootloader.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// Total memory
+bootloader.mmTotal = 0;
+for (int i = 0; i &lt; mm_response-&gt;entry_count; i++) {
+  struct limine_memmap_entry *entry = mm_response-&gt;entries[i];
+  // entry-&gt;type != LIMINE_MEMMAP_FRAMEBUFFER &amp;&amp;
+  if (entry-&gt;type != LIMINE_MEMMAP_RESERVED)
+    bootloader.mmTotal += entry-&gt;length;
+}</code></pre></div>
+<p><code>mmTotal</code> là <strong>tổng độ dài</strong> các vùng không phải RESERVED, không phải "địa chỉ cao nhất". Lý do nằm ở sơ đồ dưới: RAM không phải một dải liền từ 0. Không gian địa chỉ vật lý là một bản đồ chung; RAM chỉ chiếm vài mảnh, xen giữa là vùng BIOS/ACPI và MMIO của thiết bị (Bài 4). Lấy địa chỉ cao nhất sẽ làm bitmap phình theo các lỗ đó.</p>
+<figure class="diagram">
+<svg id="svg-phys-mem-not-contiguous" role="img" aria-label="phys mem not contiguous" width="100%" viewBox="0 0 760 254" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-phys-mem-not-contiguous-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-phys-mem-not-contiguous .lbl{fill:#5c5a52;} #svg-phys-mem-not-contiguous .mono{font-family:'SF Mono',Consolas,monospace;} #svg-phys-mem-not-contiguous .tline{stroke:#c7c4ba;} #svg-phys-mem-not-contiguous .flow{stroke:#8C8A82;} #svg-phys-mem-not-contiguous .lbl{fill:#c2c0b6;} #svg-phys-mem-not-contiguous .tline{stroke:rgba(222,220,209,0.3);} #svg-phys-mem-not-contiguous .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="30" y="26" class="lbl" font-size="9.5">low physical addresses</text>
+<text x="730" y="26" text-anchor="end" class="lbl" font-size="9.5">high physical addresses</text>
+<!-- boundary addresses -->
+<text x="34" y="46" class="lbl mono" font-size="8.5">0x1000</text>
+<text x="192" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0x100000</text>
+<text x="490" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0xfd000000</text>
+<text x="676" y="46" text-anchor="middle" class="lbl mono" font-size="8.5">0xfd00000000</text>
+<!-- the map -->
+<rect x="30" y="54" width="40" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="50" y="86" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600" class="mono">BR</text>
+<rect x="70" y="54" width="90" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="115" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<text x="115" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">252 KB</text>
+<rect x="160" y="54" width="32" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="176" y="86" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600" class="mono">R</text>
+<rect x="192" y="54" width="190" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="287" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<text x="287" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">~254 MiB — the main block</text>
+<rect x="382" y="54" width="32" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="398" y="86" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600" class="mono">BR</text>
+<rect x="414" y="54" width="76" height="54" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="452" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9" font-weight="600">KERNEL</text>
+<text x="452" y="95" text-anchor="middle" fill="#85B7EB" font-size="8.5">in use</text>
+<rect x="490" y="54" width="96" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="538" y="80" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600">FRAMEBUF</text>
+<text x="538" y="95" text-anchor="middle" fill="#EEC2C2" font-size="8.5">MMIO</text>
+<rect x="586" y="54" width="76" height="54" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="624" y="86" text-anchor="middle" fill="#D3D1C7" font-size="8.5">gap</text>
+<rect x="662" y="54" width="68" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="696" y="80" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600">RESERVED</text>
+<text x="696" y="95" text-anchor="middle" fill="#EEC2C2" font-size="8.5">high MMIO</text>
+<!-- brackets -->
+<line x1="30" y1="126" x2="490" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="30" y1="120" x2="30" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="490" y1="120" x2="490" y2="126" class="tline" stroke-width="1.2"/>
+<text x="260" y="144" text-anchor="middle" class="lbl" font-size="9">real RAM — USABLE and BR are what the PMM may hand out</text>
+<line x1="490" y1="126" x2="730" y2="126" class="tline" stroke-width="1.2"/>
+<line x1="730" y1="120" x2="730" y2="126" class="tline" stroke-width="1.2"/>
+<text x="610" y="144" text-anchor="middle" class="lbl" font-size="9">not RAM — devices; a write here</text>
+<text x="610" y="158" text-anchor="middle" class="lbl" font-size="9">drives hardware, it stores nothing</text>
+<text x="380" y="188" text-anchor="middle" class="lbl" font-size="9">BR = BOOT_RECLAIM (Limine structures, reclaimable once read) · R = RESERVED · gap = neither RAM nor device</text>
+<text x="380" y="208" text-anchor="middle" class="lbl" font-size="9">the address space has holes — so total RAM must be summed from region lengths,</text>
+<text x="380" y="222" text-anchor="middle" class="lbl" font-size="9">never taken as "the highest address seen", which would balloon past the MMIO hole</text>
+<text x="380" y="242" text-anchor="middle" class="lbl" font-size="8.5">not to scale</text>
+</svg>
+</figure>
+<ul>
+<li>RAM có lỗ: vùng BIOS quanh <code>0x9fc00</code>, PCI hole quanh <code>0xfd000000</code>.</li>
+<li>Địa chỉ cao không phải RAM: <code>0xfd000000</code> (framebuffer) và <code>0xfd00000000</code> là MMIO.</li>
+<li>Dòng comment cho thấy tác giả từng tính bỏ cả FRAMEBUFFER, nhưng code hiện tại vẫn cộng nó (chỉ loại RESERVED).</li>
+</ul>
+
+<h3 id="ds-bitmap">2. Cấu trúc <code>DS_Bitmap</code> (<code>include/bitmap.h</code>, <code>include/pmm.h</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct DS_Bitmap {
+  uint8_t *Bitmap;
+  size_t   BitmapSizeInBlocks; // CEIL(x / BLOCK_SIZE)
+  size_t   BitmapSizeInBytes;  // CEIL(blockSize / 8)
+  size_t allocatedSizeInBlocks;
+  size_t lastDeepFragmented;   // optimization(1), xem mục 5
+  size_t mem_start;
+  bool   ready; // has been initiated
+} DS_Bitmap;
+
+#define BLOCKS_PER_BYTE 8 // using uint8_t
+#define BLOCK_SIZE 4096
+#define INVALID_BLOCK ((size_t)-1)
+
+// include/pmm.h
+DS_Bitmap physical;</code></pre></div>
+<p>"Block" trong code chính là frame 4 KiB. <code>physical</code> là biến toàn cục nên mọi trường khởi đầu bằng 0, trong đó <strong><code>mem_start = 0</code></strong>. Vì vậy block k ứng đúng với PA <code>k × 4096</code>, và địa chỉ <code>PhysicalAllocate</code> trả về là PA dùng thẳng được.</p>
+
+<h3 id="initiatepmm">3. <code>initiatePMM()</code> — dựng quyển sổ (<code>memory/pmm.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiatePMM() {
+  DS_Bitmap *bitmap = &amp;physical;
+  bitmap-&gt;ready = false;
+
+  // (1) cỡ sổ: số frame, rồi số byte
+  physical.BitmapSizeInBlocks = DivRoundUp(bootloader.mmTotal, BLOCK_SIZE);
+  physical.BitmapSizeInBytes = DivRoundUp(physical.BitmapSizeInBlocks, 8);
+
+  // (2) tìm vùng USABLE đầu tiên đủ chỗ chứa sổ
+  struct limine_memmap_entry *mm = 0;
+  for (int i = 0; i &lt; bootloader.mmEntryCnt; i++) {
+    struct limine_memmap_entry *entry = bootloader.mmEntries[i];
+    if (entry-&gt;type != LIMINE_MEMMAP_USABLE ||
+        entry-&gt;length &lt; physical.BitmapSizeInBytes)
+      continue;
+    mm = entry;
+    break;
+  }
+  if (!mm) { debugf("[pmm] Not enough memory: ..."); panic(); }
+
+  // (3) đặt sổ ở đầu vùng đó, truy cập qua HHDM
+  size_t bitmapStartPhys = mm-&gt;base;
+  physical.Bitmap = (uint8_t *)(bitmapStartPhys + bootloader.hhdmOffset);
+
+  // (4) đóng hết, mở USABLE, đóng lại phần không phải USABLE
+  memset(physical.Bitmap, 0xff, physical.BitmapSizeInBytes);
+  for (...) if (entry-&gt;type == LIMINE_MEMMAP_USABLE)
+      MarkRegion(bitmap, (void *)entry-&gt;base, entry-&gt;length, 0);
+  for (...) if (entry-&gt;type != LIMINE_MEMMAP_USABLE)
+      MarkRegion(bitmap, (void *)entry-&gt;base, entry-&gt;length, 1);
+
+  // (5) tự đánh dấu chỗ của chính quyển sổ
+  MarkRegion(bitmap, (void *)bitmapStartPhys, physical.BitmapSizeInBytes, 1);
+  physical.allocatedSizeInBlocks = 0;
+
+  debugf("[pmm] Bitmap initiated: bitmapStartPhys{0x%lx} size{%lx}\n", ...);
+  bitmap-&gt;ready = true;
+}</code></pre></div>
+<ul>
+<li><strong>Bước 2–3:</strong> sổ không cần allocator nào khác; nó tự chiếm đầu vùng USABLE đầu tiên đủ lớn. Ghi vào sổ qua VA HHDM, vì CPU không ghi thẳng bằng PA được.</li>
+<li><strong>Bước 4:</strong> <code>memset 0xff</code> làm mọi frame thành "đang dùng". Sau đó chỉ vùng USABLE được mở. Frame nằm trong lỗ địa chỉ không thuộc entry nào, nên giữ nguyên 1 mãi mãi. Vòng thứ ba đánh dấu lại mọi vùng non-USABLE là đang dùng, cho chắc.</li>
+<li><strong>Bước 5:</strong> nếu thiếu bước này, frame đầu tiên được cấp chính là chỗ đang chứa sổ.</li>
+</ul>
+<p>Log thật khi boot cavOS (QEMU <code>-m 4g</code>, <code>lab/outputs/cavos-boot-2026-09-03.txt</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pmm] Bitmap initiated: bitmapStartPhys{0x60000} size{20050}</code></pre></div>
+<p><code>%lx</code> in hex không có tiền tố: <code>0x20050</code> = 131 152 byte ≈ 128 KiB, đúng cỡ cho khoảng 4 GiB (4 GiB / 4 KiB / 8 = 131 072 byte). Sổ nằm ở <code>0x60000</code>, đầu một vùng USABLE thấp.</p>
+
+<h3 id="bit-get-set">4. Đọc/ghi một bit, đổi địa chỉ ↔ block (<code>bitmap.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>int BitmapGet(DS_Bitmap *bitmap, size_t block) {
+  size_t addr = block / BLOCKS_PER_BYTE;
+  size_t offset = block % BLOCKS_PER_BYTE;
+  return (bitmap-&gt;Bitmap[addr] &amp; (1 &lt;&lt; offset)) != 0;
+}
+void BitmapSet(DS_Bitmap *bitmap, size_t block, bool value) {
+  ... if (value) Bitmap[addr] |= (1 &lt;&lt; offset);
+      else       Bitmap[addr] &amp;= ~(1 &lt;&lt; offset);
+}
+
+void *ToPtr(DS_Bitmap *bitmap, size_t block)       // block → địa chỉ
+  { return (void *)(bitmap-&gt;mem_start + block * BLOCK_SIZE); }
+size_t ToBlock(DS_Bitmap *bitmap, void *ptr)       // địa chỉ → block, làm tròn xuống
+  { return (size_t)(ptr - mem_start) / BLOCK_SIZE; }
+size_t ToBlockRoundUp(DS_Bitmap *bitmap, void *ptr) // địa chỉ → block, làm tròn lên
+  { return DivRoundUp((size_t)(ptr - mem_start), BLOCK_SIZE); }</code></pre></div>
+<p>Comment đầu <code>bitmap.c</code> viết <code>10000000 -&gt; first block is allocated</code>: chuỗi đó đọc từ trái sang theo thứ tự block. Còn bên trong một byte, block nhỏ nhất là bit 0 (bit thấp nhất).</p>
+<p><strong><code>MarkRegion(base, sizeBytes, isUsed)</code></strong> đánh dấu cả một vùng, và làm tròn khác nhau tuỳ chiều:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>if (isUsed) {
+  base = ToBlock(bitmap, basePtr);              // tròn xuống
+  size = DivRoundUp(sizeBytes, BLOCK_SIZE);     // tròn lên
+} else {
+  base = ToBlockRoundUp(bitmap, basePtr);       // tròn lên
+  size = sizeBytes / BLOCK_SIZE;                // tròn xuống
+}
+MarkBlocks(bitmap, base, size, isUsed);</code></pre></div>
+<ul>
+<li><strong>Đánh dấu "dùng":</strong> phủ rộng ra, chỉ cần frame có một byte bị dùng là đóng cả frame.</li>
+<li><strong>Đánh dấu "trống":</strong> co hẹp lại, chỉ mở frame nằm trọn trong vùng. Mở nhầm một frame chỉ trống một nửa là cấp đè dữ liệu của người khác.</li>
+</ul>
+
+<h3 id="find-free">5. Tìm chỗ trống: <code>FindFreeRegion</code> và <code>lastDeepFragmented</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>size_t FindFreeRegion(DS_Bitmap *bitmap, size_t blocks) {
+  size_t currentRegionStart = bitmap-&gt;lastDeepFragmented;
+  size_t currentRegionSize = 0;
+  for (size_t i = currentRegionStart; i &lt; bitmap-&gt;BitmapSizeInBlocks; i++) {
+    if (BitmapGet(bitmap, i)) {          // gặp frame đang dùng: đếm lại từ frame sau
+      currentRegionSize = 0;
+      currentRegionStart = i + 1;
+    } else {
+      if (blocks == 1)                    // optimization(1)
+        bitmap-&gt;lastDeepFragmented = currentRegionStart + 1;
+      currentRegionSize++;
+      if (currentRegionSize &gt;= blocks)    // đủ số frame liền nhau
+        return currentRegionStart;
+    }
+  }
+  return INVALID_BLOCK;
+}</code></pre></div>
+<ul>
+<li><strong>First-fit:</strong> lấy dải trống liền nhau <em>đầu tiên</em> đủ dài, không tìm dải vừa khít nhất.</li>
+<li><strong><code>lastDeepFragmented</code>:</strong> mốc mà mọi frame phía dưới đều đang dùng. Cấp một frame xong, mốc nhảy tới ngay sau frame đó, nên lần sau khỏi quét lại từ đầu. Khi trả một frame thấp hơn mốc, <code>MarkBlocks</code> kéo mốc xuống. Cấp từng frame một trong vòng lặp là kiểu dùng phổ biến nhất, nên tối ưu này đáng giá.</li>
+<li><code>BitmapAllocate(bitmap, blocks)</code> gọi hàm này, đánh dấu dải tìm được là 1, rồi trả <code>ToPtr(...)</code>; không tìm thấy thì trả 0.</li>
+</ul>
+
+<h3 id="api">6. API cho cả kernel: <code>PhysicalAllocate</code> / <code>PhysicalFree</code> (<code>memory/pmm.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>size_t PhysicalAllocate(int pages) {
+  spinlockAcquire(&amp;LOCK_PMM);
+  size_t phys = (size_t)BitmapAllocate(&amp;physical, pages);
+  spinlockRelease(&amp;LOCK_PMM);
+  if (!phys) {
+    debugf("[vmm::alloc] Physical kernel memory ran out!\n");
+    panic();
+  }
+  return phys;
+}
+
+void PhysicalFree(size_t ptr, int pages) {
+  spinlockAcquire(&amp;LOCK_PMM);
+  MarkRegion(&amp;physical, (void *)ptr, pages * BLOCK_SIZE, 0);
+  spinlockRelease(&amp;LOCK_PMM);
+}</code></pre></div>
+<ul>
+<li>Trả về <strong>PA</strong> của <code>pages</code> frame liền nhau. Muốn đọc/ghi nội dung thì cộng <code>hhdmOffset</code>.</li>
+<li>Hết RAM thì <strong>panic</strong>, không lặng lẽ trả NULL.</li>
+<li>Spinlock <code>LOCK_PMM</code> giữ cho hai CPU không sửa sổ cùng lúc (SMP về sau).</li>
+</ul>
+
+<h3 id="toan-canh">7. Toàn cảnh</h3>
+<p>Mỗi vùng memmap ứng với một dải bit trong sổ; frame cấp ra lấy từ dải bit 0 trong vùng USABLE.</p>
+<figure class="diagram">
+<svg id="svg-pmm-bitmap-mapping" role="img" aria-label="pmm bitmap mapping" width="100%" viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-pmm-bitmap-mapping-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-pmm-bitmap-mapping .lbl{fill:#5c5a52;} #svg-pmm-bitmap-mapping .mono{font-family:'SF Mono',Consolas,monospace;} #svg-pmm-bitmap-mapping .tline{stroke:#c7c4ba;} #svg-pmm-bitmap-mapping .flow{stroke:#8C8A82;} #svg-pmm-bitmap-mapping .lbl{fill:#c2c0b6;} #svg-pmm-bitmap-mapping .tline{stroke:rgba(222,220,209,0.3);} #svg-pmm-bitmap-mapping .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="40" y="26" class="lbl" font-size="10">physical memory map — one entry per region, reported by the bootloader</text>
+<rect x="40" y="36" width="150" height="46" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="115" y="64" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<rect x="190" y="36" width="80" height="46" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="230" y="64" text-anchor="middle" fill="#F0C9C9" font-size="9.5" font-weight="600">RESERVED</text>
+<rect x="270" y="36" width="230" height="46" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="385" y="58" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
+<text x="385" y="73" text-anchor="middle" fill="#8FC79A" font-size="8.5">the bitmap itself is stored in here</text>
+<rect x="500" y="36" width="110" height="46" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="555" y="64" text-anchor="middle" fill="#B5D4F4" font-size="9.5" font-weight="600">KERNEL</text>
+<rect x="610" y="36" width="110" height="46" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="665" y="64" text-anchor="middle" fill="#F0C9C9" font-size="9.5" font-weight="600">FRAMEBUFFER</text>
+<!-- mapping arrows -->
+<line x1="115" y1="82" x2="115" y2="146" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-bitmap-mapping-arrow)"/>
+<line x1="230" y1="82" x2="230" y2="146" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-bitmap-mapping-arrow)"/>
+<line x1="385" y1="82" x2="385" y2="146" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-bitmap-mapping-arrow)"/>
+<line x1="555" y1="82" x2="555" y2="146" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-bitmap-mapping-arrow)"/>
+<line x1="665" y1="82" x2="665" y2="146" class="flow" stroke-width="1.3" marker-end="url(#svg-pmm-bitmap-mapping-arrow)"/>
+<text x="40" y="140" class="lbl" font-size="10">bitmap — one bit per 4 KiB frame</text>
+<rect x="40" y="146" width="150" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="115" y="168" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">0 0 0 0 0 0</text>
+<text x="115" y="182" text-anchor="middle" fill="#B4B2A9" font-size="8">free</text>
+<rect x="190" y="146" width="80" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="230" y="168" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">1 1 1</text>
+<text x="230" y="182" text-anchor="middle" fill="#B4B2A9" font-size="8">used</text>
+<rect x="270" y="146" width="70" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="305" y="168" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">1 1 1</text>
+<text x="305" y="182" text-anchor="middle" fill="#D8A54A" font-size="8">the bitmap</text>
+<rect x="340" y="146" width="160" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="420" y="168" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">0 0 0 0 0 0 0</text>
+<text x="420" y="182" text-anchor="middle" fill="#B4B2A9" font-size="8">free — allocations come from here</text>
+<rect x="500" y="146" width="110" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="555" y="168" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">1 1</text>
+<text x="555" y="182" text-anchor="middle" fill="#B4B2A9" font-size="8">used</text>
+<rect x="610" y="146" width="110" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="665" y="168" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">1 1</text>
+<text x="665" y="182" text-anchor="middle" fill="#B4B2A9" font-size="8">used</text>
+<text x="40" y="222" class="lbl" font-size="9">build order — each step overwrites the previous one, so the order matters:</text>
+<text x="40" y="240" class="lbl mono" font-size="9">1. memset 0xff — assume everything is used, so address gaps stay closed forever</text>
+<text x="40" y="256" class="lbl mono" font-size="9">2. clear the USABLE regions — only these become allocatable</text>
+<text x="40" y="272" class="lbl mono" font-size="9">3. set the non-USABLE regions back, then mark the frames the bitmap itself occupies</text>
+<text x="40" y="292" class="lbl" font-size="9">chicken and egg: the first allocator has to find room for itself before it can hand out anything</text>
+</svg>
+</figure>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Nửa PMM của Lab 0x03: tự dựng bitmap từ memmap, cấp và trả frame, rồi kiểm sổ sách bằng số.</em></p>
+<p>Bài thực hành: <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (source <code>lab/src/oskernel-lab/03-pmm-vmm/</code>, file <code>pmm.c</code>). Nửa VMM của lab thuộc <a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>. Cần làm:</p>
+<ol>
+<li>Tính <code>mmTotal</code> giống cavOS (cộng <code>length</code> các vùng không RESERVED), suy ra số frame và cỡ bitmap.</li>
+<li>Đặt bitmap ở vùng USABLE đầu tiên đủ lớn, truy cập qua HHDM.</li>
+<li><code>memset 0xff</code> → mở USABLE → đóng non-USABLE → đánh dấu chính bitmap.</li>
+<li><code>pmm_alloc()</code> hai lần, <code>pmm_free()</code> hai lần, in số frame trống trước và sau.</li>
+</ol>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/03-pmm-vmm
+make run</code></pre></div>
+<p>Output thật (QEMU <code>-M q35 -m 256M</code>, 2026-09-03, trích <code>lab/outputs/lab-0x03-run-2026-09-03.txt</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pmm] total frames = 66405  bitmap bytes = 8301
+[pmm] bitmap at PA = 0x0000000000053000  (block #83)  VA = 0xffff800000053000
+[pmm] free frames  = 65181
+[pmm] alloc #1 PA  = 0x0000000000056000
+[pmm] alloc #2 PA  = 0x0000000000057000
+[pmm] free -2 = 65179  OK
+[pmm] free after free = 65181  OK (back to start)</code></pre></div>
+<p>Tự kiểm bằng số:</p>
+<ul>
+<li>Bitmap 8301 byte từ <code>0x53000</code> kết thúc ở <code>0x5506d</code>, chiếm 3 frame <code>0x53000</code>, <code>0x54000</code>, <code>0x55000</code>. Frame cấp đầu tiên <code>0x56000</code> nằm ngay sau.</li>
+<li>Bảng memmap trong cùng file có ba vùng USABLE: 304 K + 260 308 K + 124 K = 76 + 65 077 + 31 = 65 184 frame. Trừ 3 frame của bitmap còn 65 181, đúng dòng <code>free frames</code>.</li>
+<li>Cấp 2, trả 2 thì số frame trống quay về đúng 65 181.</li>
+</ul>
+<p>Lab khác cavOS ở hai chỗ: <code>bm_mark</code> làm tròn cùng một kiểu cho cả hai chiều (<code>base / PAGE_SIZE</code>, <code>DivRoundUp(len, PAGE_SIZE)</code>), và có thêm chặn biên (xem Đọc thêm).</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bấm vào câu hỏi để xem đáp án.</em></p>
+<details class="quiz"><summary>Vì sao <code>initiatePMM()</code> đặt mọi bit thành 1 trước, rồi mới mở vùng USABLE, chứ không làm ngược lại?</summary><p>Vì những frame không thuộc entry nào (lỗ địa chỉ) sẽ không bao giờ được vòng lặp nào chạm tới. Bắt đầu bằng 1 thì chúng mặc định "đang dùng" và không bao giờ bị cấp; bắt đầu bằng 0 thì chúng sẽ bị coi là trống.</p></details>
+<details class="quiz"><summary><code>PhysicalAllocate(1)</code> trả <code>0x56000</code>. Muốn xoá trắng frame đó, kernel phải <code>memset</code> vào địa chỉ nào?</summary><p>Vào <code>0x56000 + hhdmOffset</code> = <code>0xffff800000056000</code>. CPU coi mọi địa chỉ là địa chỉ ảo và dịch qua page table; PA phải được đổi sang VA trong HHDM trước khi dùng.</p></details>
+<details class="quiz"><summary>Khi đánh dấu "trống", <code>MarkRegion</code> làm tròn base lên và size xuống. Nếu làm ngược lại thì sao?</summary><p>Một vùng có mép không chia hết 4 KiB sẽ mở luôn frame chỉ trống một phần. Frame đó có thể bị cấp cho người khác trong khi phần còn lại vẫn đang chứa dữ liệu, hai bên ghi đè nhau.</p></details>
+<details class="quiz"><summary>QEMU cấp 256 MiB (65 536 frame) nhưng lab in <code>total frames = 66405</code>. Phần dư từ đâu ra?</summary><p><code>mmTotal</code> cộng mọi vùng không phải RESERVED, kể cả FRAMEBUFFER (4000 K = 1000 frame), BOOT_REC (217 frame) và KERNEL (4 frame). 65 184 USABLE + 217 + 4 + 1000 = 66 405. Sổ vì thế hơi to hơn số RAM thật, đổi lại code tính tổng đơn giản.</p></details>
+<details class="quiz"><summary>Vì sao <code>FindFreeRegion</code> được phép bắt đầu quét từ <code>lastDeepFragmented</code> mà không bỏ sót frame trống nào?</summary><p>Vì mốc đó chỉ dời lên ngay sau một frame vừa cấp, khi mọi frame phía dưới đều đang dùng; và mỗi lần trả một frame thấp hơn, <code>MarkBlocks</code> kéo mốc xuống lại. Nên phía dưới mốc luôn không có frame trống.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Lỗi thật đã gặp khi làm lab, chỗ cavOS không chặn biên, và các liên hệ.</em></p>
+
+<h3 id="bug-lam-tron">Lab 0x03 đã vá một lỗi làm tròn khi đánh dấu bitmap</h3>
+<p>Bản đầu của <code>bm_mark</code> trong lab tính số frame bằng <code>n = len / PAGE</code>, tức làm tròn <strong>xuống</strong>. Mọi vùng memmap đều dài bội số của 4 KiB nên không sao; chỉ riêng lần tự đánh dấu bitmap (8301 byte, không chia hết) là lộ lỗi.</p>
+<p>Ở lần chạy cũ (2026-06-01, <code>lab/outputs/lab-0x03-run.txt</code>), bitmap nằm ở <code>0x60000</code>–<code>0x6206d</code>, trải 3 frame nhưng chỉ 2 frame được đánh dấu. Frame thứ ba <code>0x62000</code> vẫn "trống" trong khi đang chứa 109 byte cuối của bitmap, và đúng là <code>alloc #1 PA = 0x62000</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pmm] bitmap at PA = 0x0000000000060000  (block #96)  VA = 0xffff800000060000
+[pmm] free frames  = 65196
+[pmm] alloc #1 PA  = 0x0000000000062000</code></pre></div>
+<p>Lần đó không sập chỉ vì may. Frame <code>0x62000</code> được <code>paging_init</code> dùng làm PML4 mới và chép đủ 512 entry từ PML4 của Limine vào. Theo trang lab, PML4 này chỉ có entry 192/256/511 khác 0 (từ byte 1536 trở đi; entry 192 do <code>vmap</code> thêm sau), nên 109 byte đầu bị ghi đè bằng số 0. 109 byte đó là bit của block 65 536 trở lên, tức PA từ <code>0x10000000</code>: phía trên 256 MiB RAM, không có RAM thật. Sổ vì thế báo khoảng 869 frame "ảo" là trống. Lab chỉ cấp vài frame ở vùng thấp nên chưa bao giờ chạm tới chúng; một chương trình cấp nhiều hơn sẽ nhận về địa chỉ không có RAM phía sau. Bản sửa dùng <code>DivRoundUp(len, PAGE_SIZE)</code>; lần chạy 2026-09-03 ở mục Tự làm cho thấy frame cấp đầu tiên nằm ngay <em>sau</em> frame cuối của bitmap. cavOS không dính lỗi này vì nhánh "dùng" của <code>MarkRegion</code> đã làm tròn lên.</p>
+
+<h3 id="chan-bien">cavOS không chặn biên trong <code>MarkBlocks</code></h3>
+<p><code>MarkBlocks</code> lặp <code>BitmapSet</code> từ <code>start</code> tới <code>start + size</code> mà không so với <code>BitmapSizeInBlocks</code>. Vòng "đóng non-USABLE" có chạm những entry ở địa chỉ rất cao, như framebuffer <code>0xfd000000</code> hay vùng RESERVED <code>0xfd00000000</code>. Chỉ số block của chúng lớn hơn nhiều so với số block mà sổ có (sổ chỉ tính theo <code>mmTotal</code>), nên các bit đó rơi ra ngoài sổ, ghi vào RAM nằm sau sổ qua HHDM. Lab thêm một dòng chặn trong <code>bm_mark</code>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>for (uint64_t i = 0; i &lt; count; i++) {
+    if (first + i &gt;= blocks)   // GUARD: không ghi ra ngoài bitmap
+        break;
+    ...
+}</code></pre></div>
+<p>Trước đó lab còn từng tính cỡ sổ theo "địa chỉ cuối cao nhất" thay vì <code>mmTotal</code>, làm bitmap phình tới khoảng 33 MB vì entry <code>0xfd00000000</code>. Đổi sang cách cộng dồn của cavOS thì còn 8 KB.</p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở cũ (đã trả lời)</h3>
+<ul>
+<li><strong>Bitmap đặt ở đâu?</strong> Ngay đầu vùng USABLE đầu tiên đủ lớn (<code>mm-&gt;base</code>), truy cập qua HHDM; tự <code>MarkRegion</code> chính nó là đang dùng.</li>
+<li><strong>Vùng reserved/ACPI/framebuffer xử lý sao?</strong> <code>memset 0xff</code> (mặc định đang dùng) rồi chỉ mở USABLE; non-USABLE được đánh dấu lại là đang dùng thêm một lần.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>PMM cấp frame vật lý; <a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> dùng chúng làm page table và map VA → PA. <code>initiateVMM()</code> (<code>memory/vmm.c</code>) còn dựng một <code>DS_Bitmap virtual</code> cùng cấu trúc, để quản lý vùng địa chỉ ảo.</li>
+<li>Stack và page directory của mỗi task cũng xin từ PMM: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>.</li>
+<li><code>bitmap.c</code> là cấu trúc dữ liệu dùng chung (<code>DS_Bitmap</code>), còn dùng cho ext2: <a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li>Limine memmap types (USABLE/RESERVED/ACPI/BOOTLOADER_RECLAIMABLE/KERNEL_AND_MODULES/FRAMEBUFFER): <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</li>
+</ul>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Bài 5 - Physical Memory Manager</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

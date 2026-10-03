@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step 08 — IDT &amp; Interrupts · Học cavOS</title>
+<title>Bài 9 — IDT &amp; Interrupts · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
-<body data-root="../../" data-page="ly_thuyet/steps/step_08_idt_interrupts.html">
+<body data-root="../../" data-page="ly_thuyet/bai/bai_09_idt_interrupts.html">
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
-    <h1>Step 08 — IDT &amp; Interrupts</h1>
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 9 — IDT &amp; Interrupts</h1>
     <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, cpu, interrupt</span></div>
   </div>
 </header>
@@ -21,8 +21,8 @@
 <h2 id="mục-đích">Mục đích</h2>
 <p><strong>Cho CPU biết chạy hàm nào khi có ngắt/ngoại lệ.</strong> IDT là bảng 256 vector → handler. Không có nó, mọi lỗi
 CPU (#PF, #GP, chia 0...) hay ngắt thiết bị (bàn phím, timer) đều khiến máy treo/reset. Đây là cơ chế để
-kernel <strong>giành lại quyền điều khiển</strong> khỏi code đang chạy — nền cho timer (<a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>),
-preempt scheduler (<a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>), và xử lý page fault.</p>
+kernel <strong>giành lại quyền điều khiển</strong> khỏi code đang chạy — nền cho timer (<a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>),
+preempt scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>), và xử lý page fault.</p>
 <h2 id="mục-tiêu-học">Mục tiêu học</h2>
 <ul>
 <li>Dựng IDT 256 entry (gate descriptor), <code>lidt</code>.</li>
@@ -32,14 +32,14 @@ preempt scheduler (<a href="step_11_multitasking_scheduler.html">Step 11 - Multi
 <h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
 <ul>
 <li>[ ] Interrupt gate vs trap gate (IF bit)?</li>
-<li>[ ] Liên hệ IST trong <a href="step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>.</li>
+<li>[ ] Liên hệ IST trong <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>.</li>
 </ul>
 <h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
 <ul>
 <li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — IDT, exception vectors (0–31).</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Step 08 - IDT &amp; Interrupts</footer>
+<footer>Học cavOS · Bài 9 - IDT &amp; Interrupts</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

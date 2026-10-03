@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bài 3 - Bootloader Parser · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/bai/bai_03_bootloader_parser.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 3 - Bootloader Parser</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, boot</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Gom mọi câu trả lời của Limine vào một struct dùng chung.</em></p>
+<p>Bài này đọc các response Limine đã điền và chép vào struct toàn cục <code>bootloader</code>. Từ <a href="bai_04_framebuffer_console.html">Bài 4</a> trở đi,
+các hệ con tra struct này thay vì đụng thẳng vào API Limine: bộ quản lý RAM cần bản đồ RAM, paging cần độ lệch HHDM, ACPI cần địa chỉ RSDP.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Lúc giao máy, Limine để lại một tập giấy tờ về phần cứng: RAM ở đâu, kernel nằm chỗ nào, có mấy CPU, bảng ACPI ở đâu.
+Bài này <strong>gom hết vào một bìa hồ sơ</strong> (<code>struct bootloader</code>) để cả kernel về sau lấy ra dùng. Không tính toán gì phức tạp:
+chỉ đọc, kiểm vài điều kiện, và chép lại một lần.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba khái niệm mới, một đã gặp.</em></p>
+<ul>
+<li><strong>Request / response</strong> — đã gặp ở <a href="bai_01_boot_limine.html#request-response">Bài 1</a>: kernel khai biến request có magic, Limine điền con trỏ <code>.response</code>.</li>
+<li><strong>HHDM</strong> (Higher Half Direct Map) — Limine map <em>toàn bộ</em> RAM vật lý vào một vùng ở nửa cao, bắt đầu tại một độ lệch cố định.
+Nhờ vậy muốn đọc địa chỉ vật lý (PA) nào chỉ cần cộng: <code>VA = PA + hhdmOffset</code>. Kernel không thể đọc thẳng PA vì paging đã bật, mọi truy cập đều là địa chỉ ảo.
+Đọc sâu: <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
+<li><strong>Memory map</strong> — danh sách các vùng địa chỉ vật lý, mỗi vùng có <code>base</code>, <code>length</code> và loại (RAM trống, RAM bootloader mượn tạm, kernel, framebuffer, vùng cấm...).
+Firmware dựng danh sách này; Limine chỉ chuyển lại. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Limine Protocol</a> (mục 5b).</li>
+<li><strong>SMP và BSP</strong> — SMP (Symmetric Multi-Processing) là máy có nhiều nhân CPU. Lúc boot chỉ một nhân chạy, gọi là <strong>BSP</strong> (Bootstrap Processor);
+các nhân khác chờ được đánh thức. Mỗi nhân có một số <strong>LAPIC ID</strong> riêng. Đa nhân sẽ học ở <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
+</ul>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Một file, một hàm: <code>src/kernel/entry/bootloader.c</code> → <code>initialiseBootloaderParser()</code>, gọi ngay sau <a href="bai_02_serial_uart.html">serial</a> trong <code>_start()</code>.</em></p>
+
+<h3 id="so-do">Sơ đồ: response nào thành trường nào, ai dùng</h3>
+<figure class="diagram">
+<svg id="svg-bootloader-fields" role="img" aria-label="Limine responses copied into struct bootloader and their users" style="max-width:900px" width="100%" viewBox="0 0 720 290" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-bootloader-fields-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-bootloader-fields .h{font-size:10px;fill:#c2c0b6;letter-spacing:1px;} #svg-bootloader-fields .m{font-family:'SF Mono',Consolas,monospace;font-size:10.5px;} #svg-bootloader-fields .flow{stroke:#7d7b73;stroke-width:1.5;fill:none;} #svg-bootloader-fields .a{fill:#2C4E33;stroke:#8FC79A;} #svg-bootloader-fields .at{fill:#C6E7CC;} #svg-bootloader-fields .b{fill:#5C3F0E;stroke:#D8A54A;} #svg-bootloader-fields .bt{fill:#F0DBAE;} #svg-bootloader-fields .c{fill:#0C447C;stroke:#85B7EB;} #svg-bootloader-fields .ct{fill:#B5D4F4;}</style>
+</defs>
+<text x="20" y="22" class="h">LIMINE RESPONSE</text>
+<text x="236" y="22" class="h">FIELD OF bootloader</text>
+<text x="500" y="22" class="h">USED BY</text>
+<rect x="20" y="34" width="180" height="32" class="a"/><text x="30" y="54" class="m at">paging_mode</text>
+<line x1="200" y1="50" x2="232" y2="50" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="34" width="230" height="32" class="b"/><text x="246" y="54" class="m bt">(checked only: must be 4-level)</text>
+<line x1="466" y1="50" x2="496" y2="50" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="34" width="200" height="32" class="c"/><text x="510" y="54" class="m ct">memory/paging.c (Bài 6)</text>
+<rect x="20" y="76" width="180" height="32" class="a"/><text x="30" y="96" class="m at">hhdm</text>
+<line x1="200" y1="92" x2="232" y2="92" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="76" width="230" height="32" class="b"/><text x="246" y="96" class="m bt">hhdmOffset</text>
+<line x1="466" y1="92" x2="496" y2="92" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="76" width="200" height="32" class="c"/><text x="510" y="96" class="m ct">every PA access, vmm.c</text>
+<rect x="20" y="118" width="180" height="32" class="a"/><text x="30" y="138" class="m at">kernel_address</text>
+<line x1="200" y1="134" x2="232" y2="134" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="118" width="230" height="32" class="b"/><text x="246" y="138" class="m bt">kernelVirtBase, kernelPhysBase</text>
+<line x1="466" y1="134" x2="496" y2="134" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="118" width="200" height="32" class="c"/><text x="510" y="138" class="m ct">memory/paging.c (Bài 6)</text>
+<rect x="20" y="160" width="180" height="32" class="a"/><text x="30" y="180" class="m at">memmap</text>
+<line x1="200" y1="176" x2="232" y2="176" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="160" width="230" height="32" class="b"/><text x="246" y="180" class="m bt">mmEntries, mmEntryCnt, mmTotal</text>
+<line x1="466" y1="176" x2="496" y2="176" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="160" width="200" height="32" class="c"/><text x="510" y="180" class="m ct">memory/pmm.c (Bài 5)</text>
+<rect x="20" y="202" width="180" height="32" class="a"/><text x="30" y="222" class="m at">smp</text>
+<line x1="200" y1="218" x2="232" y2="218" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="202" width="230" height="32" class="b"/><text x="246" y="222" class="m bt">smp, smpBspIndex</text>
+<line x1="466" y1="218" x2="496" y2="218" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="202" width="200" height="32" class="c"/><text x="510" y="222" class="m ct">cpu/fastSyscall.c (Bài 16)</text>
+<rect x="20" y="244" width="180" height="32" class="a"/><text x="30" y="264" class="m at">rsdp</text>
+<line x1="200" y1="260" x2="232" y2="260" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="236" y="244" width="230" height="32" class="b"/><text x="246" y="264" class="m bt">rsdp (address − hhdmOffset)</text>
+<line x1="466" y1="260" x2="496" y2="260" class="flow" marker-end="url(#svg-bootloader-fields-arrow)"/>
+<rect x="500" y="244" width="200" height="32" class="c"/><text x="510" y="264" class="m ct">acpi/uacpi_glue.c (Bài 8)</text>
+</svg>
+<figcaption>Cột phải lấy từ <code>grep</code> các trường này trong <code>~/cavOS/src/kernel</code> (commit <code>2ba0edb</code>); <code>mmTotal</code> còn được <code>vmm.c</code>, <code>system.c</code>, shell và <code>/proc</code> dùng.</figcaption>
+</figure>
+
+<h3 id="sau-request">Sáu request được khai báo</h3>
+<p>Đầu <code>entry/bootloader.c</code>, đúng thứ tự trong file:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile struct limine_paging_mode_request liminePagingreq = {
+    .id = LIMINE_PAGING_MODE_REQUEST,
+    .revision = 0,
+    .mode = LIMINE_PAGING_MODE_X86_64_4LVL};
+
+static volatile struct limine_kernel_address_request limineKrnreq = {
+    .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0};
+
+static volatile struct limine_hhdm_request limineHHDMreq = {
+    .id = LIMINE_HHDM_REQUEST, .revision = 0};
+
+static volatile struct limine_memmap_request limineMMreq = {
+    .id = LIMINE_MEMMAP_REQUEST, .revision = 0};
+
+static volatile struct limine_smp_request limineSmpReq = {
+    .id = LIMINE_SMP_REQUEST, .revision = 0};
+
+static volatile struct limine_rsdp_request limineRsdpReq = {
+    .id = LIMINE_RSDP_REQUEST, .revision = 0};</code></pre></div>
+<p>Mỗi biến chỉ có <code>.id</code> (magic) và <code>.revision</code>; trường <code>.response</code> mặc định là <code>NULL</code> cho tới khi Limine điền.
+Riêng paging_mode còn gửi kèm mong muốn: <code>.mode = 4LVL</code> (bảng trang 4 tầng).</p>
+
+<h3 id="parser">Đọc từng response: <code>initialiseBootloaderParser()</code></h3>
+<p><strong>① Paging mode.</strong> Kiểm Limine có cho đúng 4 tầng không; không thì dừng hẳn, vì code paging ở <a href="bai_06_virtual_memory_paging.html">Bài 6</a> chỉ biết 4 tầng.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>struct limine_paging_mode_response *liminePagingres = liminePagingreq.response;
+if (liminePagingres-&gt;mode != LIMINE_PAGING_MODE_X86_64_4LVL) {
+  debugf("[paging] We explicitly asked for level 4 paging!\n");
+  panic();
+}</code></pre></div>
+<p><strong>② HHDM và ③ địa chỉ kernel.</strong> Chép thẳng ba con số.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>bootloader.hhdmOffset = limineHHDMres-&gt;offset;
+bootloader.kernelVirtBase = limineKrnres-&gt;virtual_base;
+bootloader.kernelPhysBase = limineKrnres-&gt;physical_base;</code></pre></div>
+<p><strong>④ Memory map và tổng RAM.</strong> Giữ con trỏ tới mảng entry, rồi cộng <code>length</code> của mọi vùng <em>không phải</em> <code>RESERVED</code>.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>bootloader.mmEntries = mm_response-&gt;entries;
+bootloader.mmEntryCnt = mm_response-&gt;entry_count;
+
+bootloader.mmTotal = 0;
+for (int i = 0; i &lt; mm_response-&gt;entry_count; i++) {
+  struct limine_memmap_entry *entry = mm_response-&gt;entries[i];
+  // entry-&gt;type != LIMINE_MEMMAP_FRAMEBUFFER &amp;&amp;
+  if (entry-&gt;type != LIMINE_MEMMAP_RESERVED)
+    bootloader.mmTotal += entry-&gt;length;
+}</code></pre></div>
+<p>Nên <code>mmTotal</code> <strong>không</strong> phải "RAM trống": nó tính cả vùng bootloader mượn, vùng kernel, cả framebuffer. Cũng không phải "địa chỉ cao nhất":
+lỗ MMIO ở địa chỉ cao bị bỏ qua. <a href="bai_05_physical_memory_manager.html">Bài 5</a> dùng nó để tính kích thước bitmap.</p>
+<p><strong>⑤ SMP.</strong> Giữ con trỏ tới danh sách CPU, rồi tìm vị trí của BSP bằng cách so LAPIC ID.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>bootloader.smp = smp_response;
+bootloader.smpBspIndex = (uint64_t)(-1);
+for (int i = 0; i &lt; smp_response-&gt;cpu_count; i++) {
+  struct limine_smp_info *entry = smp_response-&gt;cpus[i];
+  if (entry-&gt;lapic_id == smp_response-&gt;bsp_lapic_id)
+    bootloader.smpBspIndex = i;
+}
+if (bootloader.smpBspIndex == (uint64_t)(-1)) {
+  debugf("[bootloader] Couldn't find bootstrap core!\n");
+  panic();
+}</code></pre></div>
+<p><strong>⑥ RSDP.</strong> RSDP là bảng đầu tiên của ACPI (bảng mô tả bo mạch). Với base revision 2, Limine trả về địa chỉ <em>ảo</em> trong HHDM,
+nên cavOS trừ <code>hhdmOffset</code> để lưu địa chỉ vật lý; <code>uacpi_kernel_get_rsdp()</code> ở <a href="bai_08_acpi.html">Bài 8</a> cần đúng PA này.</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// todo: revision &gt;= 3 and it's not virtual!
+struct limine_rsdp_response *rsdp_response = limineRsdpReq.response;
+bootloader.rsdp = (size_t)rsdp_response-&gt;address - bootloader.hhdmOffset;</code></pre></div>
+
+<h3 id="struct-bootloader">Struct đích: <code>include/bootloader.h</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct Bootloader {
+  size_t hhdmOffset;            // ② ảo ↔ vật lý
+  size_t kernelVirtBase;        // ③ kernel ở đâu
+  size_t kernelPhysBase;
+
+  size_t rsdp;                  // ⑥ ACPI (PA)
+
+  size_t   mmTotal;             // ④ tổng các vùng không RESERVED
+  uint64_t mmEntryCnt;
+  LIMINE_PTR(struct limine_memmap_entry **) mmEntries;  // ④ bản đồ RAM
+  LIMINE_PTR(struct limine_smp_response *) smp;         // ⑤ danh sách CPU
+  uint64_t smpBspIndex;
+} Bootloader;
+
+Bootloader bootloader;</code></pre></div>
+<p><code>Bootloader bootloader;</code> nằm ngay trong header, nên mọi file <code>.c</code> include nó đều "định nghĩa" một bản. Link vẫn được vì Makefile có
+<code>-fcommon</code>: các định nghĩa không có giá trị đầu gộp lại thành một biến duy nhất.</p>
+
+<h3 id="cac-con-so">Các con số này nghĩa là gì</h3>
+<ul>
+<li><strong>② hhdmOffset</strong> (<code>0xffff800000000000</code> trong mọi lần chạy đã ghi lại): cộng vào PA bất kỳ ra VA đọc/ghi được ngay. Xem <a href="../khai_niem/hhdm.html">HHDM</a>, <a href="../khai_niem/paging.html">Paging</a> ý #5.</li>
+<li><strong>③ kernel_address</strong>: kernel có <strong>virt</strong> (<code>0xffffffff80000000</code>, địa chỉ link) và <strong>phys</strong> (nơi Limine chọn đặt kernel trong RAM; không được hard-code).
+Cùng một frame kernel vì thế có <strong>2 VA</strong> (qua HHDM và qua mapping kernel) trỏ về <strong>1 PA</strong>: đó là aliasing. Về KASLR: <a href="../khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</li>
+<li><strong>④ memmap</strong>: chỉ entry <code>LIMINE_MEMMAP_USABLE</code> mới được cấp phát; đây là đầu vào sống còn của <a href="bai_05_physical_memory_manager.html">Bài 5</a>.</li>
+<li><strong>⑥ rsdp</strong>: lưu dạng <strong>PA thuần</strong>; muốn đọc bảng ACPI phải <code>+ hhdmOffset</code> lại.</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Tự khai request và in câu trả lời của Limine ra serial.</em></p>
+<p><a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>: khai 4 request (HHDM, kernel_address, memmap, paging), kiểm <code>response != NULL</code>, in từng con số. Chạy trong WSL:</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/01-bootloader-parser
+make run</code></pre></div>
+<p>Output thật (chạy lại 2026-10-03, QEMU <code>-M q35 -m 256M</code>), lược bớt giữa memmap:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Step 02) ===
+[paging] mode = 4-level
+[hhdm]   offset = 0xffff800000000000
+[kernel] virt = 0xffffffff80000000
+         phys = 0x000000000ff42000
+[memmap]                                         ; 16 entries
+  [0] base=0x0000000000001000 len=0x0000000000052000 BOOT_RECLAIM
+  [1] base=0x0000000000053000 len=0x000000000004c000 USABLE
+  ...
+  [4] base=0x0000000000100000 len=0x000000000fe3f000 USABLE
+  ...
+  [6] base=0x000000000ff42000 len=0x0000000000003000 KERNEL_MODS
+  ...
+  [12] base=0x00000000fd000000 len=0x00000000003e8000 FRAMEBUFFER
+  ...
+  -- USABLE = 254 MiB / non-RES = 259 MiB
+[done] halt.</code></pre></div>
+<p>Entry <code>[6]</code> bắt đầu đúng bằng <code>phys</code> của kernel. <code>non-RES</code> chính là cách cavOS tính <code>mmTotal</code>, và lớn hơn <code>USABLE</code>.
+Lab khác cavOS: chỉ in ra chứ không gom vào struct, chưa xử lý RSDP và SMP.</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bấm vào câu hỏi để xem đáp án.</em></p>
+<details class="quiz"><summary>Vì sao cavOS trừ <code>hhdmOffset</code> khỏi địa chỉ RSDP rồi mới lưu?</summary>
+<p>Với base revision 2, Limine trả RSDP dưới dạng địa chỉ ảo trong HHDM. uACPI muốn địa chỉ vật lý, nên cavOS trừ độ lệch để về PA. Comment <code>todo</code> nhắc rằng từ revision 3 Limine trả PA sẵn, khi đó phép trừ sẽ sai.</p></details>
+<details class="quiz"><summary><code>mmTotal</code> có bằng lượng RAM cấp phát được không?</summary>
+<p>Không. Nó cộng mọi vùng không phải <code>RESERVED</code>, kể cả vùng bootloader, kernel và framebuffer. Trong lab: USABLE = 254 MiB nhưng non-RES = 259 MiB.</p></details>
+<details class="quiz"><summary>Nếu Limine không trả lời một request (<code>.response == NULL</code>) thì cavOS làm gì?</summary>
+<p>cavOS không kiểm; nó đọc thẳng qua con trỏ NULL và sẽ lỗi ngay. Lab thì kiểm <code>response != NULL</code> trước khi in, đó là cách an toàn nên làm.</p></details>
+<details class="quiz"><summary>Vì sao <code>hhdm</code> và <code>virt</code> giống hệt nhau giữa các lần chạy lab, còn <code>phys</code> thì không nên hard-code?</summary>
+<p><code>virt</code> là địa chỉ link trong <code>linker.ld</code> (lab link không PIE nên không thể dời). HHDM là độ lệch Limine chọn; mọi lần chạy đã ghi lại đều là <code>0xffff800000000000</code>, nhưng code vẫn đọc từ response chứ không viết cứng. <code>phys</code> là chỗ Limine tìm được RAM trống, phụ thuộc kích thước kernel và memmap: lần chạy 2026-05-28 là <code>0x0ffb2000</code>, lần 2026-09-03 là <code>0x0ff42000</code>.</p></details>
+<details class="quiz"><summary>Vì sao gom vào <code>struct bootloader</code> thay vì để mỗi file tự đọc response?</summary>
+<p>Chỉ một chỗ phụ thuộc vào API Limine; RSDP được đổi sang PA một lần; BSP được tìm một lần. Đổi bootloader sau này chỉ phải sửa một file.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Phần tra cứu, không cần cho bài sau.</em></p>
+<h3 id="luu-y">Lưu ý khi tự viết</h3>
+<ul>
+<li>Luôn kiểm <code>req.response != NULL</code> trước khi đọc (Limine có thể không cấp).</li>
+<li><code>include/bootloader.h</code> có macro <code>IS_INSIDE_HHDM(a)</code>: kiểm một địa chỉ có nằm trong <code>[hhdmOffset, hhdmOffset + mmTotal]</code> không.</li>
+</ul>
+<h3 id="so-do-lab">Sơ đồ RAM vật lý và địa chỉ ảo</h3>
+<p>Sơ đồ mũi tên aliasing với số thật: <a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>.
+Bảng đầy đủ 3 cột PA / VA-HHDM / VA-kernel cho mọi vùng: <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>pmm_dump_map</code>).</p>
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li>Limine protocol (struct request/response, memmap types): <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>, <a href="../khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>.</li>
+<li>ACPI RSDP: <a href="bai_08_acpi.html">Bài 8 - ACPI</a>, spec ACPI.</li>
+</ul>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Bài 3 - Bootloader Parser</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

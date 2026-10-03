@@ -101,8 +101,9 @@ $ mdir -i disk.img@@1M -/ -b ::
 <ul>
 <li>Phân vùng 1 có type <code>0x83</code> (Linux), không phải <code>0xEF</code>. Theo spec nó không phải ESP. OVMF vẫn boot được vì
 driver FAT của nó gắn vào mọi phân vùng FAT, không xét type. Firmware máy thật có thể khắt khe hơn; điều này chưa được thử.</li>
-<li><code>BOOTX64.EFI</code> trên đĩa trùng byte với <code>src/bootloader/limine/BOOTX64.EFI</code> (Limine <strong>10.1.1</strong>,
-theo <code>src/bootloader/assert.sh</code>), <code>kernel.bin</code> trùng với <code>target/boot/kernel.bin</code> (kiểm bằng <code>cmp</code>).</li>
+<li><code>BOOTX64.EFI</code> trên đĩa trùng byte với <code>src/bootloader/limine/BOOTX64.EFI</code> (chuỗi version trong file là <code>Limine 10.8.5 (x86-64, UEFI)</code>;
+<code>src/bootloader/assert.sh</code> ghim <code>TARGET_VERSION="10.1.1"</code> và ghi số đó vào <code>.version</code>, nhưng clone đầu nhánh
+<code>v10.x-binary</code>, nên bản thật sự cài là <strong>10.8.5</strong>), <code>kernel.bin</code> trùng với <code>target/boot/kernel.bin</code> (kiểm bằng <code>cmp</code>).</li>
 <li><code>make qemu</code> của cavOS không truyền firmware UEFI nào cho QEMU, nên mặc định nó boot qua SeaBIOS (đường BIOS:
 MBR → <code>limine-bios.sys</code>). Đường UEFI chỉ chạy khi bạn tự thêm OVMF như ở trên.</li>
 </ul>
@@ -140,7 +141,7 @@ timeout: 0
 <text x="36" y="242" fill="#D8A54A" font-size="9" class="mono">\EFI\BOOT\BOOTX64.EFI</text>
 <line x1="185" y1="256" x2="185" y2="278" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
 <rect x="20" y="280" width="330" height="76" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
-<text x="36" y="303" fill="#B5D4F4" font-size="11.5" font-weight="600">Limine 10.1.1 (PE32+ UEFI app)</text>
+<text x="36" y="303" fill="#B5D4F4" font-size="11.5" font-weight="600">Limine 10.8.5 (PE32+ UEFI app)</text>
 <text x="36" y="322" fill="#85B7EB" font-size="9">sectors via EFI_BLOCK_IO ReadBlocks</text>
 <text x="36" y="340" fill="#85B7EB" font-size="9">files via its own FAT32 driver</text>
 <line x1="185" y1="356" x2="185" y2="378" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
@@ -173,10 +174,10 @@ timeout: 0
 điểm vào với hai đối số: <code>ImageHandle</code> và con trỏ <code>EFI_SYSTEM_TABLE</code>.</li>
 <li>Limine liệt kê mọi handle có <code>EFI_BLOCK_IO_PROTOCOL</code> (<code>gBS-&gt;LocateHandle(ByProtocol, ...)</code> trong
 <code>common/drivers/disk.s2.c</code>) và đọc sector bằng <code>ReadBlocks</code>. Nó tự đọc bảng MBR/GPT và tự hiểu FAT
-(<code>common/fs/fat32.s2.c</code>). Trong mã nguồn 10.1.1 không có chỗ nào dùng <code>EFI_SIMPLE_FILE_SYSTEM_PROTOCOL</code>.</li>
-<li>Limine tìm file cấu hình trên từng phân vùng theo thứ tự trong <code>common/lib/config.c</code>:
-<code>/limine.conf</code>, <code>/limine/limine.conf</code>, <code>/boot/limine.conf</code>, <code>/boot/limine/limine.conf</code>,
-rồi (chỉ bản UEFI) <code>/EFI/BOOT/limine.conf</code>, <code>/EFI/limine/limine.conf</code>. cavOS trúng đường thứ hai.</li>
+(<code>common/fs/fat32.s2.c</code>). Trong mã nguồn 10.8.5 không có chỗ nào dùng <code>EFI_SIMPLE_FILE_SYSTEM_PROTOCOL</code>.</li>
+<li>Limine tìm file cấu hình trên từng phân vùng theo thứ tự trong <code>common/lib/config.c</code> (<code>init_config_disk</code>, không phân biệt hoa thường):
+(chỉ bản UEFI) <code>limine.conf</code> nằm cùng thư mục với chính file EFI (ở đây là <code>/EFI/BOOT/limine.conf</code>), rồi
+<code>/boot/limine/limine.conf</code>, <code>/boot/limine.conf</code>, <code>/limine/limine.conf</code>, <code>/limine.conf</code>. cavOS trúng <code>/limine/limine.conf</code>.</li>
 <li>Limine đọc <code>kernel.bin</code> theo <code>kernel_path</code>, nạp các segment ELF, dựng page table, lấy memory map lần cuối,
 gọi <code>ExitBootServices</code> (<code>efi_exit_boot_services()</code> trong <code>common/lib/misc.c</code>), rồi nhảy vào <code>_start</code>.</li>
 </ol>
@@ -187,10 +188,10 @@ gọi <code>ExitBootServices</code> (<code>efi_exit_boot_services()</code> trong
 <li><a href="https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html">UEFI 2.11 §3 Boot Manager</a>: <code>Boot####</code>, <code>BootOrder</code>, <code>EFI_LOAD_OPTION</code>, removable media boot path</li>
 <li><a href="https://uefi.org/specs/UEFI/2.11/05_GUID_Partition_Table_Format.html">UEFI 2.11 §5 GPT Disk Layout</a>: GPT header, protective MBR, ESP type GUID</li>
 <li><a href="https://uefi.org/specs/UEFI/2.11/13_Protocols_Media_Access.html">UEFI 2.11 §13 Media Access Protocols</a>: Simple File System, Block I/O, Disk I/O</li>
-<li><a href="https://github.com/limine-bootloader/limine/blob/v10.1.1/USAGE.md">Limine 10.1.1 USAGE.md</a>: cài lên ESP, chỗ đặt <code>limine.conf</code></li>
+<li><a href="https://github.com/limine-bootloader/limine/blob/v10.8.5/USAGE.md">Limine 10.8.5 USAGE.md</a>: cài lên ESP, chỗ đặt <code>limine.conf</code></li>
 <li><a href="https://wiki.osdev.org/UEFI">UEFI - OSDev Wiki</a></li>
 </ul>
-<p>Liên quan: <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>, <a href="secure_boot.html">Secure Boot</a>, <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>.</p>
+<p>Liên quan: <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>, <a href="secure_boot.html">Secure Boot</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>.</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · ESP và cách UEFI tìm Limine</footer>
 </main>

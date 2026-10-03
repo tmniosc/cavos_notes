@@ -108,10 +108,10 @@ chmod +x ~/oskernel-lab/scripts/mkimage.sh</code></pre></div>
 ├─ limine.h            lấy từ cavOS src/kernel/include/limine.h (base revision 2)
 ├─ .clangd             gỡ flag GCC-only cho clangd
 ├─ scripts/mkimage.sh  dựng os.img: MBR + FAT32@1MiB + limine bios-install
-├─ 00-hello-serial/       Step 00 + 01
-├─ 01-bootloader-parser/  Step 02
-├─ 02-framebuffer/        Step 03
-└─ 03-pmm-vmm/            Step 04 + 05</code></pre></div>
+├─ 00-hello-serial/       Bài 1 + 01
+├─ 01-bootloader-parser/  Bài 3
+├─ 02-framebuffer/        Bài 4
+└─ 03-pmm-vmm/            Bài 5 + 05</code></pre></div>
 <h2 id="4-build-chạy">4. Build + chạy</h2>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/00-hello-serial
 make info      # in ra đang dùng cross gcc hay gcc hệ thống

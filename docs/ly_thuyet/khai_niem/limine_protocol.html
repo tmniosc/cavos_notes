@@ -73,7 +73,7 @@ if (LIMINE_BASE_REVISION_SUPPORTED == false) panic();</code></pre></div>
 </tr>
 </tbody>
 </table></div>
-<p>→ Vì vậy <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> không có dòng asm bật long mode/paging nào.</p>
+<p>→ Vì vậy <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> không có dòng asm bật long mode/paging nào.</p>
 <h2 id="5b-limine-không-làm-gì-dễ-hiểu-nhầm">5b. Limine KHÔNG làm gì (dễ hiểu nhầm)</h2>
 <p>Limine là <strong>người đưa thư</strong>, không phải người cấu hình phần cứng. Nó <strong>chỉ đọc lại</strong> thông tin firmware đã
 dựng rồi giao cho kernel — KHÔNG tự tạo/sửa.</p>
@@ -93,7 +93,7 @@ dựng rồi giao cho kernel — KHÔNG tự tạo/sửa.</p>
 </tr>
 <tr>
 <td><strong>Enumerate PCI + gán BAR</strong> (cấp MMIO cho thiết bị)</td>
-<td>Firmware (boot device) / <strong>Kernel</strong> sau (<a href="../steps/step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a>)</td>
+<td>Firmware (boot device) / <strong>Kernel</strong> sau (<a href="../bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>)</td>
 <td>✗ không đụng</td>
 </tr>
 <tr>
@@ -113,7 +113,7 @@ firmware</strong>, có TRƯỚC khi Limine chạy — không phải Limine tạo
 để kernel tự chủ (nạp kernel + long mode + paging + HHDM + giao map). Mọi việc điều khiển thiết bị → kernel tự lo.</p>
 <h2 id="6-các-request-cavos-dùng-entrybootloaderc">6. Các request cavOS dùng (<code>entry/bootloader.c</code>)</h2>
 <p><code>paging_mode</code> (ép 4-level), <code>hhdm</code>, <code>kernel_address</code>, <code>memmap</code>, <code>smp</code>, <code>rsdp</code>.
-Chi tiết: <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</p>
+Chi tiết: <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
 <h2 id="tóm-tắt-1-câu">Tóm tắt 1 câu</h2>
 <p>Kernel "đặt hàng" thông tin qua struct request (nhãn magic); Limine "giao hàng" bằng cách điền
 <code>response</code> trước khi nhảy vào <code>_start</code>, đồng thời đặt CPU vào long mode + paging + higher-half.</p>

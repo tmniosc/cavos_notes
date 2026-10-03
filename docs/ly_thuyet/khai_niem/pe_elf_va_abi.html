@@ -202,7 +202,7 @@ CPU chuyển sang stack kernel (<code>RSP0</code> trong TSS) nên stack user kh�
 vì Limine cũng chạy ở ring 0.</li>
 </ol>
 <p>Các cờ <code>-mno-80387 -mno-mmx -mno-sse -mno-sse2</code> đi cùng mục đích: kernel không dùng thanh ghi FPU/SIMD, nên khi vào ngắt không phải lưu chúng.
-TSS và stack ngắt: <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>; FPU/SSE: <a href="../steps/step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a>.</p>
+TSS và stack ngắt: <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>; FPU/SSE: <a href="../bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a>.</p>
 
 <h2 id="spec">Spec</h2>
 <ul>
@@ -212,7 +212,7 @@ TSS và stack ngắt: <a href="../steps/step_06_gdt_tss.html">Step 06 - GDT &amp
 <li><a href="https://uefi.org/specs/UEFI/2.11/02_Overview.html">UEFI 2.11 §2 Overview</a>: quy ước gọi cho nền x64, định dạng ảnh PE32+</li>
 <li><a href="https://wiki.osdev.org/PE">PE - OSDev Wiki</a> · <a href="https://wiki.osdev.org/Calling_Conventions">Calling Conventions - OSDev Wiki</a></li>
 </ul>
-<p>Liên quan: <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a>, <a href="long_mode.html">Long Mode</a>.</p>
+<p>Liên quan: <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a>, <a href="long_mode.html">Long Mode</a>.</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · PE, ELF và quy ước gọi hàm</footer>
 </main>

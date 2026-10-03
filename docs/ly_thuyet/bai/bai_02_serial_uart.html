@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bài 2 - Serial UART · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/bai/bai_02_serial_uart.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 2 - Serial UART</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, serial</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Cho kernel một kênh in log ngay từ dòng đầu tiên.</em></p>
+<p>Bài này bật cổng serial COM1 để kernel in được chữ ra terminal của bạn qua QEMU. Từ <a href="bai_03_bootloader_parser.html">Bài 3</a> trở đi,
+mọi dòng log và mọi thông báo lỗi (<code>debugf</code>) đều đi qua kênh này.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Kernel chưa có màn hình, chưa có gì để cho bạn xem nó đang làm gì. <strong>Serial (cổng COM)</strong> là cách in chữ dễ nhất:
+ghi từng byte vào một "ống" phần cứng, QEMU hứng đầu kia rồi hiện lên terminal. Làm nó <strong>đầu tiên</strong> giống bật đèn trước khi vào phòng tối:
+từ đó về sau, bước nào hỏng cũng in ra xem được.</p>
+<p>Chỉ có hai việc. <strong>Cài đặt một lần</strong>: ghi vài con số vào thanh ghi của chip để chọn tốc độ và định dạng truyền (như chỉnh đài cho đúng tần số).
+<strong>Gửi từng ký tự</strong>: hỏi chip "rảnh chưa?", rảnh thì đẩy byte vào, lặp cho cả chuỗi. Không cần framebuffer, không cần paging, nên làm được ngay đầu <code>_start()</code>.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Hai ý mới; phần boot đã có ở Bài 1.</em></p>
+<ul>
+<li><strong>Port I/O</strong> — ngoài bộ nhớ, CPU x86 còn một không gian địa chỉ riêng 64 KiB cho thiết bị, gọi là I/O port. Chỉ hai lệnh truy cập được nó:
+<code>in</code> (đọc) và <code>out</code> (ghi). cavOS bọc chúng thành <code>inportb()</code> / <code>outportb()</code> (khai trong <code>include/system.h</code>).
+Đọc sâu: <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1 (chương I/O).</li>
+<li><strong>UART 16550</strong> — chip biến byte thành chuỗi bit truyền trên một dây, và ngược lại. Nó có 8 thanh ghi nằm ở 8 port liền nhau
+(base + 0 … base + 7). Cổng COM1 có base <code>0x3F8</code> (<code>include/serial.h</code>: <code>#define COM1 0x3F8</code>). QEMU giả lập chip này.
+Đọc sâu: <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a>.</li>
+<li><code>_start()</code> và thứ tự khởi tạo — đã gặp ở <a href="bai_01_boot_limine.html">Bài 1</a>.</li>
+</ul>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Toàn bộ nằm trong một file: <code>src/kernel/drivers/serial.c</code>.</em></p>
+
+<h3 id="duong-di-log">Đường đi của một dòng log</h3>
+<figure class="diagram">
+<svg id="svg-serial-path" role="img" aria-label="Path of a debugf call to the host terminal" style="max-width:600px" width="100%" viewBox="0 0 560 352" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-serial-path-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-serial-path .t{font-size:12px;font-weight:600;font-family:'SF Mono',Consolas,monospace;} #svg-serial-path .s{font-size:10px;} #svg-serial-path .flow{stroke:#7d7b73;stroke-width:1.5;fill:none;}</style>
+</defs>
+<rect x="40" y="16" width="480" height="48" fill="#5C3F0E" stroke="#D8A54A"/>
+<text x="56" y="36" class="t" fill="#F0DBAE">debugf("[serial] ...\n")</text>
+<text x="56" y="54" class="s" fill="#D8A54A">format the string; take a spinlock if interrupts are on</text>
+<line x1="280" y1="64" x2="280" y2="84" class="flow" marker-end="url(#svg-serial-path-arrow)"/>
+<rect x="40" y="88" width="480" height="48" fill="#5C3F0E" stroke="#D8A54A"/>
+<text x="56" y="108" class="t" fill="#F0DBAE">debug(c) → serial_send(COM1, c)</text>
+<text x="56" y="126" class="s" fill="#D8A54A">called once per character</text>
+<line x1="280" y1="136" x2="280" y2="156" class="flow" marker-end="url(#svg-serial-path-arrow)"/>
+<rect x="40" y="160" width="480" height="48" fill="#0C447C" stroke="#85B7EB"/>
+<text x="56" y="180" class="t" fill="#B5D4F4">wait LSR bit 5, then outportb(0x3F8, c)</text>
+<text x="56" y="198" class="s" fill="#85B7EB">port I/O into the UART transmit register</text>
+<line x1="280" y1="208" x2="280" y2="228" class="flow" marker-end="url(#svg-serial-path-arrow)"/>
+<rect x="40" y="232" width="480" height="48" fill="#2C4E33" stroke="#8FC79A"/>
+<text x="56" y="252" class="t" fill="#C6E7CC">QEMU 16550 model (COM1)</text>
+<text x="56" y="270" class="s" fill="#8FC79A">-serial stdio forwards every byte to the host</text>
+<line x1="280" y1="280" x2="280" y2="300" class="flow" marker-end="url(#svg-serial-path-arrow)"/>
+<rect x="40" y="304" width="480" height="40" fill="#444441" stroke="#B4B2A9"/>
+<text x="56" y="329" class="t" fill="#D3D1C7">your terminal</text>
+</svg>
+<figcaption>Hai ô vàng là code cavOS, ô xanh dương là chỗ chạm phần cứng, phần còn lại là QEMU và máy host.</figcaption>
+</figure>
+
+<h3 id="khoi-tao">Khởi tạo COM1: <code>initiateSerial()</code> và <code>serial_enable()</code></h3>
+<p><code>initiateSerial()</code> là hàm <strong>đầu tiên</strong> <code>_start()</code> gọi (thứ tự đầy đủ ở <a href="bai_00_bat_dau.html">Bài 0</a>). Trích <code>drivers/serial.c</code>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>void serial_enable(int device) {
+  outportb(device + 1, 0x00);
+  outportb(device + 3, 0x80); /* Enable divisor mode */
+  outportb(device + 0, 0x03); /* Div Low:  03 Set the port to 38400 bps */
+  outportb(device + 1, 0x00); /* Div High: 00 */
+  outportb(device + 3, 0x03);
+  outportb(device + 2, 0xC7);
+  outportb(device + 4, 0x0B);
+}
+
+void initiateSerial() {
+  debugf("[serial] Installing serial...\n");
+
+  serial_enable(COM1);
+  // serial_enable(COM2);
+
+  outportb(COM1 + 1, 0x01);
+  // outportb(COM2 + 1, 0x01);
+}</code></pre></div>
+<p>Từng dòng ghi một số vào một thanh ghi. Offset 0 và 1 có hai nghĩa tuỳ bit <strong>DLAB</strong> (bit 7 của LCR): DLAB = 1 thì chúng là hai byte của số chia tốc độ,
+DLAB = 0 thì là thanh ghi dữ liệu và thanh ghi bật ngắt. Bảng thanh ghi đầy đủ: <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Port</th><th>Giá trị</th><th>Thanh ghi</th><th>Ý nghĩa</th></tr></thead>
+<tbody>
+<tr><td><code>+1</code></td><td><code>0x00</code></td><td>IER</td><td>tắt mọi ngắt của UART trong lúc cài đặt</td></tr>
+<tr><td><code>+3</code></td><td><code>0x80</code></td><td>LCR</td><td>bật DLAB để offset 0/1 thành số chia</td></tr>
+<tr><td><code>+0</code></td><td><code>0x03</code></td><td>DLL</td><td>byte thấp số chia = 3</td></tr>
+<tr><td><code>+1</code></td><td><code>0x00</code></td><td>DLM</td><td>byte cao số chia = 0. Tốc độ = 115200 / 3 = <strong>38400 bps</strong></td></tr>
+<tr><td><code>+3</code></td><td><code>0x03</code></td><td>LCR</td><td>8 bit dữ liệu, không parity, 1 stop bit (gọi tắt <strong>8N1</strong>); đồng thời tắt DLAB</td></tr>
+<tr><td><code>+2</code></td><td><code>0xC7</code></td><td>FCR</td><td>bật FIFO (hàng đợi 16 byte), xoá FIFO nhận và gửi, ngưỡng ngắt 14 byte</td></tr>
+<tr><td><code>+4</code></td><td><code>0x0B</code></td><td>MCR</td><td>bật DTR, RTS và OUT2 (trên PC, OUT2 nối đường ngắt của UART ra bộ điều khiển ngắt)</td></tr>
+<tr><td><code>+1</code></td><td><code>0x01</code></td><td>IER</td><td>(trong <code>initiateSerial</code>) bật ngắt "đã nhận được dữ liệu"</td></tr>
+</tbody></table></div>
+
+<h3 id="gui-mot-byte">Gửi một byte: <code>serial_send()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>int serial_transmit_empty(int device) { return inportb(device + 5) &amp; 0x20; }
+
+void serial_send(int device, char out) {
+  while (serial_transmit_empty(device) == 0)
+    ;
+  outportb(device, out);
+}</code></pre></div>
+<p>Port <code>+5</code> là <strong>LSR</strong> (Line Status Register). Bit 5 là <strong>THRE</strong> (Transmitter Holding Register Empty): bằng 1 nghĩa là chip đã nhận xong byte trước,
+ghi byte mới được. Không chờ bit này thì byte mới có thể đè lên byte chưa gửi và mất chữ.</p>
+<p>Chiều nhận cũng có sẵn: <code>serial_rcvd()</code> đọc bit 0 của LSR (Data Ready), <code>serial_recv()</code> chờ bit đó rồi đọc port <code>+0</code>.</p>
+
+<h3 id="debugf">In có định dạng: <code>debugf()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void debug(char c, void *arg) {
+  serial_send(COM1, c);
+}
+
+int debugf(const char *format, ...) {
+  bool ints = checkInterrupts();
+  if (ints)
+    spinlockAcquire(&amp;LOCK_DEBUGF);
+  va_list va;
+  va_start(va, format);
+  int ret = vfctprintf(debug, 0, format, va);
+  va_end(va);
+  if (ints)
+    spinlockRelease(&amp;LOCK_DEBUGF);
+  return ret;
+}</code></pre></div>
+<p><code>vfctprintf</code> (thư viện printf trong <code>drivers/printf.c</code>) dựng chuỗi theo định dạng và gọi <code>debug(c)</code> cho từng ký tự.
+Khi ngắt đã bật (tức là đã có đa nhiệm, từ các bài sau), <code>debugf</code> giữ một <strong>spinlock</strong> (khoá bận-chờ) để hai luồng không in xen chữ vào nhau.
+Lúc này ngắt chưa bật nên khoá được bỏ qua.</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Viết lại driver serial nhỏ nhất và thấy chữ hiện ra.</em></p>
+<p><a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> (chung với Bài 1). Phần của bài này là <code>serial.c</code>: <code>outb</code>/<code>inb</code>, khởi tạo COM1,
+<code>serial_putc</code> chờ THRE. Chạy trong WSL:</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/00-hello-serial
+make run</code></pre></div>
+<p>Output thật (2026-10-03):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x00 - Hello Serial (Step 00 + 01) ===
+Hello Serial
+[done] halt.</code></pre></div>
+<p>Lab khác cavOS ở ba chỗ, đáng tự giải thích được:</p>
+<ul>
+<li>Số chia là <code>1</code> (115200 bps), cavOS dùng <code>3</code> (38400 bps). Cả hai đều in được trong QEMU.</li>
+<li><code>serial_putc</code> của lab gửi thêm <code>'\r'</code> trước mỗi <code>'\n'</code> để terminal xuống dòng về đầu dòng; cavOS không làm.</li>
+<li>Lab không bật lại IER sau khi cài đặt (ngắt UART tắt hẳn); cavOS ghi <code>0x01</code>.</li>
+</ul>
+<p>Còn dòng đầu tiên của cavOS khi boot thật (log trong <code>lab/outputs/cavos-boot-2026-09-03.txt</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[serial] Installing serial...
+[graphics] Resolution fixed: fb{ffff8000fd000000} dim(xy){1024x768} bpp{32}</code></pre></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bấm vào câu hỏi để xem đáp án.</em></p>
+<details class="quiz"><summary>Vì sao serial được bật trước framebuffer và console?</summary>
+<p>Serial chỉ cần vài lệnh <code>out</code> vào port, không phụ thuộc gì. Framebuffer cần thông tin từ Limine và font; nếu nó hỏng thì chỉ serial còn báo được lỗi.</p></details>
+<details class="quiz"><summary>Quên tắt DLAB (bỏ dòng ghi <code>0x03</code> vào LCR) thì sao?</summary>
+<p>Offset 0 vẫn là byte thấp của số chia, nên mỗi lần "gửi ký tự" thực ra là đổi tốc độ truyền. Không có chữ nào ra.</p></details>
+<details class="quiz"><summary>Số chia 3 cho tốc độ bao nhiêu? Muốn 115200 bps thì ghi gì?</summary>
+<p>115200 / 3 = 38400 bps. Muốn 115200 thì số chia là 1: DLL = <code>0x01</code>, DLM = <code>0x00</code>, như lab.</p></details>
+<details class="quiz"><summary><code>initiateSerial()</code> gọi <code>debugf</code> <em>trước</em> <code>serial_enable()</code>. Sao dòng "[serial] Installing serial..." vẫn hiện?</summary>
+<p>Sau reset, LSR của 16550 có THRE = 1 nên vòng chờ thoát ngay, và byte ghi vào port <code>0x3F8</code> vẫn tới QEMU. Trên máy thật, dòng này đi ra với cấu hình firmware để lại, có thể sai tốc độ.</p></details>
+<details class="quiz"><summary>Bỏ vòng <code>while</code> chờ THRE trong <code>serial_send</code> thì sao?</summary>
+<p>Byte mới có thể được ghi khi chip chưa gửi xong byte cũ, nên chữ bị mất hoặc lẫn. Trong QEMU có thể không thấy lỗi vì thiết bị giả lập xử lý rất nhanh.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Phần tra cứu, không cần cho bài sau.</em></p>
+<h3 id="vi-sao-serial-truoc-tien">Vì sao serial trước tiên</h3>
+<ul>
+<li>Không cần framebuffer hay console (chưa khởi tạo). Chỉ cần vài thanh ghi I/O port.</li>
+<li>QEMU chuyển COM1 ra stdout hoặc file, nên log kernel hiện ngay trên máy host.</li>
+</ul>
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li>Thanh ghi và bit: <a href="../tai_lieu_goc/uart_16550.html">UART 16550</a> (datasheet 16550A).</li>
+<li><code>inb</code>/<code>outb</code>: port I/O x86, <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1.</li>
+</ul>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Bài 2 - Serial UART</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

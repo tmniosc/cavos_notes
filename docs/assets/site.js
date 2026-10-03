@@ -7,88 +7,93 @@ window.SITE = {
    "t": "Lý thuyết",
    "c": [
     {
-     "t": "Steps",
+     "t": "Bài 0 - Bắt đầu ở đây",
+     "h": "ly_thuyet/bai/bai_00_bat_dau.html"
+    },
+    {
+     "t": "Bài học",
      "c": [
       {
-       "t": "Boot Flow (_start)",
-       "h": "ly_thuyet/steps/boot_flow_start.html"
+       "t": "Bài 1 - Boot & Limine",
+       "h": "ly_thuyet/bai/bai_01_boot_limine.html"
       },
       {
-       "t": "Step 00 - Boot & Limine",
-       "h": "ly_thuyet/steps/step_00_boot_limine.html"
+       "t": "Bài 2 - Serial UART",
+       "h": "ly_thuyet/bai/bai_02_serial_uart.html"
       },
       {
-       "t": "Step 01 - Serial UART",
-       "h": "ly_thuyet/steps/step_01_serial_uart.html"
+       "t": "Bài 3 - Bootloader Parser",
+       "h": "ly_thuyet/bai/bai_03_bootloader_parser.html"
       },
       {
-       "t": "Step 02 - Bootloader Parser",
-       "h": "ly_thuyet/steps/step_02_bootloader_parser.html"
+       "t": "Bài 4 - Framebuffer & Console",
+       "h": "ly_thuyet/bai/bai_04_framebuffer_console.html"
       },
       {
-       "t": "Step 03 - Framebuffer & Console",
-       "h": "ly_thuyet/steps/step_03_framebuffer_console.html"
+       "t": "Bài 5 - Physical Memory Manager",
+       "h": "ly_thuyet/bai/bai_05_physical_memory_manager.html"
       },
       {
-       "t": "Step 04 - Physical Memory Manager",
-       "h": "ly_thuyet/steps/step_04_physical_memory_manager.html"
+       "t": "Bài 6 - Virtual Memory & Paging",
+       "h": "ly_thuyet/bai/bai_06_virtual_memory_paging.html"
       },
       {
-       "t": "Step 05 - Virtual Memory & Paging",
-       "h": "ly_thuyet/steps/step_05_virtual_memory_paging.html"
-      },
-      {
-       "t": "Step 06 - GDT & TSS",
-       "h": "ly_thuyet/steps/step_06_gdt_tss.html"
-      },
-      {
-       "t": "Step 07 - ACPI",
-       "h": "ly_thuyet/steps/step_07_acpi.html"
-      },
-      {
-       "t": "Step 08 - IDT & Interrupts",
-       "h": "ly_thuyet/steps/step_08_idt_interrupts.html"
-      },
-      {
-       "t": "Step 09 - APIC & Timer",
-       "h": "ly_thuyet/steps/step_09_apic_timer.html"
-      },
-      {
-       "t": "Step 10 - PS2 Keyboard & Mouse",
-       "h": "ly_thuyet/steps/step_10_ps2_keyboard_mouse.html"
-      },
-      {
-       "t": "Step 11 - Multitasking & Scheduler",
-       "h": "ly_thuyet/steps/step_11_multitasking_scheduler.html"
-      },
-      {
-       "t": "Step 12 - Networking",
-       "h": "ly_thuyet/steps/step_12_networking.html"
-      },
-      {
-       "t": "Step 13 - PCI & NIC",
-       "h": "ly_thuyet/steps/step_13_pci_nic.html"
-      },
-      {
-       "t": "Step 14 - AHCI & Filesystems",
-       "h": "ly_thuyet/steps/step_14_ahci_filesystems.html"
-      },
-      {
-       "t": "Step 15 - Fast Syscalls",
-       "h": "ly_thuyet/steps/step_15_fast_syscalls.html"
-      },
-      {
-       "t": "Step 16 - SSE & FPU",
-       "h": "ly_thuyet/steps/step_16_sse_fpu.html"
-      },
-      {
-       "t": "Step 17 - Userspace & ELF Loader",
-       "h": "ly_thuyet/steps/step_17_userspace_elf_loader.html"
+       "t": "Bài 7 - GDT & TSS",
+       "h": "ly_thuyet/bai/bai_07_gdt_tss.html"
       }
      ]
     },
     {
-     "t": "Khái niệm",
+     "t": "Sắp tới (mới có dàn ý)",
+     "c": [
+      {
+       "t": "Bài 8 - ACPI",
+       "h": "ly_thuyet/bai/bai_08_acpi.html"
+      },
+      {
+       "t": "Bài 9 - IDT & Interrupts",
+       "h": "ly_thuyet/bai/bai_09_idt_interrupts.html"
+      },
+      {
+       "t": "Bài 10 - APIC & Timer",
+       "h": "ly_thuyet/bai/bai_10_apic_timer.html"
+      },
+      {
+       "t": "Bài 11 - PS2 Keyboard & Mouse",
+       "h": "ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html"
+      },
+      {
+       "t": "Bài 12 - Multitasking & Scheduler",
+       "h": "ly_thuyet/bai/bai_12_multitasking_scheduler.html"
+      },
+      {
+       "t": "Bài 13 - Networking",
+       "h": "ly_thuyet/bai/bai_13_networking.html"
+      },
+      {
+       "t": "Bài 14 - PCI & NIC",
+       "h": "ly_thuyet/bai/bai_14_pci_nic.html"
+      },
+      {
+       "t": "Bài 15 - AHCI & Filesystems",
+       "h": "ly_thuyet/bai/bai_15_ahci_filesystems.html"
+      },
+      {
+       "t": "Bài 16 - Fast Syscalls",
+       "h": "ly_thuyet/bai/bai_16_fast_syscalls.html"
+      },
+      {
+       "t": "Bài 17 - SSE & FPU",
+       "h": "ly_thuyet/bai/bai_17_sse_fpu.html"
+      },
+      {
+       "t": "Bài 18 - Userspace & ELF Loader",
+       "h": "ly_thuyet/bai/bai_18_userspace_elf_loader.html"
+      }
+     ]
+    },
+    {
+     "t": "Khái niệm (tra cứu)",
      "c": [
       {
        "t": "Cấu trúc os.img",

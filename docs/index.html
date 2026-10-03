@@ -17,36 +17,27 @@
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p>Ghi chú khi đọc source <strong>cavOS</strong> (hobby OS x86_64) và ánh xạ với spec nền tảng.
-Mở folder này bằng <strong>Obsidian</strong> (Open folder as vault); các note nối nhau bằng wikilink.</p>
+<p>Khoá học đọc mã nguồn <strong>cavOS</strong> (hệ điều hành nhỏ cho x86-64) từ dòng đầu tiên của kernel, mỗi bài một bước
+khởi động, kèm lab tự viết lại và chạy trong QEMU.</p>
 <div class="callout quote">
-<p>Context + tiến độ cho Claude nằm ở <a href="../CLAUDE.md">CLAUDE</a> (tự nạp khi mở Claude tại thư mục này).</p>
+<p><strong>Mới vào?</strong> Bắt đầu ở <a href="ly_thuyet/bai/bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>, rồi đi lần lượt Bài 1, Bài 2…
+bằng nút <em>Tiếp</em> cuối mỗi trang. Mỗi bài tự nói cần biết gì trước và lab nào đi kèm.</p>
 </div>
-<h2 id="ba-cửa-vào">Ba cửa vào</h2>
+<h2 id="ba-khu">Ba khu của site</h2>
+<p class="lede"><em>Lý thuyết là đường chính; hai khu kia được các bài trỏ tới khi cần.</em></p>
 <div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Vào đâu</th>
-<th>Có gì</th>
-</tr>
-</thead>
+<thead><tr><th>Khu</th><th>Có gì</th></tr></thead>
 <tbody>
-<tr>
-<td><strong><a href="ly_thuyet/ly_thuyet.html">Lý thuyết</a></strong></td>
-<td><a href="ly_thuyet/steps/boot_flow_start.html">Boot Flow (_start)</a>, Step 00 → 17, khái niệm cốt lõi, tài liệu gốc</td>
-</tr>
-<tr>
-<td><strong><a href="thuc_hanh/thuc_hanh.html">Thực hành</a></strong></td>
-<td>Lab 0x00 → 0x03, source lab, output thật của mỗi lần chạy</td>
-</tr>
-<tr>
-<td><strong><a href="cong_cu_va_moi_truong/cong_cu_va_moi_truong.html">Công cụ và môi trường</a></strong></td>
-<td>dựng máy từ số 0, lệnh build/QEMU/GDB, bảng lỗi thường gặp</td>
-</tr>
+<tr><td><strong><a href="ly_thuyet/ly_thuyet.html">Lý thuyết</a></strong></td>
+<td><a href="ly_thuyet/bai/bai_00_bat_dau.html">Bài 0</a> → Bài 18 theo thứ tự <code>_start()</code> (Bài 1–7 đã viết, từ Bài 8 mới có dàn ý);
+Khái niệm để tra cứu; tài liệu gốc</td></tr>
+<tr><td><strong><a href="thuc_hanh/thuc_hanh.html">Thực hành</a></strong></td>
+<td>Lab 0x00 → 0x03: tự viết lại từng phần, source lab, output thật của mỗi lần chạy</td></tr>
+<tr><td><strong><a href="cong_cu_va_moi_truong/cong_cu_va_moi_truong.html">Công cụ và môi trường</a></strong></td>
+<td>dựng máy từ số 0, lệnh build/QEMU/GDB, bảng lỗi thường gặp</td></tr>
 </tbody>
 </table></div>
-<p>Đọc lần đầu thì đi: <a href="ly_thuyet/steps/boot_flow_start.html">Boot Flow (_start)</a> → <a href="ly_thuyet/khai_niem/paging.html">Paging</a> → <a href="ly_thuyet/steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>,
-làm song song <a href="thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a>.</p>
+<p>Ngữ cảnh và tiến độ cho Claude nằm ở <a href="../CLAUDE.md">CLAUDE.md</a> (tự nạp khi mở Claude tại thư mục vault).</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Home</footer>
 </main>

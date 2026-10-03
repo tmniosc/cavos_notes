@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bài 7 - GDT &amp; TSS · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/bai/bai_07_gdt_tss.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 7 - GDT &amp; TSS</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, cpu</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Khai báo cho CPU biết đâu là code kernel (ring 0), đâu là code user (ring 3), và lấy stack nào khi đổi ring.</em></p>
+<p>Bài này dựng <strong>GDT</strong> (bảng các segment code/data kernel và user) và <strong>TSS</strong> (chỗ CPU lấy stack kernel <code>RSP0</code> khi đang chạy
+user mà bị ngắt). Long mode gần như bỏ segmentation, nhưng CPU vẫn đòi selector hợp lệ và đọc mức đặc quyền từ đó. Bài 9 cần selector kernel code cho
+mỗi cổng ngắt (<a href="bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>), Bài 16 cần thứ tự segment user cho <code>sysret</code>
+(<a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>).</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>GDT là một danh sách <strong>thẻ ra vào</strong>. Mỗi thẻ ghi "đây là thẻ code hay thẻ data, và người cầm thẻ là kernel hay user". Ngày xưa thẻ còn ghi
+"được vào phòng nào, rộng bao nhiêu" (base/limit); ở 64-bit phần đó bị bỏ qua, mọi thẻ đều mở cả toà nhà. Chỉ còn <strong>cấp bậc</strong> là quan trọng.</p>
+<p>TSS ở 64-bit chỉ còn giữ <strong>địa chỉ phòng trực của kernel</strong> (<code>RSP0</code>). Khi chương trình user bị ngắt, CPU nhảy vào kernel và cần ngay một stack
+sạch của kernel; nó lấy địa chỉ stack đó trong TSS.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Bốn khái niệm về segment trên x86, mỗi cái vài câu.</em></p>
+<ul>
+<li><strong>Segment register trong long mode.</strong> CPU có các thanh ghi đoạn <code>CS</code> (code), <code>SS</code> (stack), <code>DS/ES/FS/GS</code> (data).
+Ở 64-bit, CPU coi base = 0 và bỏ kiểm limit cho CS/DS/ES/SS (base của FS/GS lấy từ MSR). Nhưng <code>CS</code> vẫn quyết định
+<em>đang chạy ring mấy</em> và <em>đang chạy code 64-bit hay không</em>. Đọc sâu: <a href="../khai_niem/x86_segmentation.html">x86 Segmentation</a>,
+<a href="../khai_niem/long_mode.html">Long Mode</a>.</li>
+<li><strong>GDT, descriptor và GDTR.</strong> GDT là mảng trong RAM, mỗi phần tử (<em>descriptor</em>) 8 byte mô tả một segment. Descriptor hệ thống như TSS dài 16 byte
+vì phải chứa địa chỉ 64-bit. Thanh ghi <code>GDTR</code> giữ địa chỉ và kích thước bảng, nạp bằng lệnh <code>lgdt</code>.
+Đọc sâu: <a href="../khai_niem/gdt.html#2-gdt-đứng-ở-đâu-giữa-các-bảng-descriptor">GDT §2</a>, <a href="../khai_niem/gdt.html#3-gdtr-thanh-ghi-trỏ-tới-bảng">§3</a>,
+từng bit ở <a href="../khai_niem/gdt.html#4-định-dạng-một-descriptor-8-byte-bóc-từng-bit">§4</a>, TSS ở <a href="../khai_niem/gdt.html#7-descriptor-hệ-thống-s0-tss-ldt-dài-16-byte">§7</a>.</li>
+<li><strong>Selector.</strong> Giá trị nạp vào thanh ghi đoạn là một <em>selector</em> 16 bit: bit 15–3 là chỉ số descriptor, bit 2 (TI) chọn GDT (0) hay LDT (1),
+bit 1–0 là RPL. Vì descriptor dài 8 byte, <strong>selector với RPL = 0 chính là offset byte trong GDT</strong>: <code>0x28</code> = descriptor số 5.
+Đọc sâu: <a href="../khai_niem/gdt.html#8-segment-selector-số-ghế-trỏ-vào-bảng">GDT §8</a>.</li>
+<li><strong>Ring: CPL, DPL, RPL.</strong> CPL là ring đang chạy (2 bit thấp của <code>CS</code>), DPL là ring ghi trong descriptor, RPL là ring ghi trong selector.
+Kernel chạy ring 0, user ring 3; CPU so các số này để chặn user dùng segment của kernel.
+Đọc sâu: <a href="../khai_niem/gdt.html#9-cpl-dpl-rpl-cơ-chế-bảo-vệ-theo-ring">GDT §9</a>.</li>
+</ul>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Một hàm <code>initiateGDT()</code>: điền bảng, nạp bảng, đổi CS, rồi nạp TSS.</em></p>
+<p>File: <code>cpu/gdt.c</code>, <code>include/gdt.h</code>. Trong <code>entry/kernel.c:_start()</code>, <code>initiateGDT()</code> chạy ở dòng 59, sau <code>initiateVMM()</code>
+(<a href="bai_06_virtual_memory_paging.html">Bài 6</a>) và trước <code>initiateACPI()</code>/<code>initiateISR()</code>. Spec: <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3.</p>
+
+<h3 id="cau-truc-gdt">1. Cấu trúc bảng (<code>gdt.h</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct GDTEntry {      // 8 byte
+  uint16_t limit; uint16_t base_low; uint8_t base_mid;
+  uint8_t  access; uint8_t granularity; uint8_t base_high;
+} __attribute__((packed)) GDTEntry;
+
+typedef struct GDTEntries {
+  GDTEntry descriptors[11];   // segment code/data: kernel + user, 16/32/64-bit
+  TSSEntry tss;               // descriptor TSS, 16 byte vì chứa địa chỉ 64-bit
+} __attribute__((packed)) GDTEntries;
+
+typedef struct GDTPtr { uint16_t limit; uint64_t base; } __attribute__((packed)) GDTPtr; // nạp vào GDTR</code></pre></div>
+<p>Bảng dài 11 × 8 + 16 = 104 byte. Trong <code>granularity</code>, nửa byte cao là cờ (G, D/B, L); nửa thấp là bit 16–19 của limit.
+Ở long mode chỉ <code>access</code> và cờ <strong>L</strong> còn ý nghĩa với segment code.</p>
+
+<h3 id="cac-descriptor">2. Điền các descriptor (<code>initiateGDT</code>)</h3>
+<p>cavOS khai cả segment 16/32-bit (di sản) lẫn 64-bit (thật sự dùng). Offset = chỉ số × 8:</p>
+<figure class="diagram">
+<svg id="svg-cavos-gdt-layout" role="img" aria-label="cavOS GDT layout with byte offsets, and how a selector splits into index, TI and RPL" style="max-width:1083px" width="100%" viewBox="0 0 720 380" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-cavos-gdt-layout .mono{font-family:'SF Mono',Consolas,monospace;} #svg-cavos-gdt-layout .lbl{fill:#c2c0b6;} #svg-cavos-gdt-layout .off{fill:#c2c0b6;}</style>
+</defs>
+<text x="215" y="34" text-anchor="middle" class="lbl" font-size="10">cavOS GDT (GDTR.base = &amp;gdt, limit 0x67)</text>
+<text x="80" y="63" text-anchor="end" class="off mono" font-size="9">0x00</text>
+<rect x="90" y="48" width="250" height="22" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="100" y="63" fill="#D3D1C7" font-size="10">null — selector 0 is invalid</text>
+<text x="80" y="85" text-anchor="end" class="off mono" font-size="9">0x08</text>
+<rect x="90" y="70" width="250" height="22" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="100" y="85" fill="#D3D1C7" font-size="10">kernel code 16</text>
+<text x="330" y="85" text-anchor="end" fill="#B4B2A9" font-size="9" class="mono">legacy</text>
+<text x="80" y="107" text-anchor="end" class="off mono" font-size="9">0x10</text>
+<rect x="90" y="92" width="250" height="22" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="100" y="107" fill="#D3D1C7" font-size="10">kernel data 16</text>
+<text x="330" y="107" text-anchor="end" fill="#B4B2A9" font-size="9" class="mono">legacy</text>
+<text x="80" y="129" text-anchor="end" class="off mono" font-size="9">0x18</text>
+<rect x="90" y="114" width="250" height="22" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="100" y="129" fill="#D3D1C7" font-size="10">kernel code 32</text>
+<text x="330" y="129" text-anchor="end" fill="#B4B2A9" font-size="9" class="mono">legacy</text>
+<text x="80" y="151" text-anchor="end" class="off mono" font-size="9">0x20</text>
+<rect x="90" y="136" width="250" height="22" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="100" y="151" fill="#D3D1C7" font-size="10">kernel data 32</text>
+<text x="330" y="151" text-anchor="end" fill="#B4B2A9" font-size="9" class="mono">legacy</text>
+<text x="80" y="173" text-anchor="end" class="off mono" font-size="9">0x28</text>
+<rect x="90" y="158" width="250" height="22" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="100" y="173" fill="#B5D4F4" font-size="10" font-weight="600">kernel code 64</text>
+<text x="330" y="173" text-anchor="end" fill="#85B7EB" font-size="9" class="mono">CS ring 0</text>
+<text x="80" y="195" text-anchor="end" class="off mono" font-size="9">0x30</text>
+<rect x="90" y="180" width="250" height="22" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="100" y="195" fill="#B5D4F4" font-size="10" font-weight="600">kernel data 64</text>
+<text x="330" y="195" text-anchor="end" fill="#85B7EB" font-size="9" class="mono">DS/SS ring 0</text>
+<text x="80" y="217" text-anchor="end" class="off mono" font-size="9">0x38</text>
+<rect x="90" y="202" width="250" height="22" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="100" y="217" fill="#B4B2A9" font-size="10">empty ("SYSENTER")</text>
+<text x="80" y="239" text-anchor="end" class="off mono" font-size="9">0x40</text>
+<rect x="90" y="224" width="250" height="22" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="100" y="239" fill="#B4B2A9" font-size="10">empty</text>
+<text x="80" y="261" text-anchor="end" class="off mono" font-size="9">0x48</text>
+<rect x="90" y="246" width="250" height="22" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="100" y="261" fill="#F0DBAE" font-size="10" font-weight="600">user data 64</text>
+<text x="330" y="261" text-anchor="end" fill="#D8A54A" font-size="9" class="mono">DS/SS ring 3</text>
+<text x="80" y="283" text-anchor="end" class="off mono" font-size="9">0x50</text>
+<rect x="90" y="268" width="250" height="22" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="100" y="283" fill="#F0DBAE" font-size="10" font-weight="600">user code 64</text>
+<text x="330" y="283" text-anchor="end" fill="#D8A54A" font-size="9" class="mono">CS ring 3</text>
+<text x="80" y="305" text-anchor="end" class="off mono" font-size="9">0x58</text>
+<rect x="90" y="290" width="250" height="44" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="100" y="309" fill="#C6E7CC" font-size="10" font-weight="600">TSS descriptor (16 bytes)</text>
+<text x="100" y="325" fill="#8FC79A" font-size="9" class="mono">base = &amp;tss, loaded by ltr</text>
+<text x="80" y="327" text-anchor="end" class="off mono" font-size="9">0x60</text>
+<!-- selector panel -->
+<text x="540" y="34" text-anchor="middle" class="lbl" font-size="10">a selector (16 bits)</text>
+<rect x="380" y="48" width="220" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="490" y="67" text-anchor="middle" fill="#B5D4F4" font-size="10">index (bits 15..3)</text>
+<rect x="600" y="48" width="40" height="30" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="620" y="67" text-anchor="middle" fill="#D3D1C7" font-size="10">TI</text>
+<rect x="640" y="48" width="60" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="670" y="67" text-anchor="middle" fill="#F0DBAE" font-size="10">RPL</text>
+<text x="380" y="98" class="lbl" font-size="9">byte offset in GDT = index × 8 · TI 0 = GDT · RPL = ring asked for</text>
+<text x="380" y="140" class="lbl" font-size="9" font-weight="600">selector</text>
+<text x="450" y="140" class="lbl" font-size="9" font-weight="600">index</text>
+<text x="500" y="140" class="lbl" font-size="9" font-weight="600">RPL</text>
+<text x="540" y="140" class="lbl" font-size="9" font-weight="600">used as</text>
+<text x="380" y="164" class="lbl mono" font-size="9">0x28</text><text x="450" y="164" class="lbl mono" font-size="9">5</text><text x="500" y="164" class="lbl mono" font-size="9">0</text><text x="540" y="164" class="lbl" font-size="9">kernel CS</text>
+<text x="380" y="186" class="lbl mono" font-size="9">0x30</text><text x="450" y="186" class="lbl mono" font-size="9">6</text><text x="500" y="186" class="lbl mono" font-size="9">0</text><text x="540" y="186" class="lbl" font-size="9">kernel DS/ES/SS</text>
+<text x="380" y="208" class="lbl mono" font-size="9">0x4b</text><text x="450" y="208" class="lbl mono" font-size="9">9</text><text x="500" y="208" class="lbl mono" font-size="9">3</text><text x="540" y="208" class="lbl" font-size="9">user DS/SS (72 | 3)</text>
+<text x="380" y="230" class="lbl mono" font-size="9">0x53</text><text x="450" y="230" class="lbl mono" font-size="9">10</text><text x="500" y="230" class="lbl mono" font-size="9">3</text><text x="540" y="230" class="lbl" font-size="9">user CS (80 | 3)</text>
+<text x="380" y="252" class="lbl mono" font-size="9">0x58</text><text x="450" y="252" class="lbl mono" font-size="9">11</text><text x="500" y="252" class="lbl mono" font-size="9">0</text><text x="540" y="252" class="lbl" font-size="9">TR (ltr)</text>
+<text x="360" y="362" text-anchor="middle" class="lbl" font-size="9">the CPU finds a descriptor at GDTR.base + index × 8 — with RPL 0 the selector is just the byte offset</text>
+</svg>
+</figure>
+<div class="table-wrap"><table>
+<thead><tr><th>offset</th><th>descriptor</th><th>access</th><th>granularity</th><th>dùng</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>null</td><td><code>0</code></td><td><code>0</code></td><td>bắt buộc (selector 0 = vô hiệu)</td></tr>
+<tr><td>8</td><td>kernel code 16</td><td><code>10011010</code></td><td><code>0</code></td><td>di sản, long mode không dùng</td></tr>
+<tr><td>16</td><td>kernel data 16</td><td><code>10010010</code></td><td><code>0</code></td><td>di sản</td></tr>
+<tr><td>24</td><td>kernel code 32</td><td><code>10011010</code></td><td><code>11001111</code></td><td>di sản (G=1 trang 4 KiB, D/B=1 32-bit)</td></tr>
+<tr><td>32</td><td>kernel data 32</td><td><code>10010010</code></td><td><code>11001111</code></td><td>di sản</td></tr>
+<tr><td><strong>40</strong></td><td><strong>kernel code 64</strong></td><td><code>10011010</code></td><td><code>00100000</code> (L=1)</td><td><strong>CS ring 0</strong> (<code>GDT_KERNEL_CODE</code>)</td></tr>
+<tr><td><strong>48</strong></td><td><strong>kernel data 64</strong></td><td><code>10010010</code></td><td><code>0</code></td><td><strong>DS/SS ring 0</strong> (<code>GDT_KERNEL_DATA</code>)</td></tr>
+<tr><td>56, 64</td><td>(SYSENTER), 0</td><td>—</td><td>—</td><td>để trống</td></tr>
+<tr><td>72</td><td>user data 64</td><td><code>11110010</code></td><td><code>0</code></td><td><strong>ring 3 data</strong> (<code>GDT_USER_DATA</code>)</td></tr>
+<tr><td>80</td><td>user code 64</td><td><code>11111010</code></td><td><code>00100000</code> (L=1)</td><td><strong>ring 3 code</strong> (<code>GDT_USER_CODE</code>)</td></tr>
+<tr><td>88</td><td>TSS</td><td>—</td><td>—</td><td>trỏ tới biến <code>tss</code></td></tr>
+</tbody>
+</table></div>
+<p>Giải mã byte <code>access</code> (bit 7 → 0):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>bit</th><th>tên</th><th>nghĩa</th></tr></thead>
+<tbody>
+<tr><td>7</td><td>P</td><td>present, phải = 1</td></tr>
+<tr><td>6–5</td><td>DPL</td><td><code>00</code> = ring 0, <code>11</code> = ring 3</td></tr>
+<tr><td>4</td><td>S</td><td>1 = segment code/data, 0 = segment hệ thống (TSS, LDT)</td></tr>
+<tr><td>3</td><td>E</td><td>1 = code, 0 = data</td></tr>
+<tr><td>1</td><td>RW</td><td>code: được đọc; data: được ghi</td></tr>
+<tr><td>0</td><td>A</td><td>accessed, CPU tự bật lên 1 khi nạp segment</td></tr>
+</tbody>
+</table></div>
+<p>Vậy <code>10011010</code> = present, ring 0, code, đọc được (kernel code); <code>11111010</code> = như trên nhưng DPL = 3 (user code);
+<code>11110010</code> = present, ring 3, data, ghi được (user data). Code 64-bit đặt <code>granularity = 0b00100000</code>, tức cờ <strong>L = 1</strong>: segment này chạy lệnh 64-bit.
+Data không cần cờ L.</p>
+<div class="callout warn">
+<p>Thứ tự lạ: user <strong>data ở 72</strong>, user <strong>code ở 80</strong>. Đây là bắt buộc của <code>sysret</code>: lệnh này lấy <code>SS = STAR[63:48] + 8</code> và
+<code>CS = STAR[63:48] + 16</code> (Intel SDM, lệnh SYSRET). <code>cpu/fastSyscall.c</code> ghi <code>STAR[63:48] = GDT_USER_CODE - 16</code> = 64, nên SS = 72, CS = 80
+(Bài 16). Comment trong <code>gdt.c</code> ghi ngược ("User code 64. (72)" trên <code>descriptors[10]</code>), nhưng chỉ số 10 là offset 80; tin chỉ số, đừng tin comment.</p>
+</div>
+
+<h3 id="gdt-reload">3. Nạp bảng và đổi CS (<code>gdt_reload</code>)</h3>
+<p><code>initiateGDT()</code> đặt <code>gdtr.limit = sizeof(GDTEntries) - 1</code> (= 0x67) và <code>gdtr.base = &amp;gdt</code>, rồi gọi:</p>
+<div class="code"><div class="code-bar">asm</div><pre><code>lgdt gdtr                 ; nạp địa chỉ + giới hạn GDT vào GDTR
+push $0x28                ; 0x28 = 40 = kernel code 64 (CS mới)
+lea 1f(%rip), %rax
+push %rax                 ; địa chỉ quay về = nhãn 1
+lretq                     ; far return: pop RIP rồi pop CS -&gt; CS = 0x28
+1: mov $0x30, %eax        ; 0x30 = 48 = kernel data 64
+   mov %eax, %ds / %es / %fs / %gs / %ss</code></pre></div>
+<ul>
+<li><code>lgdt</code> chỉ đổi GDTR. Thanh ghi đoạn giữ bản sao descriptor cũ (phần ẩn) cho tới khi được nạp lại, nên phải nạp lại từng cái.</li>
+<li>Không có lệnh <code>mov</code> vào <code>CS</code>. Cách phổ biến ở 64-bit là đẩy CS mới và địa chỉ đích lên stack rồi <code>lretq</code> (far return).
+Đọc sâu: <a href="../khai_niem/gdt.html#11-nạp-gdt-trong-thực-tế-vì-sao-phải-nhảy-xa">GDT §11</a>.</li>
+<li>DS/ES/FS/GS/SS nạp <code>0x30</code>. Ở long mode base/limit của chúng bị bỏ qua, nhưng selector vẫn phải trỏ descriptor hợp lệ.</li>
+</ul>
+
+<h3 id="tss">4. TSS: chỉ để giữ <code>RSP0</code> (<code>gdt_load_tss</code>)</h3>
+<p>TSS 64-bit không còn lưu thanh ghi của task. Nó chỉ chứa các con trỏ stack:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct TSSPtr {
+  uint32_t unused0;
+  uint64_t rsp0, rsp1, rsp2;      // stack dùng khi vào ring 0/1/2; cavOS chỉ cần rsp0
+  uint64_t unused1;
+  uint64_t ist1, ..., ist7;       // IST: 7 stack riêng, cổng ngắt nào chọn thì dùng
+  uint64_t unused2;
+  uint32_t iopb;
+} __attribute__((packed)) TSSPtr; // 104 byte</code></pre></div>
+<ul>
+<li>Cuối <code>initiateGDT()</code>: <code>memset(&amp;tss, 0, ...)</code> rồi <code>gdt_load_tss(&amp;tss)</code>. Hàm này điền địa chỉ <code>tss</code> vào descriptor ở offset 88
+(<code>base_low/mid/high/upper32</code>), đặt <code>flags1 = 0b10001001</code> (P = 1, DPL = 0, type = 1001 = "available 64-bit TSS"), rồi <code>ltr 0x58</code>
+(nạp Task Register).</li>
+<li>Lúc này <code>rsp0 = 0</code>: chưa có task user nên chưa cần. Từ Bài 12, mỗi lần đổi task scheduler ghi
+<code>tssPtr-&gt;rsp0 = next-&gt;whileTssRsp</code> (<code>multitasking/schedule.c</code>), tức stack kernel của task sắp chạy
+(<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>).</li>
+<li>cavOS <strong>không dùng IST</strong>: <code>cpu/idt.c:set_idt_gate()</code> ghi <code>idt[n].ist = 0</code> cho mọi cổng.</li>
+</ul>
+
+<h3 id="ai-dung-selector">5. Ai dùng các selector này về sau</h3>
+<ul>
+<li><code>cpu/idt.c</code>: mỗi cổng ngắt có <code>kernel_cs = GDT_KERNEL_CODE</code> (Bài 9).</li>
+<li><code>multitasking/task.c</code>: task user có <code>cs = GDT_USER_CODE | DPL_USER</code> (= 0x53), <code>ds/ss = GDT_USER_DATA | DPL_USER</code> (= 0x4b), với <code>DPL_USER = 3</code> (Bài 12).</li>
+<li><code>cpu/fastSyscall.c</code>: thanh ghi MSR <code>STAR</code> lấy <code>GDT_KERNEL_CODE</code> và <code>GDT_USER_CODE - 16</code> (Bài 16).</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Boot cavOS thật, hỏi QEMU giá trị GDTR/TR/CS, rồi tự giải mã từng byte của GDT.</em></p>
+<p>Chưa có lab riêng cho bài này. Bài tập dưới đây dùng QEMU monitor trên bản cavOS đã build (<code>~/cavOS/disk.img</code>, xem
+<a href="../../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>). Lệnh giống <code>make qemu</code> nhưng không mở cửa sổ, ghi serial ra file và
+đưa monitor ra terminal. <code>-snapshot</code> giữ <code>disk.img</code> không bị ghi. Máy không có KVM thì bỏ <code>-enable-kvm</code>.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/cavOS/src/kernel
+qemu-system-x86_64 -snapshot -d guest_errors \
+  -drive file=../../disk.img,format=raw,id=disk,if=none \
+  -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 \
+  -m 4g -netdev user,id=mynet0 -net nic,model=e1000,netdev=mynet0 \
+  -display none -enable-kvm -serial file:/tmp/serial.log -monitor stdio</code></pre></div>
+<p>Đợi khoảng 25 giây cho cavOS boot xong (<code>tail /tmp/serial.log</code> thấy dòng <code>[cpu] Extra CPU features have all been enabled without issue</code>), rồi gõ ở dấu nhắc <code>(qemu)</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>info registers
+x /14gx 0xffffffff800bd800      &lt;- thay bằng base của dòng GDT= mà máy bạn in ra
+quit</code></pre></div>
+<p>Output thật (chạy 2026-10-03, cavOS <code>2ba0edb</code>, QEMU 10.2.1 + KVM; chỉ trích các dòng liên quan):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>RIP=ffffffff8006b426 RFL=00000002 [-------] CPL=0 II=0 A20=1 SMM=0 HLT=0
+ES =0030 0000000000000000 00000000 00009300 DPL=0 DS   [-WA]
+CS =0028 0000000000000000 00000000 00209b00 DPL=0 CS64 [-RA]
+SS =0030 0000000000000000 00000000 00009300 DPL=0 DS   [-WA]
+DS =0030 0000000000000000 00000000 00009300 DPL=0 DS   [-WA]
+FS =0000 0000000000000000 00000000 00001300
+GS =0000 0000000000000000 00000000 00001300
+TR =0058 ffffffff800bd880 00000068 00008b00 DPL=0 TSS64-busy
+GDT=     ffffffff800bd800 00000067
+EFER=0000000000000d01
+
+(qemu) x /14gx 0xffffffff800bd800
+ffffffff800bd800: 0x0000000000000000 0x00009a000000ffff
+ffffffff800bd810: 0x000092000000ffff 0x00cf9a000000ffff
+ffffffff800bd820: 0x00cf92000000ffff 0x00209b0000000000
+ffffffff800bd830: 0x0000930000000000 0x0000000000000000
+ffffffff800bd840: 0x0000000000000000 0x0000f30000000000
+ffffffff800bd850: 0x0020fb0000000000 0x80008b0bd8800068
+ffffffff800bd860: 0x00000000ffffffff 0xffff800bd8000067</code></pre></div>
+<p>Đối chiếu với code:</p>
+<ul>
+<li><code>GDT= ... 00000067</code>: limit 0x67 = 103 = <code>sizeof(GDTEntries) - 1</code>. Base nằm trong ảnh kernel (<code>0xffffffff8...</code>) vì <code>gdt</code> là biến <code>static</code>.</li>
+<li><code>CS =0028</code>: selector 0x28 = chỉ số 5, RPL 0. Thuộc tính <code>00209b00</code> có <code>0x20</code> = cờ L (CS64) và <code>9b</code> = access <code>10011010</code> với bit A đã được CPU bật.</li>
+<li>Các word ở offset 0x28, 0x30, 0x48, 0x50 là <code>...9b...</code>, <code>...93...</code>, <code>...f3...</code>, <code>...fb...</code>: đúng access trong bảng mục 2 cộng bit A.
+User code/data cũng có bit A, vì lúc chụp các chương trình user đã chạy.</li>
+<li><code>TR =0058</code>, base <code>ffffffff800bd880</code>, limit 0x68: khớp descriptor 16 byte ở offset 0x58 (<code>0x80008b0bd8800068</code> + <code>0x00000000ffffffff</code>
+→ limit 0x0068, base <code>0xffffffff_80_0b_d880</code>). Type đã thành <code>b</code> (busy) dù code ghi <code>1001</code> (available): <code>ltr</code> tự bật bit busy.</li>
+<li><code>FS =0000</code>, <code>GS =0000</code> dù <code>gdt_reload</code> nạp 0x30. Đường vào ngắt <code>cpu/isr.asm</code> (dòng 129–134) chỉ nạp lại 0x30 cho DS/ES/SS; hai dòng nạp FS/GS bị
+comment, nên chúng giữ giá trị từ lúc chạy ring 3.</li>
+<li>Word cuối <code>0xffff800bd8000067</code> không thuộc GDT: đó là biến <code>gdtr</code> (limit 0x0067 + base) nằm ngay sau bảng.</li>
+</ul>
+<p>Thử tự giải mã: lấy word <code>0x0020fb0000000000</code> ở offset 0x50, tách byte access và nửa byte cờ, rồi nói nó là segment gì, ring mấy.</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu kiểm tra hiểu, không phải nhớ.</em></p>
+<details class="quiz"><summary>Long mode bỏ base/limit. Vậy sao kernel vẫn phải dựng GDT?</summary>
+<p>CPU vẫn đọc từ descriptor của CS ring đang chạy (DPL) và cờ L (chạy code 64-bit hay 32-bit). CS/SS phải trỏ descriptor hợp lệ, và <code>iretq</code>/<code>sysret</code>/cổng ngắt đều nạp selector từ GDT.</p></details>
+<details class="quiz"><summary>Vì sao <code>gdt_reload</code> phải dùng <code>lretq</code> thay vì <code>mov $0x28, %cs</code>?</summary>
+<p>x86 không có lệnh <code>mov</code> vào CS; CS chỉ đổi qua lệnh nhảy/gọi/trả về xa, ngắt hoặc <code>sysret</code>. <code>lretq</code> pop RIP rồi pop CS từ stack, nên đẩy sẵn 0x28 và địa chỉ nhãn là đổi được CS mà vẫn chạy tiếp ngay dòng sau.</p></details>
+<details class="quiz"><summary>Selector <code>0x53</code> trỏ tới descriptor nào, ring mấy?</summary>
+<p><code>0x53</code> = <code>0101 0011</code>: chỉ số = 0x53 &gt;&gt; 3 = 10 (offset 80), TI = 0 (GDT), RPL = 3. Đó là user code 64, CS của chương trình ring 3.</p></details>
+<details class="quiz"><summary>Nếu đổi chỗ, để user code ở 72 và user data ở 80, cái gì hỏng?</summary>
+<p><code>sysret</code> luôn lấy CS = STAR[63:48] + 16 và SS = STAR[63:48] + 8. Không chọn được giá trị STAR nào để CS rơi vào 72 còn SS rơi vào 80, nên sau syscall CPU sẽ nạp sai loại segment cho CS/SS và chương trình user sẽ lỗi.</p></details>
+<details class="quiz"><summary>Điều gì xảy ra nếu một task user bị ngắt khi <code>tss.rsp0</code> vẫn là 0?</summary>
+<p>Khi đổi từ ring 3 sang ring 0, CPU nạp RSP = <code>rsp0</code> rồi đẩy khung ngắt vào ngay dưới địa chỉ 0, một vùng không được map. Việc đẩy đó gây page fault ngay lúc đang vào ngắt, thường dẫn tới double fault rồi máy reset. Vì vậy scheduler phải ghi <code>rsp0</code> trước khi chạy task user.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Các chi tiết lặt vặt của source và ánh xạ spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Long mode bỏ base/limit nhưng vẫn cần descriptor, vì sao?</strong> CPU vẫn cần biết CPL (ring 0/3), loại segment (code/data) và cờ L. Selector CS/SS phải trỏ
+descriptor hợp lệ; <code>iretq</code>/<code>sysret</code> cần các segment user/kernel ở đúng offset.</li>
+<li><strong>IST dùng cho fault nào?</strong> Cho fault mà stack hiện tại có thể hỏng: double fault, NMI, machine check. IST cho CPU một stack đã biết là tốt.
+Trong cavOS hiện tại thì <strong>chưa dùng</strong>: mọi cổng IDT có <code>ist = 0</code> (<code>cpu/idt.c</code>), nên một double fault do stack hỏng sẽ không có stack dự phòng (Bài 9).</li>
+</ul>
+
+<h3 id="chi-tiet-source">Chi tiết lặt vặt trong source</h3>
+<ul>
+<li><code>gdt.h</code> có <code>#define GDT_TSS 80</code>, nhưng selector TSS thật là 0x58 = 88 (hằng viết thẳng trong <code>ltr</code>). Grep toàn kernel không thấy chỗ nào dùng <code>GDT_TSS</code>, nên lỗi này không gây hại.</li>
+<li><code>NUM_GDT_ENTRIES 7</code> trong <code>gdt.h</code> là số cũ, bảng thật có 11 descriptor + TSS. Struct <code>GDTPointer</code> (base 32-bit) cũng không được dùng; GDTR nạp từ <code>GDTPtr</code> (base 64-bit).</li>
+<li><code>gdt.tss.length = 104</code> là trường limit, còn <code>TSSPtr</code> dài đúng 104 byte, nên limit chuẩn là 103. Dư 1 byte không gây hại (Intel chỉ yêu cầu limit TSS 64-bit tối thiểu 0x67). QEMU in <code>TR ... 00000068</code> khớp giá trị này.</li>
+<li>Selector của user có RPL 3 (<code>| DPL_USER</code>), của kernel RPL 0. Vì vậy <code>schedule.c</code> kiểm "đang ở kernel" bằng <code>registers.cs &amp; GDT_KERNEL_CODE</code>: 0x28 &amp; 0x28 ≠ 0, còn 0x53 &amp; 0x28 = 0.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Nền tảng spec chuyên sâu về GDT (descriptor từng bit, selector, CPL/DPL/RPL, 32 vs 64-bit): <a href="../khai_niem/gdt.html">GDT</a>.</li>
+<li>IDT/interrupt dùng selector kernel code + RSP0 (và IST nếu có): <a href="bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>.</li>
+<li>syscall/sysret dùng segment user/kernel: <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>.</li>
+<li>RSP0 cập nhật mỗi lần đổi task: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>.</li>
+<li>Các chế độ 16/32/64-bit mà các descriptor di sản ứng với, và cờ L trong long mode: <a href="../khai_niem/long_mode.html">Long Mode</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 §3 (segmentation, descriptor), §7 (TSS, LTR, bit busy), §5 (privilege CPL/DPL/RPL), cờ L của code segment IA-32e.</li>
+<li>Intel SDM Vol.2, lệnh SYSRET: CS = STAR[63:48] + 16, SS = STAR[63:48] + 8, RPL ép về 3.</li>
+</ul>
+
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Bài 7 - GDT &amp; TSS</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

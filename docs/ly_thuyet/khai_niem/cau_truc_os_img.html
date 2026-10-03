@@ -21,7 +21,7 @@
 <p><em><code>os.img</code> <strong>không phải</strong> kernel. Nó là <strong>ảnh nguyên một ổ đĩa</strong> — QEMU cắm vào như cắm HDD thật.
 Kernel chỉ là một file nằm bên trong nó.</em></p>
 </div>
-<p>Liên quan: <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> · <a href="limine_protocol.html">Limine Protocol</a> · <a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> ·
+<p>Liên quan: <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> · <a href="limine_protocol.html">Limine Protocol</a> · <a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> ·
 lệnh build: <a href="../../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a></p>
 <h2 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h2>
 <p class="lede"><em>Tưởng tượng bạn viết xong một lá thư (<code>kernel.bin</code>) và muốn người ta đọc được. Không thể đưa lá thư trần
@@ -87,7 +87,7 @@ mtools phải được chỉ đúng chỗ: <code>os.img@@1M</code>.</li>
 <code>kernel.bin</code> → nhảy <code>kmain</code>.</li>
 <li><strong><code>limine.conf</code> (lab)</strong>: <code>timeout: 0</code> (boot thẳng, không hiện menu),
 <code>kernel_path: boot():/boot/kernel.bin</code>, <code>protocol: limine</code> → nối vào
-<a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a> §0.1.1 (Limine ELF loader đọc <code>kernel.bin</code>).</li>
+<a href="../bai/bai_01_boot_limine.html#limine-nap-elf">Bài 1 - Boot &amp; Limine, "Limine nạp ELF thế nào"</a> (Limine ELF loader đọc <code>kernel.bin</code>).</li>
 </ul>
 <h2 id="mạch-từ-source-tới-lúc-chạy">Mạch từ source tới lúc chạy</h2>
 <p class="lede"><em>Đường đi đầy đủ: file <code>.c</code> bạn gõ ra rốt cuộc thành cái gì, và ai nạp nó.</em></p>

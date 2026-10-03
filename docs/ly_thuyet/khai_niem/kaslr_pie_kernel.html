@@ -20,22 +20,108 @@
 <div class="callout quote">
 <p>Kernel cavOS là <strong>ELF64 PIE</strong> (Position-Independent Executable) → <a href="limine_protocol.html">Limine</a> có thể
 nạp nó ở địa chỉ vật lý/ảo <strong>ngẫu nhiên</strong> (KASLR) rồi tự sửa (relocate) các con trỏ.</p>
+<p>Đo thật trên bản build hiện tại: file kernel mang kiểu <code>ET_EXEC</code>, nên Limine 10.8.5 (binary cavOS thật sự boot) <strong>coi nó là không relocatable và tắt KASLR</strong>, dù <code>limine.conf</code> ghi <code>kaslr: yes</code>. Chi tiết ở <a href="#kaslr-có-chạy-với-cavos-không">mục bên dưới</a>.</p>
 </div>
+
 <h2 id="pie-là-gì">PIE là gì?</h2>
-<p>Mã không phụ thuộc địa chỉ nạp cố định. Các tham chiếu tuyệt đối được liệt kê trong section
-<code>.dynamic</code> (relocation). Khi nạp ở base mới, loader cộng "slide" vào từng mục.</p>
+<p class="lede"><em>Một chương trình chạy đúng dù bị đặt ở địa chỉ nào, miễn loader sửa giúp vài con trỏ.</em></p>
+<p>Mã không phụ thuộc địa chỉ nạp cố định. Các tham chiếu tuyệt đối được liệt kê trong bảng relocation, và section
+<code>.dynamic</code> chỉ cho loader biết bảng đó nằm đâu. Khi nạp ở base mới, loader cộng "slide" vào từng mục.</p>
+<p>Code PIE có hai loại tham chiếu:</p>
+<ul>
+<li><strong>Tương đối</strong> — code gọi hàm hay đọc biến bằng độ lệch so với RIP (<code>lea x(%rip)</code>). Cả khối dời đi thì độ lệch không đổi → không cần sửa gì. Đây là phần lớn code cavOS, xem phần so sánh <code>-fPIE</code> ở <a href="higher_half_kernel.html#vì-sao-đúng-0xffffffff80000000-2gib">Higher-Half Kernel</a>.</li>
+<li><strong>Tuyệt đối</strong> — một con trỏ <em>được lưu trong bộ nhớ</em>: bảng con trỏ hàm, mảng con trỏ chuỗi, biến global khởi tạo bằng <code>&amp;x</code>. Giá trị 64-bit đó được ghi lúc link, nên phải sửa khi kernel bị dời. Mỗi chỗ như vậy là một relocation.</li>
+</ul>
+<p>"Slide" là khoảng dời: địa chỉ nạp thật trừ địa chỉ lúc link. Với loại relocation duy nhất cavOS có, <code>R_X86_64_RELATIVE</code>, Limine (<code>common/lib/elf.c</code>, hàm <code>elf64_apply_relocations</code>) làm đúng một phép gán:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>*ptr = slide + relocation-&gt;r_addend;</code></pre></div>
+<p><code>r_addend</code> là giá trị con trỏ lúc link. Ví dụ mục đầu tiên trong bảng của cavOS: offset <code>ffffffff800acb50</code> (nằm trong <code>.data</code>), addend <code>-7fffe8ef</code> = <code>0xffffffff80001711</code>, tức là một địa chỉ trong <code>.text</code>. Slide = 0 thì giá trị giữ nguyên.</p>
+
 <h2 id="trong-linkld">Trong <code>link.ld</code></h2>
+<p class="lede"><em>Linker script dành riêng một segment cho thông tin relocation, và Makefile bật PIE.</em></p>
 <div class="code"><div class="code-bar">ld</div><pre><code>PHDRS { ... dynamic PT_DYNAMIC FLAGS(...); }
 .dynamic : { *(.dynamic) } :data :dynamic</code></pre></div>
 <p><code>PT_DYNAMIC</code> cho Limine biết chỗ chứa relocation (kiểu phổ biến: <code>R_X86_64_RELATIVE</code>).</p>
+<p>Cờ build trong <code>src/kernel/Makefile</code>: compile với <code>-fPIE</code>, link với</p>
+<div class="code"><div class="code-bar">make</div><pre><code>LDFLAGS = -m elf_x86_64 \
+		-nostdlib \
+    -static \
+    -pie \
+    --no-dynamic-linker \
+    -z text \
+    -z max-page-size=0x1000 -T link.ld</code></pre></div>
+<p><code>-static -pie --no-dynamic-linker</code> = "static PIE": không cần thư viện động, nhưng vẫn giữ bảng relocation để ai nạp thì tự sửa. <code>-z text</code> bắt linker báo lỗi nếu có relocation nào phải sửa trong section chỉ đọc (như <code>.text</code>) — chỉ dữ liệu được sửa.</p>
+<p>Kết quả trên <code>~/cavOS/target/boot/kernel.bin</code> (bản build <code>2ba0edb</code>), <code>readelf -dW</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code> 0x0000000000000007 (RELA)               0xffffffff800a05a8
+ 0x0000000000000008 (RELASZ)             46416 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffff9 (RELACOUNT)          1934</code></pre></div>
+<p>Và <code>readelf -rW</code> đếm theo loại:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>Relocation section '.rela.dyn' at offset 0xa05a8 contains 1934 entries:
+   1934 R_X86_64_RELATIVE</code></pre></div>
+<p>1934 mục × 24 byte = 46416 byte, khớp <code>RELASZ</code>. Tất cả đều là <code>RELATIVE</code>: không có symbol nào phải tra, chỉ cộng slide.</p>
+
 <h2 id="kaslr-kernel-address-space-layout-randomization">KASLR = Kernel Address Space Layout Randomization</h2>
+<p class="lede"><em>Mỗi lần boot đặt kernel ở chỗ khác, để kẻ tấn công không biết trước địa chỉ của nó.</em></p>
 <p>Nạp kernel ở base ngẫu nhiên mỗi lần boot → khó khai thác lỗ hổng. Vì base đổi, kernel cần biết
 base thực qua request <code>kernel_address</code> của Limine:</p>
 <div class="code"><div class="code-bar">c</div><pre><code>bootloader.kernelVirtBase = limineKrnres-&gt;virtual_base;
 bootloader.kernelPhysBase = limineKrnres-&gt;physical_base;</code></pre></div>
-<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</p>
+<p>Hai dòng này nằm trong <code>initialiseBootloaderParser()</code> (<code>entry/bootloader.c</code>), sau request:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile struct limine_kernel_address_request limineKrnreq = {
+    .id = LIMINE_KERNEL_ADDRESS_REQUEST, .revision = 0};</code></pre></div>
+<p>Trong <code>PROTOCOL.md</code> hiện hành (bản Limine 10.8.5 ghim, repo <code>limine-protocol</code>) tính năng này tên là "Executable Address Feature" (<code>limine_executable_address_request</code>), nhưng ID request giữ nguyên (<code>0x71ba76863cc55f63, 0xb2644a48c516a487</code> trong cả <code>limine.h</code> của cavOS lẫn <code>limine.h</code> của <code>limine-protocol</code>). Xem cách cavOS đọc mọi response ở <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
+<p>Limine 10.8.5 ngẫu nhiên hoá hai thứ (đọc trong source Limine):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Cái gì</th><th>Cách chọn</th><th>Số vị trí</th></tr></thead>
+<tbody>
+<tr><td>Base ảo của kernel</td><td><code>elf.c</code>: <code>slide = rand32() &amp; ~(max_align - 1)</code>, thử lại tới khi kernel còn nằm gọn trên <code>0xffffffff80000000</code></td><td>bước 4 KiB (align của cavOS) trong 2 GiB → tối đa khoảng 2<sup>19</sup></td></tr>
+<tr><td>Base HHDM</td><td><code>protos/limine.c</code>, <code>set_paging_mode()</code>: cộng một số ngẫu nhiên bước 1 GiB, trong một phần tư nửa cao</td><td>khoảng 2<sup>15</sup> với 4-level</td></tr>
+</tbody>
+</table></div>
+<p>Từ Limine 10.0.0, KASLR <strong>mặc định tắt</strong>: <code>protos/limine.c</code> chỉ bật khi <code>limine.conf</code> ghi đúng <code>kaslr: yes</code> (Limine 8.x thì ngược lại: mặc định bật, chỉ tắt khi ghi <code>no</code>). Base HHDM được ngẫu nhiên khi <code>randomise_hhdm_base</code> bật; theo <code>CONFIG.md</code>, mặc định nó bật nếu KASLR được hỗ trợ và đang bật. Đó là lý do comment trong <code>bootloader.c</code> ghi "HHDM (randomized kernel positionings)": cavOS đọc offset từ Limine chứ không hard-code. Địa chỉ vật lý của kernel thì <code>elf.c</code> chỉ xin một vùng nhớ (<code>ext_mem_alloc_type_aligned</code>), không gọi hàm ngẫu nhiên nào.</p>
+<p>Liên quan: <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
+
+<h2 id="kaslr-có-chạy-với-cavos-không">KASLR có chạy với cavOS không?</h2>
+<p class="lede"><em>Không. Cấu hình xin KASLR, nhưng file kernel không qua được phép kiểm tra của Limine.</em></p>
+<p><code>target/boot/limine/limine.conf</code> ghi (comment "Disable … enabled by default" là chép từ mẫu cũ, đúng với Limine 8.x; với Limine 10.8.5 thì chính dòng <code>yes</code> này mới bật KASLR):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>    # Disable KASLR (it is enabled by default for relocatable kernels)
+    kaslr: yes</code></pre></div>
+<p>Nhưng Limine chỉ ngẫu nhiên hoá kernel <em>relocatable</em>, và hàm quyết định điều đó (<code>elf64_is_relocatable</code> trong <code>common/lib/elf.c</code>) trả <code>false</code> ngay nếu kiểu ELF không phải <code>ET_DYN</code>. Rồi <code>protos/limine.c</code> làm <code>kaslr = kaslr &amp;&amp; is_reloc;</code>, nên HHDM cũng không bị ngẫu nhiên. Kernel cavOS lại là:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>$ readelf -h ~/cavOS/target/boot/kernel.bin
+  Type:                              EXEC (Executable file)
+  Entry point address:               0xffffffff8002a548</code></pre></div>
+<p>Dù có <code>FLAGS_1: PIE</code> và đủ 1934 relocation, file vẫn là <code>EXEC</code>. Thử link lại cùng file <code>.o</code> với cùng cờ, chỉ đổi <code>. = 0xffffffff80000000;</code> thành <code>. = 0;</code> trong một bản sao của <code>link.ld</code> (ra file tạm, không đụng cavOS):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>  Type:                              DYN (Position-Independent Executable file)
+  Entry point address:               0x2a548</code></pre></div>
+<p>Vậy GNU ld 2.38 của cavOS ghi PIE thành <code>EXEC</code> khi link ở base khác 0 (ld 2.46 của Ubuntu cũng cho <code>EXEC</code> với <code>link.ld</code> gốc). <code>PROTOCOL.md</code> đã tính đến cách link ở 0: "For relocatable executables asking to be loaded at address 0, a minimum slide of <code>0xffffffff80000000</code> is applied". Bản kernel link ở 0 này chưa được boot thử.</p>
+<p>Kiểm chứng bằng hai lần boot thật (QEMU, KVM, <code>-snapshot</code>, monitor <code>info mem</code> và <code>gva2gpa 0xffffffff80000000</code>):</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Lần 1</th><th>Lần 2</th></tr></thead>
+<tbody>
+<tr><td>Base ảo kernel</td><td><code>ffffffff80000000</code></td><td><code>ffffffff80000000</code></td></tr>
+<tr><td>Base vật lý kernel</td><td><code>0xbfbbf000</code></td><td><code>0xbfbbf000</code></td></tr>
+<tr><td>HHDM</td><td><code>ffff800000000000</code></td><td><code>ffff800000000000</code></td></tr>
+</tbody>
+</table></div>
+<p>Hai lần giống hệt nhau, đúng như source Limine dự đoán. Muốn tự lặp lại: boot QEMU với <code>-monitor unix:/tmp/cavmon.sock,server,nowait</code>, đợi cavOS boot xong, gửi <code>info mem</code> và so dòng bắt đầu bằng <code>ffffffff8</code> giữa các lần.</p>
+
+<h2 id="kaslr-bảo-vệ-gì-và-giới-hạn">KASLR bảo vệ gì, và giới hạn</h2>
+<p class="lede"><em>KASLR không vá lỗi nào; nó chỉ bắt kẻ tấn công phải biết thêm một bí mật.</em></p>
+<p>Nhiều kiểu khai thác kernel cần biết trước địa chỉ: nhảy tới một hàm có sẵn, ghép các mẩu code (ROP), hay ghi đè một biến global đã biết. Nếu địa chỉ đổi mỗi lần boot, khai thác phải đoán, và đoán sai thường làm kernel crash thay vì bị chiếm. Giới hạn:</p>
+<ul>
+<li><strong>Rò rỉ thông tin (info leak).</strong> Chỉ cần lộ một con trỏ kernel là biết slide, vì cả ảnh kernel dời cùng một khoảng. cavOS in nhiều địa chỉ ra serial và màn hình, ví dụ <code>fb{ffff8000fd000000}</code> lộ luôn base HHDM.</li>
+<li><strong>Kênh kề (side channel).</strong> Đo thời gian truy cập, TLB hay prefetch có thể cho biết trang nào đang được map, kể cả từ user mode. Các lỗ kiểu Meltdown đọc được thẳng bộ nhớ kernel.</li>
+<li><strong>Ít entropy.</strong> Tối đa khoảng 2<sup>19</sup> vị trí trong 2 GiB. Mỗi lần đoán sai thường chỉ làm crash một lần boot, nhưng con số này nhỏ so với địa chỉ 64-bit.</li>
+<li><strong>Dễ tắt mà không ai biết.</strong> Như mục trên: cấu hình bật mà kernel không đủ điều kiện thì không có gì báo lỗi, chỉ đo mới biết.</li>
+</ul>
+
 <h2 id="spec">Spec</h2>
 <p>ELF64 / System V ABI (program headers, <code>.dynamic</code>, relocation types); Limine <code>PROTOCOL.md</code> (Kernel Address).</p>
+<ul>
+<li>Limine 10.8.5: <code>PROTOCOL.md</code> của <code>limine-protocol</code> commit <code>e42d010</code> ("Memory Layout at Entry", "Executable Address Feature"), <code>CONFIG.md</code> (<code>kaslr</code>, <code>randomise_hhdm_base</code>), <code>ChangeLog</code> (Release 10.0.0: KASLR mặc định tắt), source <code>common/lib/elf.c</code> (<code>elf64_is_relocatable</code>, <code>elf64_load</code>, <code>elf64_apply_relocations</code>) và <code>common/protos/limine.c</code> (<code>set_paging_mode</code>).</li>
+<li>System V x86-64 psABI: <code>R_X86_64_RELATIVE</code> (giá trị = B + A).</li>
+</ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · KASLR &amp; PIE Kernel</footer>
 </main>

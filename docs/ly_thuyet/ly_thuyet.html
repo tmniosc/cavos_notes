@@ -18,144 +18,42 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p><em>Nửa "đọc và hiểu" của vault: đi theo thứ tự khởi tạo của cavOS, mỗi bước ánh xạ code thật với spec
-nền tảng x86_64. Nửa còn lại là <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a> — tự viết lại để kiểm chứng.</em></p>
+<p><em>Đường chính của site: 18 bài theo đúng thứ tự <code>_start()</code> của cavOS khởi tạo máy. Đọc từ Bài 0, mỗi bài dùng
+những gì bài trước đã dạy.</em> Phần tự viết lại nằm ở <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a>; mỗi bài đã trỏ sẵn tới lab của nó.</p>
 </div>
 <p>Về trang chủ: <a href="../index.html">Home</a></p>
-<h2 id="bắt-đầu-từ-đâu">Bắt đầu từ đâu</h2>
-<ol>
-<li><a href="steps/boot_flow_start.html">Boot Flow (_start)</a> — bản đồ thứ tự khởi tạo, nằm ngay trong <code>Steps/</code> vì nó là chỉ mục của chuỗi đó.
-Mọi Step đều treo vào đây.</li>
-<li><a href="khai_niem/paging.html">Paging</a> — 5 ý nền tảng, nên nạp trước Step 03 thì đọc <code>link.ld</code> / memmap / HHDM mới trôi.</li>
-<li><a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> — học phần nào thì mở tài liệu gốc nào, lấy ở đâu.</li>
-</ol>
-<h2 id="các-bước-theo-start">Các bước theo <code>_start()</code></h2>
-<div class="callout quote">
-<p><em>Mỗi Step = một mảnh trong hàm khởi tạo của cavOS, đọc theo đúng thứ tự máy chạy.</em>
-Cột <strong>Lab</strong> là bài thực hành phụ trách step đó, chi tiết ở <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a>.</p>
-</div>
+<h2 id="bat-dau">Bắt đầu</h2>
+<p class="lede"><em>Một cửa vào duy nhất.</em></p>
+<p><a href="bai/bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>: khoá học đi đâu, mỗi bài theo khuôn nào, bản đồ 18 bài, và chuẩn bị máy.
+Từ đó bấm <em>Tiếp</em> cuối mỗi trang để đi Bài 1, Bài 2…</p>
+<h2 id="cac-bai">Các bài</h2>
+<p class="lede"><em>Bài 1–7 đã viết đủ; từ Bài 8 mới có dàn ý (mục tiêu, câu hỏi, spec).</em></p>
 <div class="table-wrap"><table>
-<thead>
-<tr>
-<th>#</th>
-<th>Step</th>
-<th>Lab</th>
-<th>Tiến độ</th>
-</tr>
-</thead>
+<thead><tr><th>Bài</th><th>Học gì</th><th>Lab</th><th>Tình trạng</th></tr></thead>
 <tbody>
-<tr>
-<td>00</td>
-<td><a href="steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a></td>
-<td>0x00</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>01</td>
-<td><a href="steps/step_01_serial_uart.html">Step 01 - Serial UART</a></td>
-<td>0x00</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>02</td>
-<td><a href="steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a></td>
-<td>0x01</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>03</td>
-<td><a href="steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a></td>
-<td>0x02</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>04</td>
-<td><a href="steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a></td>
-<td>0x03</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>05</td>
-<td><a href="steps/step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a></td>
-<td>0x03</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>06</td>
-<td><a href="steps/step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a></td>
-<td>0x04</td>
-<td>xong</td>
-</tr>
-<tr>
-<td>07</td>
-<td><a href="steps/step_07_acpi.html">Step 07 - ACPI</a></td>
-<td>0x04</td>
-<td>tiếp theo</td>
-</tr>
-<tr>
-<td>08</td>
-<td><a href="steps/step_08_idt_interrupts.html">Step 08 - IDT &amp; Interrupts</a></td>
-<td>0x04</td>
-<td></td>
-</tr>
-<tr>
-<td>09</td>
-<td><a href="steps/step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></td>
-<td>0x04</td>
-<td></td>
-</tr>
-<tr>
-<td>10</td>
-<td><a href="steps/step_10_ps2_keyboard_mouse.html">Step 10 - PS2 Keyboard &amp; Mouse</a></td>
-<td>0x05</td>
-<td></td>
-</tr>
-<tr>
-<td>11</td>
-<td><a href="steps/step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a></td>
-<td>0x06</td>
-<td></td>
-</tr>
-<tr>
-<td>12</td>
-<td><a href="steps/step_12_networking.html">Step 12 - Networking</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
-<tr>
-<td>13</td>
-<td><a href="steps/step_13_pci_nic.html">Step 13 - PCI &amp; NIC</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
-<tr>
-<td>14</td>
-<td><a href="steps/step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
-<tr>
-<td>15</td>
-<td><a href="steps/step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
-<tr>
-<td>16</td>
-<td><a href="steps/step_16_sse_fpu.html">Step 16 - SSE &amp; FPU</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
-<tr>
-<td>17</td>
-<td><a href="steps/step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a></td>
-<td>0x07+</td>
-<td></td>
-</tr>
+<tr><td><a href="bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a></td><td>kernel được nạp vào đâu, dòng đầu tiên của nó</td><td><a href="../thuc_hanh/lab_0x00_hello_serial.html">0x00</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a></td><td>nói chuyện ra ngoài qua cổng COM1</td><td><a href="../thuc_hanh/lab_0x00_hello_serial.html">0x00</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a></td><td>đọc các response của Limine: memmap, HHDM, kernel address</td><td><a href="../thuc_hanh/lab_0x01_bootloader_parser.html">0x01</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a></td><td>vẽ điểm ảnh và chữ lên màn hình</td><td><a href="../thuc_hanh/lab_0x02_framebuffer.html">0x02</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a></td><td>kiểm kê và cấp frame RAM vật lý</td><td><a href="../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a></td><td>bảng trang của riêng kernel</td><td><a href="../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a></td><td>segment, ring, stack cho ngắt</td><td>chưa có</td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_08_acpi.html">Bài 8 - ACPI</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_11_ps2_keyboard_mouse.html">Bài 11 - PS2 Keyboard &amp; Mouse</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_13_networking.html">Bài 13 - Networking</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
 </tbody>
 </table></div>
-<h2 id="khái-niệm-cốt-lõi">Khái niệm cốt lõi</h2>
-<p class="lede"><em>Thứ dùng đi dùng lại ở nhiều Step, tách riêng để khỏi giải thích lại mỗi lần.</em></p>
+<p>Muốn biết phần nào nằm ở spec nào: <a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</p>
+<h2 id="khái-niệm-cốt-lõi">Khái niệm (tra cứu)</h2>
+<p class="lede"><em>Thứ dùng đi dùng lại ở nhiều bài, tách riêng để khỏi giải thích lại mỗi lần.</em></p>
 <ul>
 <li><a href="khai_niem/paging.html">Paging</a> — nền tảng nhất, đọc trước</li>
 <li><a href="khai_niem/long_mode.html">Long Mode</a> — chế độ 64-bit, nơi kernel thực sự chạy</li>
@@ -165,7 +63,7 @@ Cột <strong>Lab</strong> là bài thực hành phụ trách step đó, chi ti�
 <li><a href="khai_niem/limine_protocol.html">Limine Protocol</a> · <a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
 <li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — vì sao địa chỉ vật lý đổi mỗi lần boot</li>
 <li><a href="khai_niem/x86_segmentation.html">x86 Segmentation</a> — segment + 3 chế độ (real/protected/long)</li>
-<li><a href="khai_niem/gdt.html">GDT</a> — segment descriptor table, bổ trợ Step 06</li>
+<li><a href="khai_niem/gdt.html">GDT</a> — segment descriptor table, bổ trợ Bài 7</li>
 <li><a href="khai_niem/esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a> — ESP, BootOrder và đường dẫn dự phòng; disk.img thật là MBR, Limine đọc kernel bằng driver FAT của nó</li>
 <li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI; cavOS không gọi firmware, tắt máy qua uACPI</li>
 <li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, shim và MOK; BOOTX64.EFI của Limine không ký nên OVMF Secure Boot trả Access Denied</li>
@@ -177,7 +75,7 @@ Cột <strong>Lab</strong> là bài thực hành phụ trách step đó, chi ti�
 <ul>
 <li><a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> — bảng tra tổng: cần gì thì mở cuốn nào</li>
 <li><a href="tai_lieu_goc/intel_sdm.html">Intel SDM</a> — Intel 64 &amp; IA-32 Software Developer's Manual</li>
-<li><a href="tai_lieu_goc/uart_16550.html">UART 16550</a> — datasheet con chip serial dùng ở Step 01</li>
+<li><a href="tai_lieu_goc/uart_16550.html">UART 16550</a> — datasheet con chip serial dùng ở Bài 2</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Lý thuyết</footer>

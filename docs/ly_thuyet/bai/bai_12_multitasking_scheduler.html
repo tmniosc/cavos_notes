@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step 11 — Multitasking &amp; Scheduler · Học cavOS</title>
+<title>Bài 12 — Multitasking &amp; Scheduler · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
-<body data-root="../../" data-page="ly_thuyet/steps/step_11_multitasking_scheduler.html">
+<body data-root="../../" data-page="ly_thuyet/bai/bai_12_multitasking_scheduler.html">
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
-    <h1>Step 11 — Multitasking &amp; Scheduler</h1>
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 12 — Multitasking &amp; Scheduler</h1>
     <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, scheduler, smp</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateTasking()</code> · <strong>Đầu vào:</strong> SMP từ <a href="step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>, tick từ <a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a></p>
+<p><strong>Hàm:</strong> <code>initiateTasking()</code> · <strong>Đầu vào:</strong> SMP từ <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>, tick từ <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a></p>
 <h2 id="mục-đích">Mục đích</h2>
 <p><strong>Chạy nhiều luồng/tiến trình "đồng thời" trên CPU.</strong> Lưu/khôi phục context (register, stack, CR3), và dùng
-timer tick (<a href="step_09_apic_timer.html">Step 09 - APIC &amp; Timer</a>) để <strong>cướp quyền</strong> (preempt) luân phiên các task. Đây là lúc <code>mov cr3</code>
-thật sự được dùng để đổi address space (<a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>) — mỗi task một không gian riêng.
-Nền cho userspace (<a href="step_17_userspace_elf_loader.html">Step 17 - Userspace &amp; ELF Loader</a>).</p>
+timer tick (<a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>) để <strong>cướp quyền</strong> (preempt) luân phiên các task. Đây là lúc <code>mov cr3</code>
+thật sự được dùng để đổi address space (<a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>) — mỗi task một không gian riêng.
+Nền cho userspace (<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
 <h2 id="mục-tiêu-học">Mục tiêu học</h2>
 <ul>
 <li>Task struct (context register, stack, address space).</li>
@@ -40,7 +40,7 @@ Nền cho userspace (<a href="step_17_userspace_elf_loader.html">Step 17 - Users
 <li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — task, SMP/APIC INIT-SIPI.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Step 11 - Multitasking &amp; Scheduler</footer>
+<footer>Học cavOS · Bài 12 - Multitasking &amp; Scheduler</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

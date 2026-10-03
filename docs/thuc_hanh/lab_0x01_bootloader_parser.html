@@ -18,8 +18,8 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p><strong>Thực hành <a href="../ly_thuyet/steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</strong> Tự khai các Limine request, đọc response,
-in ra serial — thấy tận mắt paging/HHDM/kernel-address/memmap mà Step 02 chỉ đọc vào struct.
+<p><strong>Thực hành <a href="../ly_thuyet/bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</strong> Tự khai các Limine request, đọc response,
+in ra serial — thấy tận mắt paging/HHDM/kernel-address/memmap mà Bài 3 chỉ đọc vào struct.
 Nối tiếp <a href="lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> (tái dùng serial 16550).</p>
 </div>
 <p><strong>Vị trí:</strong> <code>~/oskernel-lab/01-bootloader-parser/</code> · build/run y hệt Lab 0x00 (<code>make kernel</code>, <code>make run</code>).</p>
@@ -48,7 +48,7 @@ LIMINE_REQUEST static volatile struct limine_paging_mode_request    paging_reque
   [0] base=0x... len=0x... USABLE
   ...
   -- USABLE = ~2xx MiB</code></pre></div>
-<h2 id="khác-với-cavos-step-02">Khác với cavOS (Step 02)</h2>
+<h2 id="khác-với-cavos-step-02">Khác với cavOS (Bài 3)</h2>
 <ul>
 <li>cavOS gom vào struct <code>bootloader</code> dùng nội bộ; lab chỉ <strong>in ra</strong> để quan sát.</li>
 <li>Lab <strong>chưa</strong> trừ <code>hhdmOffset</code> cho RSDP / chưa xử SMP (giữ tối giản); tập trung HHDM + memmap + kernel-address.</li>
@@ -62,7 +62,7 @@ LIMINE_REQUEST static volatile struct limine_paging_mode_request    paging_reque
 </ol>
 <h2 id="notes-của-tôi">Notes của tôi</h2>
 <h3 id="run-thật-2026-05-28-qemu--m-q35--m-256m">Run thật (2026-05-28, QEMU <code>-M q35 -m 256M</code>)</h3>
-<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Step 02) ===
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Bài 3) ===
 [paging] mode = 4-level
 [hhdm]   offset = 0xffff800000000000
 [kernel] virt = 0xffffffff80000000
@@ -77,7 +77,7 @@ LIMINE_REQUEST static volatile struct limine_paging_mode_request    paging_reque
   -- USABLE = 254 MiB / non-RES = 259 MiB (QEMU cấp 256 MiB)
 [done] halt.</code></pre></div>
 <h3 id="run-thật-2026-09-03-qemu--m-q35--m-256m">Run thật 2026-09-03 (QEMU <code>-M q35 -m 256M</code>)</h3>
-<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Step 02) ===
+<div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x01 - Bootloader Parser (Bài 3) ===
 [paging] mode = 4-level
 [hhdm]   offset = 0xffff800000000000        ← Y HỆT lần trước: HHDM cố định, không theo KASLR
 [kernel] virt = 0xffffffff80000000          ← Y HỆT: top-2GiB luôn cố định
@@ -97,7 +97,7 @@ ranh giới các vùng thì <strong>đổi hết</strong>. Đó chính là lý d
 Vẫn đúng 16 entry và vẫn <code>254 / 259 MiB</code> vì QEMU cấu hình y như cũ.</p>
 </div>
 <h3 id="các-loại-vùng-memmap-type-kernel-được-làm-gì-với-chúng">Các loại vùng (memmap type) — kernel được làm gì với chúng</h3>
-<p class="lede"><em>Mỗi vùng có 1 "nhãn" cho biết là RAM trống, RAM mượn-tạm, hay vùng cấm. PMM (<a href="../ly_thuyet/steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>) dựa vào nhãn này để quyết định cấp phát.</em></p>
+<p class="lede"><em>Mỗi vùng có 1 "nhãn" cho biết là RAM trống, RAM mượn-tạm, hay vùng cấm. PMM (<a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>) dựa vào nhãn này để quyết định cấp phát.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -136,7 +136,7 @@ Vẫn đúng 16 entry và vẫn <code>254 / 259 MiB</code> vì QEMU cấu hình 
 <td><strong>FRAMEBUFFER</strong></td>
 <td>✗</td>
 <td>✗</td>
-<td>VRAM màn hình (MMIO) — xem <a href="../ly_thuyet/steps/step_03_framebuffer_console.html">Step 03 - Framebuffer &amp; Console</a></td>
+<td>VRAM màn hình (MMIO) — xem <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a></td>
 </tr>
 <tr>
 <td><strong>ACPI_RECLAIM</strong></td>
@@ -152,7 +152,7 @@ Vẫn đúng 16 entry và vẫn <code>254 / 259 MiB</code> vì QEMU cấu hình 
 </tr>
 </tbody>
 </table></div>
-<p>→ <strong>2 mức phân loại PMM dùng</strong> (<a href="../ly_thuyet/steps/step_04_physical_memory_manager.html">Step 04 - Physical Memory Manager</a>):</p>
+<p>→ <strong>2 mức phân loại PMM dùng</strong> (<a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>):</p>
 <ul>
 <li><strong>"Đếm vào tổng RAM" (<code>mmTotal</code>)</strong>: mọi type <strong>trừ <code>RESERVED</code></strong> (cộng dồn length).</li>
 <li><strong>"Cấp phát được ngay"</strong>: <code>USABLE</code> (+ <code>BOOT_RECLAIM</code> nếu coi như đã reclaim). Dòng <code>-- USABLE</code> vs <code>non-RES</code>

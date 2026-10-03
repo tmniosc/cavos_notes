@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Step 17 — Userspace &amp; ELF Loader · Học cavOS</title>
+<title>Bài 18 — Userspace &amp; ELF Loader · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
-<body data-root="../../" data-page="ly_thuyet/steps/step_17_userspace_elf_loader.html">
+<body data-root="../../" data-page="ly_thuyet/bai/bai_18_userspace_elf_loader.html">
 <header class="top">
   <div class="top-inner">
-    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Steps</div>
-    <h1>Step 17 — Userspace &amp; ELF Loader</h1>
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
+    <h1>Bài 18 — Userspace &amp; ELF Loader</h1>
     <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, userspace, elf</span></div>
   </div>
 </header>
@@ -20,14 +20,14 @@
 <p><strong>Files:</strong> <code>entry/*</code> (elf loader), <code>multitasking/*</code> · <strong>Spec:</strong> ELF64; x86-64 psABI; musl</p>
 <h2 id="mục-đích">Mục đích</h2>
 <p><strong>Chạy chương trình của người dùng ở ring 3</strong> — đích đến của cả hành trình. Đọc file ELF từ đĩa
-(<a href="step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a>), map các segment vào address space user (<a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>),
+(<a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>), map các segment vào address space user (<a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>),
 dựng stack + argv/auxv, rồi nhảy xuống ring 3. Gom mọi thứ trước đó: paging (không gian riêng), GDT user
-segment (<a href="step_06_gdt_tss.html">Step 06 - GDT &amp; TSS</a>), syscall (<a href="step_15_fast_syscalls.html">Step 15 - Fast Syscalls</a>), scheduler (<a href="step_11_multitasking_scheduler.html">Step 11 - Multitasking &amp; Scheduler</a>).
+segment (<a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>), syscall (<a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>), scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>).
 Kết quả: <code>_start</code> kết thúc bằng <code>run("/bin/bash")</code> — một shell thật chạy trên cavOS.</p>
 <ul>
 <li><code>_start</code> kết thúc bằng <code>while(1) run("/bin/bash", ...)</code>.</li>
-<li>ELF loader: đọc file (<a href="step_14_ahci_filesystems.html">Step 14 - AHCI &amp; Filesystems</a>), map các <strong>PT_LOAD</strong> vào không gian ảo
-(<a href="step_05_virtual_memory_paging.html">Step 05 - Virtual Memory &amp; Paging</a>), dựng stack + <strong>auxv</strong>, nhảy vào <strong>ring 3</strong>.</li>
+<li>ELF loader: đọc file (<a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>), map các <strong>PT_LOAD</strong> vào không gian ảo
+(<a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>), dựng stack + <strong>auxv</strong>, nhảy vào <strong>ring 3</strong>.</li>
 <li>Dynamic linking: musl ld.so cho shared library.</li>
 </ul>
 <h2 id="câu-hỏi">✓ Câu hỏi</h2>
@@ -38,7 +38,7 @@ Kết quả: <code>_start</code> kết thúc bằng <code>run("/bin/bash")</code
 <h2 id="notes-của-tôi">Notes của tôi</h2>
 <div class="callout quote"></div>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Step 17 - Userspace &amp; ELF Loader</footer>
+<footer>Học cavOS · Bài 18 - Userspace &amp; ELF Loader</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

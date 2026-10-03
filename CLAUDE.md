@@ -10,7 +10,7 @@
 
 ## Mục tiêu
 Đọc source cavOS từ đầu, **ánh xạ code ↔ spec nền tảng x86_64** (Intel SDM, ACPI, PCI, AHCI, Limine,
-datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem `docs/ly_thuyet/steps/boot_flow_start.html`).
+datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_start()` (xem `docs/ly_thuyet/bai/bai_00_bat_dau.html`).
 
 ## Vị trí (RẤT QUAN TRỌNG)
 | Thứ | Đường dẫn |
@@ -22,6 +22,7 @@ datasheet thiết bị), đi tuần tự theo thứ tự khởi tạo trong `_st
 | **Source lab** — trong WSL | `~/oskernel-lab` — chép từ `lab/src/oskernel-lab` |
 | Cross toolchain | `~/opt/cross/bin/x86_64-cavos-gcc` (GCC 11.4.0, dựng bằng `make tools`) |
 | Limine binary | `~/opt/limine` — branch **`v8.x-binary`** (v9+ đổi tên `kernel_path`, lệch note) |
+| Limine cavOS thật sự boot | `~/cavOS/src/bootloader/limine/` — `assert.sh` ghim 10.1.1 nhưng clone đầu nhánh `v10.x-binary`, binary là **10.8.5** (trang khái niệm trích source 10.8.5; `~/opt/limine` 8.7.0 chỉ cho oskernel-lab) |
 
 WSL2 **Ubuntu-26.04** trên cả 2 máy. Claude chạy phía Windows → vào WSL qua `wsl.exe`
 hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD lúc chạy `claude`:
@@ -70,7 +71,7 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 - 3 khu: **Lý thuyết** (đọc hiểu) · **Thực hành** (tự viết chạy được) · **Công cụ và môi trường**.
   Mỗi khu có 1 trang chỉ mục cùng tên nằm trong chính khu đó (`docs/ly_thuyet/ly_thuyet.html`).
 - **Tên thư mục + tên file HTML: không dấu, chữ thường, `_` giữa các từ** (`ly_thuyet/khai_niem/paging.html`,
-  `steps/step_05_virtual_memory_paging.html`). Tiêu đề hiển thị (h1, sidebar `t` trong site.js) vẫn tiếng Việt có dấu.
+  `bai/bai_06_virtual_memory_paging.html`). Tiêu đề hiển thị (h1, sidebar `t` trong site.js) vẫn tiếng Việt có dấu.
   Tiếng Việt cho nội dung; thuật ngữ (Paging, HHDM, GDT, Long Mode…) giữ tiếng Anh.
 - **KHÔNG dùng emoji/icon.** Mũi tên `→`, ký tự vẽ bảng `├─►`, tick `✓ ✗` không tính là icon.
 - **Sơ đồ là SVG inline trong trang, không dùng ASCII art.** Vẽ theo style skill `dark-native-diagrams`
@@ -88,17 +89,25 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 
 ## Quy ước viết note
 - **Đọc code** trong WSL. **Ghi note** vào vault (ổ Windows).
-- Mỗi step: đọc code thật → giảng + ánh xạ spec → cập nhật trang step (chip `Status` = `done`), cập nhật bảng
-  Step trong `docs/ly_thuyet/ly_thuyet.html` và mục "Tiến độ học" bên dưới.
-- **Mỗi trang step có 2 mục cố định gần đầu:** `<h2>Mục đích</h2>` (step này để làm gì, link chéo step phụ
-  thuộc) và `<h2 class="card-head">Nói thật đơn giản</h2>` — tóm tắt **toàn bài** bằng ngôn ngữ đời thường,
-  có ẩn dụ, lướt chỗ quá kỹ thuật. Đọc riêng mục này là hiểu step làm gì và vì sao.
+- **Site là MỘT khoá học tuyến tính** (2026-10-03): Bài 0 → Bài 18 ở `docs/ly_thuyet/bai/bai_NN_<tên>.html`,
+  đúng thứ tự `_start()`. Sidebar (site.js) và nút Trước/Sau đi theo thứ tự đó. Khái niệm (`khai_niem/`) là phần
+  **tra cứu**, không nằm trên đường chính; Tài liệu gốc để biết spec nào nói phần nào.
+- **Mỗi bài theo đúng khuôn 7 mục, theo thứ tự:** `Mục đích` (`#muc-dich`) → `Nói thật đơn giản` (`.card-head`,
+  toàn bài bằng lời đời thường, có ẩn dụ) → `Cần biết trước` (`#can-biet-truoc`: 2–4 khái niệm giải thích ngắn tại chỗ
+  + link "đọc sâu" sang `khai_niem/`; khái niệm đã dạy ở bài trước thì chỉ ghi "đã gặp ở Bài K") → `Đọc code cavOS`
+  (`#doc-code`: file/hàm theo thứ tự chạy, h3 cho từng phần) → `Tự làm` (`#tu-lam`: lab + lệnh + output thật; chưa có
+  lab thì một việc tay đã chạy thử thật) → `Tự kiểm tra` (`#tu-kiem-tra`: 3–5 câu `<details class="quiz">`, style ở
+  noir.css) → `Đọc thêm` (`#doc-them`: ánh xạ spec, câu hỏi mở đã trả lời, nhật ký lỗi, chi tiết sâu).
+  Bài 0 là trang "bắt đầu ở đây" (khuôn bài, bản đồ khoá học, chuẩn bị máy), không theo khuôn 7 mục.
+- Viết bài mới (Bài 8 trở đi): đọc code thật trong `~/cavOS` → viết theo khuôn → sửa chip/cột "Tình trạng" trong
+  `docs/ly_thuyet/ly_thuyet.html` (dàn ý → đã viết), chuyển bài từ nhóm "Sắp tới" sang "Bài học" trong site.js,
+  cập nhật bản đồ trong Bài 0 (ô xanh) và mục "Tiến độ học" bên dưới.
 - **Mọi mục `h2` mở đầu bằng 1 câu đời thường** `<p class="lede"><em>…</em></p>` trước khi vào code/chi
   tiết — user là người mới, mỗi mục phải đọc-là-hiểu. Chi tiết kỹ thuật để bên dưới.
 - Code viết dạng text đã escape trong `.code > .code-bar(c|bash|asm|ld|make|text) + pre > code`; `noir.js` tự tô màu.
 
 ## Quy ước lab
-- **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với step (bảng trong `docs/thuc_hanh/thuc_hanh.html`).
+- **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với bài (bảng trong `docs/thuc_hanh/thuc_hanh.html`).
 - **Build + boot QEMU thật rồi mới chép output vào note** — KHÔNG bịa output/bài học
   (đã từng sai, xem `docs/thuc_hanh/lab_0x03_pmm_vmm.html` "Ghi chú trung thực"). Log đầy đủ để ở `lab/outputs/`.
 - **Tách module ngay từ Lab 0x00**: `io.h`/`serial.{h,c}`/`boot.{h,c}`/`pmm.{h,c}`/`paging.{h,c}` +
@@ -108,18 +117,18 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
   lên GitHub → cái gì không nằm trong vault thì không có bản sao nào.
 
 ## Tiến độ học
-Trang step nằm ở `docs/ly_thuyet/steps/` (tên file dạng `step_05_virtual_memory_paging.html`).
-- [x] Step 00 - Boot & Limine — link.ld, _start, Limine protocol
-- [x] Step 01 - Serial UART — 16550, COM1
-- [x] Step 02 - Bootloader Parser — 6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP
-- [x] Step 03 - Framebuffer & Console — Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ
-- [x] Step 04 - Physical Memory Manager — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
-- [x] Step 05 - Virtual Memory & Paging — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
-- [x] Step 06 - GDT & TSS — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
-- [ ] Step 07 - ACPI ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
-- [ ] Step 08 → 17: khung sẵn trong vault, điền dần.
+Trang bài nằm ở `docs/ly_thuyet/bai/` (tên file dạng `bai_06_virtual_memory_paging.html`; Bài N = Step N-1 cũ).
+- [x] Bài 1 - Boot & Limine — link.ld, _start, Limine protocol
+- [x] Bài 2 - Serial UART — 16550, COM1
+- [x] Bài 3 - Bootloader Parser — 6 request → struct `bootloader`; paging/HHDM/kernel_addr/memmap/SMP/RSDP
+- [x] Bài 4 - Framebuffer & Console — Limine FB qua HHDM, BGRX 32bpp, PSF1 font, console con trỏ
+- [x] Bài 5 - Physical Memory Manager — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
+- [x] Bài 6 - Virtual Memory & Paging — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
+- [x] Bài 7 - GDT & TSS — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
+- [ ] Bài 8 - ACPI ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
+- [ ] Bài 9 → 18: mới có dàn ý, điền dần theo khuôn 7 mục.
 
-> Nạp trước Step 03: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
+> Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 
 ## Quyết định đã chốt
 - Nội dung học là **site HTML dark noir** (chuyển từ vault Obsidian ngày 2026-09-30 bằng

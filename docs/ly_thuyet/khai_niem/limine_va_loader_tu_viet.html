@@ -76,7 +76,7 @@ memmap, SMP, RSDP) và <code>drivers/vga.c</code> (framebuffer). Cột giữa l�
 <tr><td>Màn hình</td><td>Tự hỏi GOP: base, pitch, định dạng điểm ảnh</td><td>Framebuffer request</td></tr>
 <tr><td>Memory map</td><td>Nguyên mảng <code>EFI_MEMORY_DESCRIPTOR</code>, tự phân loại vùng nào dùng được</td><td>Memmap request: đã gộp theo loại của Limine (usable, bootloader-reclaimable, ACPI, framebuffer…)</td></tr>
 <tr><td>ExitBootServices</td><td>Tự gọi, phải đọc lại map và thử lại khi MapKey cũ</td><td>Limine gọi; kernel không thấy Boot Services</td></tr>
-<tr><td>ACPI</td><td>Tìm RSDP trong Configuration Table của UEFI theo GUID</td><td>RSDP request (<a href="../steps/step_07_acpi.html">Step 07</a>)</td></tr>
+<tr><td>ACPI</td><td>Tìm RSDP trong Configuration Table của UEFI theo GUID</td><td>RSDP request (<a href="../bai/bai_08_acpi.html">Bài 8</a>)</td></tr>
 <tr><td>CPU khác</td><td>Tự gửi INIT-SIPI qua local APIC</td><td>SMP request: Limine đánh thức các AP, mỗi AP chờ một địa chỉ để nhảy tới</td></tr>
 <tr><td>Máy BIOS cũ</td><td>Không chạy</td><td>Chạy</td></tr>
 </tbody>
@@ -98,7 +98,7 @@ memmap, SMP, RSDP) và <code>drivers/vga.c</code> (framebuffer). Cột giữa l�
 <li><a href="https://wiki.osdev.org/Limine_Bare_Bones">Limine Bare Bones - OSDev Wiki</a></li>
 <li><a href="https://wiki.osdev.org/UEFI">UEFI - OSDev Wiki</a>: viết ứng dụng UEFI và loader của riêng mình</li>
 </ul>
-<p>Liên quan: <a href="limine_protocol.html">Limine Protocol</a>, <a href="../steps/step_00_boot_limine.html">Step 00 - Boot &amp; Limine</a>, <a href="../steps/step_02_bootloader_parser.html">Step 02 - Bootloader Parser</a>.</p>
+<p>Liên quan: <a href="limine_protocol.html">Limine Protocol</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Limine hay tự viết loader UEFI</footer>
 </main>
