@@ -3,40 +3,350 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 8 — ACPI · Học cavOS</title>
+<title>Bài 8 - ACPI · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_08_acpi.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 8 — ACPI</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, acpi, firmware</span></div>
+    <h1>Bài 8 - ACPI</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, acpi, firmware</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateACPI()</code> · <strong>Đầu vào:</strong> <code>rsdp</code> từ <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Đọc các bảng mô tả phần cứng do firmware cung cấp</strong> (qua RSDP từ <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>). ACPI là
-"danh bạ" của bo mạch: có bao nhiêu CPU, APIC ở đâu, HPET/PCIe ở đâu, cách tắt/sleep máy. Cụ thể cavOS cần
-<strong>MADT</strong> để biết Local/IO APIC → tiền đề bắt buộc cho <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>.</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateACPI()</code> (<code>acpi/acpi.c</code>) · <strong>Đầu vào:</strong> <code>bootloader.rsdp</code> từ <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a></p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Đọc các bảng mà firmware để lại để biết máy có những phần cứng gì và nằm ở đâu.</em></p>
+<p>Kernel không tự đoán được máy có mấy CPU, chip ngắt nằm ở địa chỉ nào, hay tắt máy bằng cách nào. Firmware ghi sẵn những điều đó vào các <strong>bảng ACPI</strong> trong RAM.
+Bài này lần theo chuỗi RSDP → RSDT/XSDT → từng bảng. Bảng quan trọng nhất cho bước kế tiếp là <strong>MADT</strong>: nó cho địa chỉ Local APIC, I/O APIC và cách các IRQ cũ nối vào
+I/O APIC, thứ mà <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a> cần để bật timer.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Hãy hình dung bạn dọn vào một căn nhà lạ. Chủ cũ (firmware) để lại một <strong>tập hồ sơ</strong> trên bàn: trang bìa (RSDP) ghi "mục lục ở trang X"; mục lục (RSDT hoặc XSDT)
+liệt kê từng hồ sơ; mỗi hồ sơ có một nhãn bốn chữ cái: <code>APIC</code> là sơ đồ hệ thống chuông báo (CPU, chip ngắt), <code>FACP</code> là sổ tay điện nước (cổng tắt máy,
+đồng hồ), <code>HPET</code> là đồng hồ treo tường.</p>
+<p>Phần lớn hồ sơ là bảng số liệu, đọc thẳng được. Riêng hồ sơ <code>DSDT</code> viết bằng một "ngôn ngữ máy" riêng (AML), muốn hiểu phải có người phiên dịch. cavOS dùng một
+người phiên dịch có sẵn: thư viện <strong>uACPI</strong>.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Bốn ý; RSDP và HHDM đã gặp ở Bài 3.</em></p>
 <ul>
-<li>Từ RSDP → RSDT/XSDT → tìm các bảng (MADT/APIC, FADT, HPET…).</li>
-<li>Parse <strong>MADT</strong> lấy local APIC / IO APIC (chuẩn bị <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>).</li>
-<li>Checksum bảng ACPI.</li>
+<li><strong>Firmware và ACPI.</strong> Firmware (BIOS hoặc UEFI) chạy trước bootloader, khởi tạo bo mạch, rồi dựng các bảng mô tả phần cứng trong RAM. ACPI (Advanced Configuration and
+Power Interface) là chuẩn quy định hình dạng các bảng đó, để một kernel đọc được trên mọi máy. Có hai loại nội dung: <em>bảng tĩnh</em> (số liệu: địa chỉ, số lượng, cờ) và
+<em>AML</em> (bytecode mô tả thiết bị và các thao tác như tắt máy, cần trình thông dịch). Đọc sâu: <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> (ACPI Specification).</li>
+<li><strong>Header chung và checksum.</strong> Mọi bảng (trừ RSDP và FACS) mở đầu bằng cùng một header 36 byte: chữ ký 4 ký tự (<code>"APIC"</code>), độ dài cả bảng, revision, checksum,
+tên OEM. <em>Checksum</em> là một byte được chọn sao cho cộng mọi byte của bảng (bỏ phần nhớ) ra 0. Cộng ra khác 0 nghĩa là đọc sai chỗ hoặc bảng hỏng.</li>
+<li><strong>Đã gặp ở <a href="bai_03_bootloader_parser.html">Bài 3</a>:</strong> Limine trả địa chỉ RSDP qua một request; với base revision 2 đó là địa chỉ <em>ảo</em> trong HHDM,
+cavOS trừ <code>hhdmOffset</code> để lưu địa chỉ vật lý. Đọc sâu: <a href="../khai_niem/hhdm.html">HHDM</a>, <a href="../khai_niem/limine_protocol.html">Limine protocol</a>.</li>
+<li><strong>APIC, nói trước một câu.</strong> APIC là chip ngắt hiện đại thay PIC 8259 (<a href="bai_09_idt_interrupts.html">Bài 9</a>): mỗi CPU có một <em>Local APIC</em>, và bo mạch
+có một hoặc vài <em>I/O APIC</em> nhận IRQ từ thiết bị. Chi tiết ở <a href="bai_10_apic_timer.html">Bài 10</a>; bài này chỉ cần biết địa chỉ của chúng nằm trong MADT.</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>cavOS chỉ viết khoảng 50 dòng cho ACPI; phần nặng là thư viện uACPI, còn MADT thì <code>initiateAPIC()</code> tự duyệt.</em></p>
+<p>File: <code>entry/bootloader.c</code>, <code>acpi/acpi.c</code>, <code>acpi/uacpi_glue.c</code>, <code>acpi/uacpi/*.c</code> (uACPI 3.1.0, mã nguồn chép vào cây cavOS),
+<code>cpu/apic.c</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initialiseBootloaderParser();                       // Bài 3: lưu bootloader.rsdp
+  ...
+  initiatePMM();                                      // Bài 5
+  initiateVMM();                                      // Bài 6
+  initiateGDT();                                      // Bài 7
+  LinkedListInit(&amp;dsIrqHandler, sizeof(irqHandler)); // uACPI sẽ đăng ký IRQ handler vào đây
+  initiateACPI(); // needed for APIC setup            // bài này
+  initiateISR();                                      // Bài 9, gọi initiateAPIC() (Bài 10)</code></pre></div>
+<p>ACPI chạy sau PMM/VMM vì uACPI cần <code>malloc</code> (<code>uacpi_kernel_alloc</code> gọi <code>malloc</code>). Nó chạy trước <code>initiateISR()</code> vì <code>initiateAPIC()</code> ở cuối
+<code>initiateISR()</code> hỏi uACPI bảng MADT. Danh sách IRQ handler được tạo ngay trước, vì uACPI đăng ký handler cho ngắt ACPI (SCI) ngay trong lúc khởi tạo.</p>
+
+<h3 id="rsdp">2. RSDP: từ Limine tới uACPI</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/bootloader.c:initialiseBootloaderParser()
+  // RSDP
+  // todo: revision &gt;= 3 and it's not virtual!
+  struct limine_rsdp_response *rsdp_response = limineRsdpReq.response;
+  bootloader.rsdp = (size_t)rsdp_response-&gt;address - bootloader.hhdmOffset;
+
+// acpi/uacpi_glue.c
+uacpi_status uacpi_kernel_get_rsdp(uacpi_phys_addr *out_rsdp_address) {
+  *out_rsdp_address = bootloader.rsdp;          // uACPI hỏi: RSDP ở PA nào?
+  return UACPI_STATUS_OK;
+}
+void *uacpi_kernel_map(uacpi_phys_addr addr, uacpi_size len) {
+  return (void *)(bootloader.hhdmOffset + addr); // "map" = cộng HHDM, không tạo mapping mới
+}</code></pre></div>
+<p>uACPI không biết gì về Limine hay HHDM. Nó gọi các hàm <code>uacpi_kernel_*</code> mà kernel phải cung cấp (gọi là <em>glue</em>). cavOS trả RSDP dạng PA, và "map" một PA
+bằng cách cộng <code>hhdmOffset</code>, vì HHDM đã phủ sẵn RAM và vùng ACPI. Nếu quên trừ ở <code>bootloader.c</code>, uACPI sẽ cộng HHDM lần thứ hai và đọc vào địa chỉ không tồn tại.</p>
+
+<h3 id="initiate-acpi">3. <code>initiateACPI()</code>: ba bước của uACPI</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// acpi/acpi.c
+void initiateACPI() {
+  uacpi_status ret = uacpi_initialize(0);      // (1) RSDP, RSDT/XSDT, danh sách bảng, FADT
+  if (uacpi_unlikely_error(ret)) { ...; panic(); }
+
+  ret = uacpi_namespace_load();                // (2) đưa DSDT + mọi SSDT vào trình thông dịch AML
+  if (uacpi_unlikely_error(ret)) { ...; panic(); }
+
+  // set the interrupt model
+  uacpi_set_interrupt_model(UACPI_INTERRUPT_MODEL_IOAPIC);   // gọi method \_PIC(1)
+
+  ret = uacpi_namespace_initialize();          // (3) chạy _STA/_INI của các device
+  if (uacpi_unlikely_error(ret)) { ...; panic(); }
+
+  // use the fadt for getting the century register (if it exists)
+  struct acpi_fadt *fadt = 0;
+  if (!uacpi_unlikely_error(uacpi_table_fadt(&amp;fadt))) {
+    century_register = fadt-&gt;century;         // ô CMOS chứa thế kỷ, cho RTC
+    if (century_register)
+      debugf("[acpi::info] Found century register for RTC: register{0x%lx}\n", century_register);
+  }
+}</code></pre></div>
 <ul>
-<li>[ ] RSDT (32-bit ptr) vs XSDT (64-bit ptr) — dùng cái nào?</li>
-<li>[ ] MADT entry types nào cần?</li>
+<li><strong>(1) <code>uacpi_initialize</code></strong> làm đúng việc của mục 4 bên dưới: đọc RSDP, chọn XSDT hay RSDT, ghi lại từng bảng (và in mỗi bảng một dòng).</li>
+<li><strong>(2) <code>uacpi_namespace_load</code></strong> chạy AML trong DSDT và SSDT để dựng <em>namespace</em>: cây các object như <code>\_SB.PCI0</code>, <code>\_S5</code>. Cũng trong bước này uACPI
+cài handler cho SCI (ngắt ACPI) qua <code>uacpi_kernel_install_interrupt_handler</code>.</li>
+<li><strong><code>\_PIC(1)</code></strong> báo cho firmware: "OS dùng APIC, không dùng PIC 8259". Một số DSDT trả bảng định tuyến ngắt PCI khác nhau tuỳ giá trị này.</li>
+<li><strong>(3) <code>uacpi_namespace_initialize</code></strong> chạy <code>_STA</code> (thiết bị có mặt không) và <code>_INI</code> (khởi tạo) cho từng device.</li>
+<li>cavOS chỉ lấy đúng một trường FADT: <code>century</code>. Các dịch vụ khác của uACPI được dùng về sau: tắt máy và khởi động lại (<code>acpiPoweroff</code>, <code>acpiReboot</code> cùng file),
+và bảng định tuyến ngắt PCI (<code>ioApicPciRegister</code>, Bài 10, Bài 14).</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="tu-rsdp-toi-bang">4. Từ RSDP tới từng bảng</h3>
+<p>Đây là việc uACPI làm trong bước (1), và là việc Lab 0x05 làm bằng tay:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// acpi/uacpi/tables.c (uACPI, rút gọn)
+    rsdp = uacpi_kernel_map(rsdp_phys, sizeof(struct acpi_rsdp));
+    if (rsdp-&gt;revision &gt; 1 &amp;&amp; rsdp-&gt;xsdt_addr &amp;&amp; !uacpi_check_flag(UACPI_FLAG_BAD_XSDT)) {
+        rxsdt = rsdp-&gt;xsdt_addr;   rxsdt_entry_size = 8;   // ACPI 2.0+: XSDT, con trỏ 64 bit
+    } else {
+        rxsdt = rsdp-&gt;rsdt_addr;   rxsdt_entry_size = 4;   // ACPI 1.0: RSDT, con trỏ 32 bit
+    }
+    return initialize_from_rxsdt(rxsdt, rxsdt_entry_size);</code></pre></div>
+<figure class="diagram">
+<svg id="svg-bai08-tables" role="img" aria-label="ACPI table chain: RSDP points to RSDT or XSDT, which lists FACP, APIC (MADT), HPET, MCFG and WAET; FACP points to DSDT and FACS" style="max-width:1083px" width="100%" viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-bai08-tables-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-bai08-tables .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai08-tables .lbl{fill:#c2c0b6;} #svg-bai08-tables .flow{stroke:#7d7b73;fill:none;}</style>
+</defs>
+<rect x="20" y="110" width="150" height="80" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="95" y="136" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">RSDP</text>
+<text x="95" y="154" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">"RSD PTR ", 20/36 B</text>
+<text x="95" y="170" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">from Limine request</text>
+<rect x="200" y="110" width="150" height="80" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="275" y="136" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">RSDT / XSDT</text>
+<text x="275" y="154" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">header + N pointers</text>
+<text x="275" y="170" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">4 B (RSDT) / 8 B (XSDT)</text>
+<line x1="170" y1="150" x2="196" y2="150" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M350 150 H372 V40 H396" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M372 90 H396" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M372 150 V260 H396" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M372 150 H396" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M372 205 H396" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<rect x="400" y="20" width="150" height="40" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="475" y="37" text-anchor="middle" fill="#F0DBAE" font-size="10.5" font-weight="600">FACP (FADT)</text>
+<text x="475" y="51" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">power, SCI, century</text>
+<rect x="400" y="70" width="150" height="40" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="475" y="87" text-anchor="middle" fill="#C6E7CC" font-size="10.5" font-weight="600">APIC (MADT)</text>
+<text x="475" y="101" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">LAPIC, I/O APIC, ISO</text>
+<rect x="400" y="130" width="150" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="475" y="147" text-anchor="middle" fill="#D3D1C7" font-size="10.5" font-weight="600">HPET</text>
+<text x="475" y="161" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">event timer</text>
+<rect x="400" y="185" width="150" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="475" y="202" text-anchor="middle" fill="#D3D1C7" font-size="10.5" font-weight="600">MCFG (q35)</text>
+<text x="475" y="216" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">PCIe config MMIO</text>
+<rect x="400" y="240" width="150" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="475" y="257" text-anchor="middle" fill="#D3D1C7" font-size="10.5" font-weight="600">WAET ...</text>
+<text x="475" y="271" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">other tables</text>
+<rect x="590" y="20" width="110" height="40" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="645" y="37" text-anchor="middle" fill="#F0C9C9" font-size="10.5" font-weight="600">DSDT</text>
+<text x="645" y="51" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">AML bytecode</text>
+<rect x="590" y="70" width="110" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="645" y="87" text-anchor="middle" fill="#D3D1C7" font-size="10.5" font-weight="600">FACS</text>
+<text x="645" y="101" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">no checksum</text>
+<line x1="550" y1="40" x2="586" y2="40" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<path d="M568 40 V90 H586" class="flow" stroke-width="1.5" marker-end="url(#svg-bai08-tables-arrow)"/>
+<text x="20" y="300" class="lbl" font-size="9.5">every table except RSDP and FACS starts with the same 36-byte header: signature, length, revision, checksum, OEM ids</text>
+<text x="20" y="318" class="lbl" font-size="9.5">DSDT and FACS are not in the RSDT/XSDT list: only the FADT points to them</text>
+</svg>
+<figcaption>Chuỗi bảng ACPI trên QEMU q35. Xanh lá: MADT, bảng Bài 10 dùng. Đỏ: DSDT, phần cần trình thông dịch AML.</figcaption>
+</figure>
 <ul>
-<li>ACPI Specification (RSDP, XSDT, MADT).</li>
+<li><strong>RSDP</strong> bản ACPI 1.0 dài 20 byte (checksum tính trên 20 byte); bản 2.0+ dài 36 byte, thêm <code>xsdt_addr</code> và một <em>extended checksum</em> tính trên cả 36 byte.</li>
+<li><strong>RSDT và XSDT</strong> giống nhau, chỉ khác cỡ con trỏ. Số bảng = <code>(length − 36) / cỡ con trỏ</code>.</li>
+<li>Muốn tìm bảng nào thì so 4 byte chữ ký. Đó là việc của <code>uacpi_table_find_by_signature("APIC", …)</code> mà <code>initiateAPIC()</code> gọi.</li>
 </ul>
+
+<h3 id="boot-log">5. Đọc boot log của cavOS</h3>
+<p>Log thật khi boot cavOS trên QEMU (máy mặc định <code>pc</code>, SeaBIOS), lưu ở <code>lab/outputs/cavos-boot-2026-09-03.txt</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[acpi::info] starting uACPI, version 3.1.0
+[acpi::info] RSDP 0x00000000000F5250 00000014 v00 (BOCHS )
+[acpi::info] RSDT 0x00000000BFFE2320 00000034 v01 (BOCHS  BXPC    )
+[acpi::info] DSDT 0x00000000BFFE0040 00002194 v01 (BOCHS  BXPC    )
+[acpi::info] FACP 0x00000000BFFE21D4 00000074 v01 (BOCHS  BXPC    )
+[acpi::info] APIC 0x00000000BFFE2248 00000078 v03 (BOCHS  BXPC    )
+[acpi::info] HPET 0x00000000BFFE22C0 00000038 v01 (BOCHS  BXPC    )
+[acpi::info] WAET 0x00000000BFFE22F8 00000028 v01 (BOCHS  BXPC    )
+[acpi::info] FACS 0x00000000BFFE0000 00000040
+[acpi::warn] uacpi_kernel_get_nanoseconds_since_boot() appears to be a stub, this may cause problems
+[acpi::info] loaded 1 AML blob (0 errors)
+[acpi::info] namespace initialization done: 54 devices, 0 thermal zones
+[acpi::info] Found century register for RTC: register{0x32}
+[apic] Detection completed: lapic{fee00000} ioapic{fec00000}</code></pre></div>
+<div class="table-wrap"><table>
+<thead><tr><th>Dòng</th><th>Nghĩa</th></tr></thead>
+<tbody>
+<tr><td><code>RSDP … 00000014 v00</code></td><td>RSDP dài <code>0x14</code> = 20 byte, revision 0: ACPI 1.0, nên chỉ có RSDT. PA <code>0xF5250</code> nằm trong vùng BIOS <code>0xE0000–0xFFFFF</code>.</td></tr>
+<tr><td><code>RSDT … 00000034</code></td><td>52 byte = 36 header + 4 con trỏ × 4 byte: FACP, APIC, HPET, WAET.</td></tr>
+<tr><td><code>DSDT</code>, <code>FACS</code></td><td>Không nằm trong RSDT; uACPI lấy qua FACP. DSDT dài <code>0x2194</code> byte, gần như toàn AML.</td></tr>
+<tr><td><code>APIC … 00000078 v03</code></td><td>MADT 120 byte: 44 byte đầu bảng + 1 Local APIC (8) + 1 I/O APIC (12) + 5 override (10 mỗi cái) + 1 LAPIC NMI (6).</td></tr>
+<tr><td><code>…nanoseconds_since_boot() appears to be a stub</code></td><td>Timer chưa chạy (<a href="bai_10_apic_timer.html">Bài 10</a>). Hàm glue trả <code>timerBootUnix * 10^9 + timerTicks * 10^6</code> = 0 cả lúc bắt đầu lẫn lúc kết thúc nạp AML, nên uACPI cảnh báo.</td></tr>
+<tr><td><code>loaded 1 AML blob</code></td><td>Chỉ có DSDT, không có SSDT nào.</td></tr>
+<tr><td><code>54 devices</code></td><td>Số device trong namespace sau khi chạy <code>_STA</code>/<code>_INI</code>.</td></tr>
+<tr><td><code>century … {0x32}</code></td><td>Trường <code>century</code> của FADT: ô CMOS <code>0x32</code>.</td></tr>
+<tr><td><code>[apic] Detection completed</code></td><td>Dòng của <code>initiateAPIC()</code> sau khi duyệt MADT: Local APIC ở <code>0xfee00000</code>, một I/O APIC ở <code>0xfec00000</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="madt">6. MADT: bảng Bài 10 cần</h3>
+<p>MADT (chữ ký <code>"APIC"</code>) gồm 44 byte đầu (header 36 byte + địa chỉ Local APIC 4 byte + flags 4 byte), rồi một dãy <em>entry</em> độ dài thay đổi. Mỗi entry mở đầu bằng
+2 byte <code>{type, length}</code>, nên đọc được entry kế tiếp kể cả khi không hiểu type. Năm type cavOS cần hoặc gặp:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>type</th><th>tên</th><th>dài</th><th>trường chính</th><th>cavOS dùng ở</th></tr></thead>
+<tbody>
+<tr><td>0</td><td>Processor Local APIC</td><td>8</td><td>processor UID, APIC ID, flags (bit 0 enabled)</td><td>không: danh sách CPU lấy từ Limine SMP</td></tr>
+<tr><td>1</td><td>I/O APIC</td><td>12</td><td>ID, địa chỉ MMIO, GSI base</td><td><code>initiateAPIC</code></td></tr>
+<tr><td>2</td><td>Interrupt Source Override</td><td>10</td><td>bus, IRQ ISA, GSI, flags (polarity, trigger)</td><td><code>ioApicRedirect</code></td></tr>
+<tr><td>4</td><td>Local APIC NMI</td><td>6</td><td>UID (0xFF = mọi CPU), chân LINT</td><td>không</td></tr>
+<tr><td>5</td><td>Local APIC Address Override</td><td>12</td><td>địa chỉ Local APIC 64 bit</td><td><code>initiateAPIC</code></td></tr>
+</tbody>
+</table></div>
+<p><em>GSI</em> (Global System Interrupt) là số chân ngắt chung của cả hệ thống: I/O APIC có <code>gsi_base = 0</code> và 24 chân thì giữ GSI 0–23. <em>Override</em> nói "IRQ ISA số này không
+nằm ở chân cùng số": trên QEMU, IRQ 0 của PIT nằm ở GSI 2. cavOS duyệt MADT trong <code>initiateAPIC()</code>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/apic.c:initiateAPIC() (rút gọn)
+  uacpi_table madtTbl;
+  uacpi_table_find_by_signature("APIC", &amp;madtTbl);
+  madt = madtTbl.ptr;
+  if (madt-&gt;local_interrupt_controller_address != apicPhys) { /* cảnh báo, tin MADT */ }
+
+  size_t curr = (size_t)madt + sizeof(struct acpi_madt);   // bỏ 44 byte đầu
+  size_t end = curr + madt-&gt;hdr.length;                    // (xem Đọc thêm: thừa 44 byte)
+  while (curr &lt; end) {
+    struct acpi_entry_hdr *browse = (struct acpi_entry_hdr *)curr;
+    if (browse-&gt;type == ACPI_MADT_ENTRY_TYPE_IOAPIC) { /* ghi lại I/O APIC */ }
+    else if (browse-&gt;type == ACPI_MADT_ENTRY_TYPE_LAPIC_ADDRESS_OVERRIDE) { /* đổi apicPhys */ }
+    curr += browse-&gt;length;
+  }</code></pre></div>
+
+<h3 id="vi-sao">7. Vì sao bật APIC phải qua ACPI</h3>
+<ul>
+<li><strong>Địa chỉ I/O APIC chỉ có trong MADT.</strong> Local APIC còn có MSR <code>IA32_APIC_BASE</code> để hỏi, nhưng I/O APIC thì không có thanh ghi CPU nào chỉ tới; số lượng và địa chỉ
+của chúng tuỳ bo mạch.</li>
+<li><strong>Cách IRQ cũ nối vào I/O APIC chỉ có trong MADT.</strong> Không đọc override thì nối IRQ 0 vào chân 0 và timer không bao giờ đến (Lab 0x05 đã thử).</li>
+<li><strong>Ngắt của thiết bị PCI</strong> thì phải hỏi AML (<code>_PRT</code>, bảng định tuyến PCI) trong DSDT. Đây là lý do cavOS cần cả trình thông dịch uACPI chứ không chỉ đọc bảng tĩnh.</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x05 đọc cùng các bảng đó bằng tay, không dùng uACPI.</em></p>
+<p><a href="../../thuc_hanh/lab_0x05_acpi_apic.html">Lab 0x05 - ACPI, APIC &amp; Timer</a>, phần đầu (<code>acpi.c</code>): lấy RSDP từ Limine, trừ <code>hhdmOffset</code>, kiểm checksum,
+chọn XSDT/RSDT như uACPI, in mọi bảng, DSDT/FACS qua FADT, và giải từng entry MADT. Phần sau của lab là Bài 10.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/05-acpi-apic
+make run                                         # SeaBIOS: RSDP rev 0, RSDT
+make run QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4"
+make run QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -bios /usr/share/ovmf/OVMF.fd"   # UEFI: XSDT</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35 -smp 4</code>; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2468 XSDT=0x0 -&gt; using RSDT (4-byte pointers)
+[acpi]   FACP PA=0x000000000ffe2248 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe233c len=0x90 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+...
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2208 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=1 apic_id=1 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=2 apic_id=2 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=3 apic_id=3 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -&gt; GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -&gt; GSI 5  flags=0xd (active-high, level)
+...
+[madt] totals: 4 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI</code></pre></div>
+<ul>
+<li>Cùng số liệu như log cavOS: <code>century=0x32</code>, Local APIC <code>0xfee00000</code>, I/O APIC <code>0xfec00000</code>. q35 có thêm bảng MCFG.</li>
+<li><code>-smp 4</code> cho 4 entry type 0, và MADT dài <code>0x90</code> = <code>0x78</code> + 3 × 8. DSDT cũng dài ra (<code>0x2109</code> → <code>0x2208</code>), vì mỗi CPU còn được mô tả bằng một object AML.</li>
+<li>Boot qua OVMF: RSDP revision 2, lab đi qua XSDT (con trỏ 8 byte).</li>
+</ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu kiểm tra hiểu, không phải nhớ.</em></p>
+<details class="quiz"><summary>Nếu <code>bootloader.c</code> lưu nguyên địa chỉ Limine trả (không trừ <code>hhdmOffset</code>) thì sao?</summary>
+<p>Với base revision 2 địa chỉ đó đã là VA trong HHDM. <code>uacpi_kernel_map</code> lại cộng <code>hhdmOffset</code> lần nữa, ra một địa chỉ không được map, và uACPI gây page fault ngay khi đọc RSDP.</p></details>
+<details class="quiz"><summary>RSDP có revision 0. Kernel phải đi qua bảng nào?</summary>
+<p>RSDT, con trỏ 4 byte. Revision 0 là ACPI 1.0: RSDP chỉ có 20 byte và không có trường <code>xsdt_addr</code>.</p></details>
+<details class="quiz"><summary>Duyệt hết RSDT không thấy DSDT. Có phải máy không có DSDT?</summary>
+<p>Không. DSDT không bao giờ nằm trong RSDT/XSDT; chỉ FADT trỏ tới nó (trường <code>DSDT</code> 32 bit hoặc <code>X_DSDT</code> 64 bit). FACS cũng vậy.</p></details>
+<details class="quiz"><summary>Đọc MADT không cần uACPI. Vậy vì sao cavOS vẫn kéo cả uACPI vào?</summary>
+<p>MADT chỉ là số liệu. Nhưng tắt máy cần giá trị trong object <code>\_S5</code>, và định tuyến ngắt PCI cần <code>_PRT</code>; cả hai nằm trong AML của DSDT, phải chạy trình thông dịch mới có.</p></details>
+<details class="quiz"><summary>Vì sao <code>initiateACPI()</code> phải chạy trước <code>initiateISR()</code>?</summary>
+<p><code>initiateISR()</code> gọi <code>initiateAPIC()</code> ở cuối, và hàm đó hỏi uACPI bảng MADT để biết I/O APIC nằm đâu. Chưa khởi tạo uACPI thì không tìm được bảng, cavOS panic.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, các chỗ đáng ngờ trong source, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>RSDT (con trỏ 32 bit) hay XSDT (con trỏ 64 bit), dùng cái nào?</strong> XSDT nếu RSDP revision ≥ 2 và <code>xsdt_addr</code> khác 0; ACPI spec nói OS nên ưu tiên XSDT khi có.
+uACPI (<code>tables.c</code>) làm đúng như vậy, và có cờ <code>UACPI_FLAG_BAD_XSDT</code> để ép dùng RSDT với firmware có XSDT hỏng. Trên QEMU: SeaBIOS chỉ cho RSDT, OVMF cho cả hai.</li>
+<li><strong>MADT entry types nào cần?</strong> Với cavOS: type 1 (I/O APIC), type 2 (override) và type 5 (đổi địa chỉ Local APIC). Type 0 (Local APIC) cần khi khởi động các CPU khác, nhưng
+cavOS lấy danh sách CPU từ Limine SMP response. Type 9 (Local x2APIC) dành cho CPU có APIC ID từ 255 trở lên, không vừa trường 1 byte của type 0.</li>
+<li><strong>Checksum bảng ACPI.</strong> Cộng mọi byte của bảng (độ dài lấy từ header) theo kiểu <code>uint8_t</code>, kết quả phải bằng 0. RSDP có hai checksum: 20 byte đầu, và cả 36 byte (bản 2.0+).
+Lab 0x05 kiểm tất cả và đều <code>OK</code>; FACS không có trường checksum.</li>
+</ul>
+
+<h3 id="diem-yeu">Điểm yếu tìm thấy trong source</h3>
+<ul>
+<li><strong>Vòng duyệt MADT đi quá cuối bảng 44 byte.</strong> Trong <code>initiateAPIC()</code> và <code>ioApicRedirect()</code> (<code>cpu/apic.c</code>):
+<code>curr = (size_t)madt + sizeof(struct acpi_madt); end = curr + madt-&gt;hdr.length;</code>. <code>hdr.length</code> đã tính cả 44 byte đầu, nên <code>end</code> lố đúng
+<code>sizeof(struct acpi_madt)</code> = 44 byte. Lab 0x05 in ra 44 byte đó trên q35/SeaBIOS: <code>48 50 45 54 …</code> = header bảng <code>"HPET"</code>, mà cavOS sẽ đọc như entry type 72,
+length 80; trên OVMF là các byte <code>0xaf</code>. Hiện vô hại vì type 72 hay 175 không khớp case nào. Nếu byte rơi vào type 1 hay 2 thì cavOS sẽ ghi nhận một I/O APIC hay override giả;
+nếu là length 0 thì vòng lặp không bao giờ dừng. Sửa: <code>end = (size_t)madt + madt-&gt;hdr.length</code>.</li>
+<li><strong>SCI (ngắt ACPI) không bao giờ tới.</strong> uACPI cài handler bằng <code>uacpi_kernel_install_interrupt_handler(fadt.sci_int, …)</code> (<code>uacpi/event.c</code>, trong
+<code>uacpi_namespace_load</code>). Glue của cavOS gọi thẳng <code>registerIRQhandler(irq, handler)</code> với <code>irq = 9</code>, tức dùng số GSI làm số vector. Không ai gọi
+<code>ioApicRedirect(9, …)</code> (các chỗ gọi chỉ có <code>timer.c</code> với 0, <code>kb.c</code> với 1, <code>mouse.c</code> với 12), nên chân 9 của I/O APIC vẫn bị che; mà kể cả có tới thì
+<code>handle_interrupt</code> chỉ coi vector 32–47 là IRQ. Hệ quả suy ra từ source (chưa thử bằng nút nguồn QEMU): sự kiện ACPI như nút nguồn không được xử lý. Tắt máy bằng lệnh vẫn chạy
+vì đó là ghi cổng, không cần ngắt.</li>
+<li><strong>Đồng hồ cho uACPI chưa chạy lúc khởi tạo.</strong> <code>uacpi_kernel_get_nanoseconds_since_boot</code> trả 0 trước <code>initiateApicTimer()</code> (dòng cảnh báo trong log), và
+<code>uacpi_kernel_stall</code>, <code>uacpi_kernel_sleep</code> thấy 0 thì <code>return</code> ngay (comment "timer initiated yet!"). Nghĩa là mọi lệnh <code>Stall</code>/<code>Sleep</code> trong AML lúc
+khởi tạo đều không chờ gì. Trên QEMU không sao; trên máy thật có AML cần chờ phần cứng thì có thể sai.</li>
+<li><strong>RSDP với base revision ≥ 3.</strong> Comment <code>// todo: revision &gt;= 3 and it's not virtual!</code> trong <code>bootloader.c</code>: từ base revision 3 Limine trả PA, phép trừ
+<code>hhdmOffset</code> khi đó sẽ ra số sai. cavOS đang dùng base revision 2 nên chưa sao.</li>
+</ul>
+
+<h3 id="lab-vs-uacpi">Lab đọc tay khác uACPI ở đâu</h3>
+<p>Lab chỉ làm phần bảng tĩnh của bước (1): RSDP, RSDT/XSDT, header, checksum, FADT, MADT. Nó không nạp namespace, không chạy <code>_PIC</code>/<code>_STA</code>/<code>_INI</code>, không có SCI,
+không tắt máy được. Đủ cho Bài 10; phần còn lại cần một trình thông dịch AML thật.</p>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>RSDP lấy từ đâu: <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a> · <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
+<li>Dùng MADT để bật APIC và timer: <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>.</li>
+<li>Bảng định tuyến ngắt PCI qua uACPI: <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li>ACPI Specification (xem <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>), phần 5.2 "ACPI System Description Tables": §5.2.5 RSDP (cấu trúc, hai checksum),
+§5.2.6 header chung, §5.2.7 RSDT, §5.2.8 XSDT, §5.2.9 FADT (trường <code>SCI_INT</code>, <code>PM1a_CNT_BLK</code>, <code>PM_TMR_BLK</code>, <code>CENTURY</code>, <code>X_DSDT</code>),
+§5.2.10 FACS, §5.2.11 DSDT/SSDT, §5.2.12 MADT (các loại entry, cờ MPS INTI cho polarity/trigger).</li>
+<li>ACPI Specification, chương AML (ngữ pháp bytecode; <code>0x10</code> = <code>DefScope</code>) và các object <code>\_PIC</code>, <code>_STA</code>, <code>_INI</code>, <code>_PRT</code>, <code>\_S5</code>.</li>
+<li>Limine protocol: RSDP feature (VA trong HHDM với base revision &lt; 3).</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 8 - ACPI</footer>
 </main>

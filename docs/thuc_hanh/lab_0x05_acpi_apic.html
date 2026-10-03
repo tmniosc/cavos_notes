@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x05 - ACPI, APIC &amp; Timer · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x05_acpi_apic.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x05 - ACPI, APIC &amp; Timer</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, acpi, apic, timer</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_08_acpi.html">Bài 8 - ACPI</a> + <a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a></strong>.
+Kernel tự đọc bảng ACPI, bật Local APIC, đưa ngắt PIT qua I/O APIC, dùng PIT để đo tốc độ LAPIC timer, rồi chạy LAPIC timer 1 ngắt/ms và đếm tick theo đồng hồ RTC.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/05-acpi-apic/</code> (chép từ <code>04-gdt-idt/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make run</code>.
+Source lưu ở <code>lab/src/oskernel-lab/05-acpi-apic/</code>, log đầy đủ (5 lần chạy) ở <code>lab/outputs/lab-0x05-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ các module của Lab 0x04, thêm ba cặp file: acpi, apic, timer.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>io.h          outb/inb
+serial.{h,c}  UART 16550 (Bài 2)
+boot.{h,c}    Limine requests, HHDM; THÊM request RSDP + SMP như cavOS bootloader.c
+pmm.{h,c}     bitmap PMM (Bài 5)
+paging.{h,c}  PML4 riêng + vmap (Bài 6); THÊM cờ PCD/PWT và paging_leaf()
+gdt.{h,c}     GDT + TSS (Bài 7)
+idt.{h,c}     IDT 256 cổng (Bài 9)
+isr.{h,c}     stub + handle_interrupt (Bài 9); THÊM EOI Local APIC, đếm spurious,
+              isr_init() gọi apic_init() rồi sti như cavOS initiateISR()
+acpi.{h,c}    MỚI: RSDP -&gt; RSDT/XSDT -&gt; bảng, checksum, FADT, MADT (đọc bằng tay)
+apic.{h,c}    MỚI, theo cavOS cpu/apic.c: initiateAPIC, ioApicRedirect,
+              irqPerCoreAllocate, MMIO map uncached
+timer.{h,c}   MỚI, theo cavOS cpu/timer.c: initiatePitTimer, initiateApicTimer; RTC
+kernel.c      kmain: pmm, paging, gdt, acpi, isr(+apic, sti), timer, đếm tick
+host/cavos_irq_alloc.c  chép logic irqPerCoreAllocate của cavOS để chạy trên host</code></pre></div>
+<p><code>SRCS := kernel.c boot.c serial.c pmm.c paging.c gdt.c idt.c isr.c acpi.c apic.c timer.c</code>. cavOS không tự đọc bảng ACPI: nó dùng thư viện
+<strong>uACPI</strong> (<code>acpi/acpi.c: initiateACPI</code>). Lab đọc bảng bằng tay theo ACPI spec, chỉ phần bảng; phần chạy AML trong DSDT thì lab không làm.</p>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Đi đúng thứ tự cavOS <code>_start()</code>: ACPI trước, rồi IDT + APIC + <code>sti</code>, rồi timer.</em></p>
+<ol>
+<li><strong>ACPI</strong> (<code>acpi_init</code> + <code>acpi_dump</code>): lấy RSDP từ Limine, trừ <code>hhdmOffset</code> như cavOS, kiểm checksum, chọn XSDT nếu RSDP revision &gt; 1 (giống uACPI),
+không thì RSDT. In mọi bảng, rồi DSDT và FACS lấy qua FADT, vài trường FADT, và từng entry của MADT.</li>
+<li><strong>IDT + APIC</strong> (<code>isr_init</code> = <code>initiateISR</code>): như Lab 0x04, thêm <code>apic_init</code> = <code>initiateAPIC</code>: CPUID, MSR <code>0x1B</code>, so địa chỉ với MADT,
+ghi lại I/O APIC (số chân đọc từ thanh ghi version), map MMIO <em>uncached</em>, <code>SVR |= 0x1FF</code>. Cuối cùng <code>sti</code>.</li>
+<li><strong>Timer</strong> (<code>timer_init</code> = <code>initiateApicTimer</code>): PIT ~1000 Hz, ISA IRQ 0 → override → GSI 2 → vector <code>0x20</code>; LAPIC đếm xuống trong 10 tick PIT;
+chuyển LAPIC sang periodic, vector <code>0x21</code>; che PIT.</li>
+<li><strong>Đếm</strong>: mỗi lần giây của RTC đổi, in số tick LAPIC và PIT trong giây vừa qua. Năm dòng rồi <code>cli; hlt</code>.</li>
+</ol>
+
+<figure class="diagram">
+<svg id="svg-lab05-flow" role="img" aria-label="Lab 0x05 flow: Limine RSDP to ACPI tables, MADT gives LAPIC and I/O APIC addresses, PIT IRQ 0 goes through override to GSI 2 and vector 0x20 for calibration, then LAPIC timer vector 0x21 counts ticks checked against RTC seconds" style="max-width:1083px" width="100%" viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab05-flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab05-flow .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab05-flow .lbl{fill:#c2c0b6;} #svg-lab05-flow .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="20" y="30" width="150" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="95" y="56" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">Limine RSDP</text>
+<text x="95" y="74" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">VA - hhdmOffset = PA</text>
+<rect x="210" y="30" width="150" height="66" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="285" y="56" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">acpi_init</text>
+<text x="285" y="74" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">RSDT/XSDT, FADT, MADT</text>
+<rect x="400" y="30" width="150" height="66" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="475" y="56" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">apic_init</text>
+<text x="475" y="74" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">map UC, SVR |= 0x1FF</text>
+<rect x="590" y="30" width="110" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="645" y="56" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">sti</text>
+<text x="645" y="74" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">IF = 1</text>
+<line x1="170" y1="63" x2="206" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<line x1="360" y1="63" x2="396" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<line x1="550" y1="63" x2="586" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<line x1="645" y1="96" x2="645" y2="146" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<rect x="520" y="150" width="180" height="66" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="610" y="176" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">PIT ~1000 Hz</text>
+<text x="610" y="194" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">IRQ0 -&gt; GSI 2 -&gt; vec 0x20</text>
+<rect x="290" y="150" width="190" height="66" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="385" y="176" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">calibrate</text>
+<text x="385" y="194" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">LAPIC ticks in 10 PIT ticks</text>
+<rect x="20" y="150" width="230" height="66" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="135" y="176" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">LAPIC periodic</text>
+<text x="135" y="194" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">vec 0x21, PIT masked</text>
+<line x1="520" y1="183" x2="484" y2="183" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<line x1="290" y1="183" x2="254" y2="183" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<line x1="135" y1="216" x2="135" y2="252" class="flow" stroke-width="1.5" marker-end="url(#svg-lab05-flow-arrow)"/>
+<rect x="20" y="256" width="400" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="220" y="280" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">count ticks per RTC second, 5 lines, cli; hlt</text>
+<text x="220" y="298" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">every IRQ: handle_interrupt -&gt; EOI (PIC + LAPIC 0xB0)</text>
+</svg>
+<figcaption>Thứ tự chạy của lab. Khối vàng chỉ chạy khoảng 10 ms lúc đo, sau đó PIT bị che.</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một bản build, bốn cấu hình máy, và một bản build hỏng có chủ đích.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/05-acpi-apic
+make run                                                    # q35, 1 CPU, SeaBIOS
+make run QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4"
+make run QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4 -enable-kvm"
+make run QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -bios /usr/share/ovmf/OVMF.fd"
+make clean &amp;&amp; make run DEMO=-DNO_VOLATILE                    # timerTicks không volatile như cavOS</code></pre></div>
+<p>Kernel kết thúc bằng <code>cli; hlt</code>, nên mỗi lần chạy được bọc trong <code>timeout</code>. Mọi output dưới đây là thật: QEMU 10.2.1, cross gcc <code>x86_64-cavos-gcc -O2</code>,
+Limine 8.7.0, chạy ngày 2026-10-03.</p>
+
+<h2 id="bang-acpi">Kết quả 1: bảng ACPI</h2>
+<p class="lede"><em>Từ một địa chỉ Limine đưa, lần ra mọi bảng firmware để lại trong RAM.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[acpi] Limine RSDP response-&gt;address = 0xffff8000000f5290 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2351 XSDT=0x0 -&gt; using RSDT (4-byte pointers)
+[acpi] RSDT PA=0x000000000ffe2351 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 5 tables listed:
+[acpi]   FACP PA=0x000000000ffe2149 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe223d len=0x78 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000ffe22b5 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000ffe22ed len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000ffe2329 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2109 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8421 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -&gt; needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000ffe0000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2</code></pre></div>
+<ul>
+<li><strong>RSDP là VA trong HHDM.</strong> Với base revision 2, Limine trả <code>0xffff8000000f5290</code>; trừ <code>hhdmOffset</code> ra PA <code>0xf5290</code>, nằm trong vùng BIOS
+<code>0xE0000–0xFFFFF</code>, nơi RSDP của BIOS luôn nằm. cavOS làm đúng phép trừ này (<code>entry/bootloader.c</code>).</li>
+<li><strong>SeaBIOS cho RSDP revision 0</strong>, tức ACPI 1.0: chỉ có RSDT, con trỏ 4 byte. Đây cũng là điều log cavOS ghi (<code>RSDP ... v00</code>).</li>
+<li><strong>DSDT và FACS không nằm trong RSDT.</strong> Chỉ FADT trỏ tới chúng. DSDT là 8421 byte <em>AML</em> (bytecode), byte đầu <code>0x10</code> là lệnh <code>Scope</code>. Đọc header thì dễ,
+còn hiểu thân DSDT thì cần một trình thông dịch AML; cavOS dùng uACPI cho việc đó.</li>
+<li><strong>FADT</strong>: <code>SCI_INT=9</code> là IRQ của ngắt ACPI (nút nguồn, sự kiện); <code>century=0x32</code> là ô CMOS chứa thế kỷ, đúng số cavOS in
+(<code>Found century register for RTC: register{0x32}</code>). <code>PM1a_CNT=0x604</code> là cổng I/O mà uACPI ghi khi tắt máy (S5).</li>
+<li>So với log cavOS (máy <code>pc</code>/i440fx), q35 có thêm <strong>MCFG</strong>: bảng chỉ chỗ cấu hình PCIe qua MMIO.</li>
+</ul>
+<p>Boot bằng OVMF (UEFI) thì RSDP là revision 2 và lab đi qua XSDT:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[acpi] RSDP PA=0x000000000f77e014 sig="RSD PTR " rev=2 OEM=(BOCHS ) checksum(20B) OK ext-checksum(36B) OK
+[acpi] RSDT=0xf77d074 XSDT=0xf77d0e8 -&gt; using XSDT (8-byte pointers)
+[acpi] XSDT PA=0x000000000f77d0e8 len=0x54 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 6 tables listed:
+...
+[acpi]   BGRT PA=0x000000000f774000 len=0x38 rev=1 OEM=(INTEL  EDK2    ) checksum OK</code></pre></div>
+<p>XSDT dài <code>0x54</code> = 36 byte header + 6 × 8 byte con trỏ. OVMF thêm bảng <strong>BGRT</strong> (ảnh logo lúc boot) và đặt mỗi bảng ở đầu một trang 4 KiB riêng.</p>
+
+<h2 id="madt">Kết quả 2: MADT, có và không có <code>-smp 4</code></h2>
+<p class="lede"><em>MADT kể ra từng CPU, từng I/O APIC và các IRQ ISA bị nối khác chân.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=1 apic_id=1 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=2 apic_id=2 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=3 apic_id=3 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -&gt; GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -&gt; GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -&gt; GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -&gt; GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -&gt; GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 4 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+...
+[smp] Limine: cpu_count=4 bsp_lapic_id=0 lapic ids: 0 1 2 3</code></pre></div>
+<ul>
+<li>Bản <code>-smp 4</code> có <strong>4 entry type 0</strong>; bản 1 CPU chỉ có 1. MADT dài <code>0x78</code> = 120 byte với 1 CPU: 44 (header MADT) + 8 + 12 + 5 × 10 + 6.
+Danh sách APIC ID trong MADT khớp danh sách Limine trả qua SMP request.</li>
+<li><strong>IRQ 0 → GSI 2</strong>: PIT nối vào chân 2 của I/O APIC chứ không phải chân 0. Không đọc override này thì timer không bao giờ tới. Flags <code>0</code> nghĩa là "theo chuẩn bus",
+với ISA là active-high, edge.</li>
+<li>IRQ 5, 9, 10, 11 giữ số chân nhưng đổi sang <code>level, active-high</code> (flags <code>0xd</code> = <code>11 01</code>): đó là các ngắt PCI và SCI.</li>
+<li>I/O APIC bắt đầu ở <code>gsi_base=0</code>; nó có bao nhiêu chân thì MADT không nói, phải đọc thanh ghi version của chính nó (Kết quả 3).</li>
+</ul>
+<p>Sau đó lab mô phỏng vòng duyệt MADT của cavOS, vòng này dừng ở <code>start + hdr.length</code> thay vì <code>madt + hdr.length</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[madt] cavOS loop end = start + hdr.length -&gt; walks 44 bytes past the table; bytes there:
+[madt]   48 50 45 54 38 00 00 00 01 b4 42 4f 43 48 53 20 42 58 50 43 20 20
+[madt]   20 20 01 00 00 00 42 58 50 43 01 00 00 00 01 a2 86 80 00 00 00 00
+[madt]   cavOS would read a fake entry: type 72 len 80</code></pre></div>
+<p>44 byte sau MADT là header của bảng kế tiếp: <code>48 50 45 54</code> = <code>"HPET"</code>. cavOS sẽ đọc chữ <code>'H'</code> (72) làm type và <code>'P'</code> (80) làm length.
+Type 72 không khớp case nào nên hiện tại vô hại. Với OVMF, vùng sau MADT là byte <code>0xaf</code> (fake entry type 175 len 175), cũng vô hại. Chi tiết ở
+<a href="../ly_thuyet/bai/bai_08_acpi.html#diem-yeu">Bài 8, Đọc thêm</a>.</p>
+
+<h2 id="apic">Kết quả 3: Local APIC và I/O APIC</h2>
+<p class="lede"><em>Đọc lại từng thanh ghi để thấy APIC đã bật, nằm ở đâu, và được map với kiểu cache nào.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000}
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=0  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -&gt; match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -&gt; 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -&gt; 4K page entry=0x00000000fee0007b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0xc0000000 mask=0xffc0000000 type=0 (UC)  &lt;- covers the LAPIC page
+[lapic] ID reg=0x0 -&gt; APIC ID 0  version reg=0x50014 -&gt; version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -&gt; 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -&gt; version 0x20, max redirection index 23 -&gt; 24 pins, GSI 0..23</code></pre></div>
+<ul>
+<li><strong>MSR <code>0xfee00900</code></strong> = base <code>0xfee00000</code> + bit 11 (APIC bật) + bit 8 (CPU này là BSP). Firmware đã bật sẵn; <code>apicSetBase</code> của cavOS ghi lại đúng giá trị đó.</li>
+<li><strong>Kiểu cache.</strong> HHDM của Limine phủ cả <code>0xfee00000</code> bằng một trang 2 MiB, cờ PCD=PWT=0 (write-back). cavOS đọc ghi LAPIC qua đúng mapping này
+(<code>apicVirt = hhdmOffset + apicPhys</code>). Lab tự map một trang 4 KiB với PCD=PWT=1 (uncached), như Intel SDM khuyên cho vùng thanh ghi APIC.
+cavOS vẫn chạy vì firmware đặt MTRR cho cả dải <code>0xc0000000–0xffffffff</code> là UC, và khi MTRR là UC thì truy cập là UC dù bảng trang ghi WB.
+Với OVMF, MTRR UC bắt đầu từ <code>0x80000000</code>, vẫn phủ LAPIC.</li>
+<li><strong>Version <code>0x50014</code></strong>: <code>0x14</code> là APIC tích hợp trong CPU; trường bit 23:16 = 5 nghĩa là 6 mục LVT.</li>
+<li><strong>SVR đã là <code>0x1ff</code></strong> trước khi lab ghi, nên phép <code>|= 0x1FF</code> của cavOS không đổi gì ở đây. Boot qua OVMF thì giá trị trước là <code>0x10f</code>
+(đã bật, vector 0x0F), và lệnh OR đổi vector spurious thành <code>0xff</code>.</li>
+<li><strong>I/O APIC</strong>: version reg <code>0x170020</code> → chỉ số chân lớn nhất <code>0x17</code> = 23, tức 24 chân, GSI 0–23. cavOS lưu <code>ioapicRedEnd = start + 23</code>, và so
+<code>gsi &lt;= ioapicRedEnd</code> (gồm cả 23), đúng.</li>
+<li>Dưới KVM, CPUID báo có x2APIC (<code>ECX.x2APIC=1</code>) và I/O APIC là bản của KVM (version <code>0x11</code>). cavOS vẫn chỉ dùng chế độ xAPIC qua MMIO.</li>
+</ul>
+
+<h2 id="timer">Kết quả 4: đo LAPIC timer và đếm tick</h2>
+<p class="lede"><em>LAPIC timer không biết mình chạy bao nhanh; kernel phải đo bằng một đồng hồ đã biết tần số.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[timer] PIT ch0 mode 2, divisor 1193 -&gt; 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -&gt; override -&gt; GSI 2 = I/O APIC pin 2 -&gt; vector 0x20 -&gt; LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6f5aa -&gt; 592469 LAPIC ticks in 10 ms -&gt; apicFreq = 59246 ticks/ms (div 16 -&gt; timer input clock ~947 MHz)
+[ioapic] ISA IRQ 0 -&gt; override -&gt; GSI 2 = I/O APIC pin 2 -&gt; vector 0x20 -&gt; LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59246 -&gt; one interrupt per ms
+[ioapic] redirection entries after timer_init:
+[ioapic]   pin  0: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  2: 0x0000000000010020  vector=0x20 masked edge high dest=0
+
+[uptime] RTC 03:56:21  start: timerTicks=368 (lapic 358, pit 10)
+[uptime] RTC 03:56:22  timerTicks=1422  uptime ~1.4 s  this second: +1054 LAPIC, +0 PIT
+[uptime] RTC 03:56:23  timerTicks=2477  uptime ~2.4 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:24  timerTicks=3532  uptime ~3.5 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:25  timerTicks=4587  uptime ~4.5 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:26  timerTicks=5642  uptime ~5.6 s  this second: +1055 LAPIC, +0 PIT
+[lapic] spurious interrupts seen: 0</code></pre></div>
+<ul>
+<li><strong>Hai vector giống hệt cavOS</strong>: PIT (GSI 2) nhận chỉ số 0 → <code>0x20</code>; LAPIC timer gọi <code>irqPerCoreAllocate(0, …)</code> với "GSI 0" làm khoá → chỉ số 1 → <code>0x21</code>.
+Lần gọi <code>ioApicRedirect(0, true)</code> thứ hai tìm thấy GSI 2 đã có vector nên giữ <code>0x20</code>, chỉ bật bit mask (bit 16): <code>0x10020</code>.</li>
+<li><strong>LVT timer <code>0x20021</code></strong> = vector <code>0x21</code> + bit 17 (periodic). LAPIC tự nạp lại <code>INITCNT</code> mỗi khi đếm về 0, nên không cần làm gì thêm trong handler ngoài EOI.</li>
+<li><strong>PIT dừng hẳn</strong> sau khi bị che (<code>+0 PIT</code>). Nó kịp bắn 10 tick lúc đo, đôi khi 11–12 tick trước khi bị che.</li>
+<li><strong>Số tick thật mỗi giây không phải 1000.</strong> Chu kỳ được đặt bằng kết quả đo, mà phép đo 10 tick PIT có sai số: tick đầu tiên có thể đến bất cứ lúc nào trong ms đầu,
+và máy ảo không bắn ngắt đúng giờ tuyệt đối. Bốn lần chạy:</li>
+</ul>
+<div class="table-wrap"><table>
+<thead><tr><th>Cấu hình</th><th>LAPIC đếm trong "10 ms"</th><th>xung vào suy ra</th><th>tick thật / giây RTC</th><th>sai lệch</th></tr></thead>
+<tbody>
+<tr><td>q35, TCG, 1 CPU</td><td><code>592469</code></td><td>~947 MHz</td><td>1054–1055</td><td>+5.5%</td></tr>
+<tr><td>q35, TCG, <code>-smp 4</code></td><td><code>623099</code></td><td>~996 MHz</td><td>1003</td><td>+0.3%</td></tr>
+<tr><td>q35, KVM, <code>-smp 4</code></td><td><code>675467</code></td><td>~1080 MHz</td><td>925–926</td><td>−7.5%</td></tr>
+<tr><td>q35, TCG, OVMF</td><td><code>594613</code></td><td>~951 MHz</td><td>1051–1052</td><td>+5.1%</td></tr>
+</tbody>
+</table></div>
+<p>Xung vào LAPIC timer của QEMU là cố định (các con số quanh 1 GHz); chỉ độ dài thật của "10 tick PIT" thay đổi giữa các lần. Lab dùng đúng cách đo của cavOS, nên
+"1 tick = 1 ms" của cavOS có thể lệch vài phần trăm. Cách giảm sai số: chờ một cạnh tick PIT rồi mới bắt đầu đếm, đo lâu hơn, hoặc đo bằng HPET / PM timer
+(địa chỉ có trong bảng HPET và FADT).</p>
+
+<h2 id="volatile">Kết quả 5: biến <code>timerTicks</code> không volatile</h2>
+<p class="lede"><em>Cùng một vòng chờ, biên dịch tối ưu thì treo mãi.</em></p>
+<p>cavOS khai <code>uint64_t timerTicks;</code> (<code>include/timer.h</code>), không có <code>volatile</code>, rồi chờ bằng <code>while (target &gt; timerTicks);</code>. Bản
+<code>DEMO=-DNO_VOLATILE</code> của lab làm y như vậy:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[timer] PIT ch0 mode 2, divisor 1193 -&gt; 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -&gt; override -&gt; GSI 2 = I/O APIC pin 2 -&gt; vector 0x20 -&gt; LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+qemu-system-x86_64: terminating on signal 15 from pid 14384 (timeout)</code></pre></div>
+<div class="code"><div class="code-bar">asm</div><pre><code>; -O2, không volatile: đọc timerTicks MỘT lần, rồi so mãi với thanh ghi
+ 1e3:  mov    0x0(%rip),%rax        ; timerTicks
+ 1f0:  cmp    $0xfffffffffffffff5,%rax
+ 1f4:  jbe    1f0
+
+; -O2, có volatile: đọc lại bộ nhớ mỗi vòng
+ 210:  mov    0x0(%rip),%rax        ; timerTicks
+ 217:  cmp    %rdx,%rax
+ 21a:  jb     210</code></pre></div>
+<p>Ngắt PIT vẫn tăng biến trong RAM, nhưng vòng lặp không bao giờ đọc lại. cavOS không bị vì Makefile kernel của nó không bật tối ưu (<code>CFLAGS</code> trong
+<code>src/kernel/Makefile</code> không có <code>-O</code>): <code>objdump</code> <code>cpu/timer.o</code> của cavOS cho thấy mỗi vòng có một lệnh <code>mov (%rax),%rax</code> đọc lại biến.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Lab chép thứ tự và thuật toán của cavOS; mỗi chỗ khác đều có lý do.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab</th></tr></thead>
+<tbody>
+<tr><td>Đọc bảng ACPI</td><td>uACPI: tìm bảng, nạp và chạy AML (DSDT/SSDT), <code>_PIC</code>, <code>_STA</code>/<code>_INI</code></td><td>tự đọc RSDP/RSDT/XSDT/FADT/MADT theo spec; không chạy AML</td></tr>
+<tr><td>Map LAPIC/I/O APIC</td><td>qua HHDM (WB, nhờ MTRR mới thành UC)</td><td>trang 4 KiB riêng ở <code>0xfffffe8000000000</code>, PCD=PWT=1</td></tr>
+<tr><td>Cuối vòng duyệt MADT</td><td><code>start + hdr.length</code> (quá 44 byte)</td><td><code>madt + hdr.length</code></td></tr>
+<tr><td>Chọn CPU cho IRQ</td><td><code>irqPerCpu[i] = min</code> (gán)</td><td><code>min = irqPerCpu[i]</code>; vẫn chỉ xét CPU 0 như cavOS</td></tr>
+<tr><td>Né vector spurious</td><td><code>while (irqLast == 0xff)</code> (so chỉ số)</td><td><code>while (irqLast + 32 == 0xff)</code> (so vector)</td></tr>
+<tr><td><code>timerTicks</code></td><td>không volatile, chạy được nhờ <code>-O0</code></td><td><code>volatile</code>; <code>-DNO_VOLATILE</code> để thấy treo</td></tr>
+<tr><td>Handler tick</td><td>một <code>timerTick</code> cho cả 2 vector, gọi <code>schedule()</code></td><td>2 hàm đếm riêng PIT/LAPIC; chưa có scheduler (Bài 12)</td></tr>
+<tr><td>Danh sách I/O APIC, IRQ handler</td><td>linked list (<code>dsIoapic</code>, <code>dsIrqHandler</code>)</td><td>mảng cố định (chưa có <code>malloc</code>)</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Sửa một dòng, đoán kết quả, rồi chạy để kiểm. Bốn câu đầu đã chạy thử thật; output ở cuối <code>lab-0x05-run.txt</code>.</em></p>
+<details class="quiz"><summary>Bỏ phần đọc Interrupt Source Override, nối IRQ 0 thẳng vào chân 0. Chuyện gì xảy ra?</summary>
+<p>Chân 0 của I/O APIC không nối với PIT, nên không có tick nào. Chạy thử: log in <code>(no override) GSI 0</code> rồi dừng ở <code>calibrating…</code>.</p></details>
+<details class="quiz"><summary>Bỏ dòng <code>apic_eoi()</code> trong <code>handle_interrupt</code>. Lab còn đếm được tick không?</summary>
+<p>Không. LAPIC coi ngắt PIT đầu tiên chưa xử lý xong (bit của nó trong ISR vẫn bật), nên không giao thêm ngắt nào cùng mức ưu tiên hay thấp hơn. Chạy thử: lab dừng ở dòng
+<code>calibrating…</code>, vòng chờ 10 tick không bao giờ xong.</p></details>
+<details class="quiz"><summary>Đổi divide từ <code>0x3</code> (chia 16) sang <code>0xB</code> (chia 1) cả lúc đo lẫn lúc chạy. Số tick mỗi giây đổi không?</summary>
+<p>Gần như không: số đếm được trong 10 ms lớn hơn 16 lần và <code>INITCNT</code> cũng lớn hơn 16 lần, nên chu kỳ vẫn khoảng 1 ms. Chỉ cần đo và chạy dùng cùng một hệ số chia.
+Với chia 1 ở 1 GHz, 10 ms là khoảng 10 triệu nhịp, vẫn vừa thanh ghi 32 bit. Chạy thử: 1080 tick mỗi giây RTC, nằm trong khoảng sai số đo ở bảng trên.</p></details>
+<details class="quiz"><summary>Với <code>-smp 4</code>, nếu <code>irqPerCoreAllocate</code> chọn LAPIC 3 cho PIT thì sao?</summary>
+<p>Ngắt PIT được giao tới CPU 3, nhưng CPU đó vẫn đang chờ trong Limine, chưa bật ngắt và chưa có IDT của kernel. BSP không bao giờ thấy tick, vòng chờ đo treo.
+Chạy thử với <code>-smp 4</code>: log in <code>-&gt; LAPIC 3</code> rồi dừng ở <code>calibrating…</code>. Đó là lý do cả cavOS lẫn lab chỉ xét CPU 0.</p></details>
+<details class="quiz"><summary>Vì sao lab dùng RTC để đếm "tick mỗi giây" thay vì chính PIT?</summary>
+<p>PIT đã bị che sau khi đo, và PIT cũng chính là thứ dùng để đo, nên so với nó không phát hiện được sai số đo. RTC là đồng hồ độc lập, giây của nó đổi đúng 1 lần mỗi giây.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_08_acpi.html">Bài 8 - ACPI</a>, <a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a> · nền <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
+<li>Lab trước: <a href="lab_0x04_gdt_idt.html">Lab 0x04 - GDT, TSS &amp; IDT</a> (IDT, stub, PIC vẫn dùng nguyên).</li>
+<li>Tick dùng để làm gì tiếp: <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>.</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x05 - ACPI, APIC &amp; Timer</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

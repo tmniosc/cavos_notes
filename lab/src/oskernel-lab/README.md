@@ -19,7 +19,8 @@ oskernel-lab/
 ├─ 01-bootloader-parser/ đọc 4 Limine request: paging/HHDM/kernel address/memmap
 ├─ 02-framebuffer/       vẽ pixel + chữ, font 8x8 nhúng
 ├─ 03-pmm-vmm/           bitmap PMM + tự dựng PML4, mov cr3, vmap/vresolve
-└─ 04-gdt-idt/           GDT + TSS như cavOS (lgdt, lretq, ltr), IDT 256 cổng + stub ISR, bắt #BP/#DE/#UD/#GP/#PF, IST1 cho #DF
+├─ 04-gdt-idt/           GDT + TSS như cavOS (lgdt, lretq, ltr), IDT 256 cổng + stub ISR, bắt #BP/#DE/#UD/#GP/#PF, IST1 cho #DF
+└─ 05-acpi-apic/         RSDP → RSDT/XSDT → MADT/FADT tự parse, LAPIC (MMIO uncached) + I/O APIC, PIT đo LAPIC timer, periodic 1 ms, sti
 ```
 
 ## Chạy

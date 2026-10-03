@@ -3,41 +3,499 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 10 — APIC &amp; Timer · Học cavOS</title>
+<title>Bài 10 - APIC &amp; Timer · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_10_apic_timer.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 10 — APIC &amp; Timer</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, apic, timer</span></div>
+    <h1>Bài 10 - APIC &amp; Timer</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, apic, timer</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateAPIC()</code> · <strong>Đầu vào:</strong> MADT từ <a href="bai_08_acpi.html">Bài 8 - ACPI</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Có nguồn "nhịp tim" (timer interrupt) và bộ định tuyến ngắt hiện đại.</strong> Local APIC timer phát ngắt định kỳ<br/>
-→ làm <strong>tick</strong> để scheduler cướp quyền (preempt). IO APIC định tuyến IRQ thiết bị → vector IDT. Thay thế PIC
-8259 cũ. Không có tick thì không có đa nhiệm theo thời gian (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>).</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateAPIC()</code> (<code>cpu/apic.c</code>), <code>initiateApicTimer()</code> (<code>cpu/timer.c</code>) · <strong>Đầu vào:</strong> MADT từ <a href="bai_08_acpi.html">Bài 8 - ACPI</a></p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Bật bộ định tuyến ngắt hiện đại và cho kernel một "nhịp tim" đều 1 ms.</em></p>
+<p>Bài này thay PIC 8259 cũ bằng <strong>APIC</strong>: I/O APIC đưa IRQ của thiết bị tới đúng vector trong IDT, Local APIC nhận ngắt cho từng CPU và có sẵn một <strong>timer</strong>.
+cavOS cho timer đó bắn mỗi millisecond. Mỗi lần bắn là một <em>tick</em>; không có tick thì không có đa nhiệm theo thời gian, vì scheduler của
+<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a> chỉ được gọi khi tick tới.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Hãy hình dung một toà nhà văn phòng. <strong>I/O APIC</strong> là quầy lễ tân: mọi cuộc gọi từ bên ngoài (bàn phím, ổ đĩa, đồng hồ PIT) đến quầy, và quầy có một tờ danh sách
+"cuộc gọi đường số 2 thì chuyển cho phòng 0, ghi mã 0x20". <strong>Local APIC</strong> là cô thư ký riêng của mỗi phòng (mỗi CPU): nhận cuộc gọi lễ tân chuyển lên, báo cho sếp,
+và chờ sếp nói "xong rồi" (EOI) mới chuyển cuộc tiếp theo. Cô thư ký còn có một chiếc <strong>đồng hồ hẹn giờ</strong> riêng.</p>
+<p>Vấn đề: đồng hồ hẹn giờ đó không ghi tốc độ trên mặt. Nên lúc mới vào làm, cavOS bấm nó chạy cùng lúc với một đồng hồ chuẩn đã biết (PIT), đợi đồng hồ chuẩn kêu 10 lần
+(10 ms), xem đồng hồ hẹn giờ đếm được bao nhiêu, rồi đặt nó kêu mỗi 1/10 số đó, tức mỗi 1 ms.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba ý mới; IRQ, vector, EOI đã gặp ở Bài 9, MADT ở Bài 8.</em></p>
 <ul>
-<li>Local APIC (MMIO base), spurious vector, EOI.</li>
-<li>IO APIC: định tuyến IRQ → vector.</li>
-<li>Local APIC timer (one-shot/periodic) làm tick scheduler.</li>
-<li>Tắt PIC 8259 cũ (mask).</li>
+<li><strong>Thanh ghi MMIO.</strong> Nhiều chip không dùng cổng I/O (<code>in</code>/<code>out</code>) mà đặt thanh ghi ở một địa chỉ vật lý; đọc ghi bằng lệnh <code>mov</code> như RAM
+(memory-mapped I/O). Hai điều phải giữ: con trỏ là <code>volatile</code> để compiler không bỏ hay gộp lần đọc ghi, và vùng đó không được cache (Intel SDM yêu cầu vùng thanh ghi APIC là
+<em>uncacheable</em>). Đọc sâu: <a href="../khai_niem/paging.html">Paging</a> (cờ PCD/PWT của entry bảng trang).</li>
+<li><strong>Local APIC và I/O APIC.</strong> Mỗi CPU có một <em>Local APIC</em> (LAPIC) ở địa chỉ <code>0xfee00000</code>: nó giao ngắt cho CPU đó, nhận EOI, và có một timer đếm xuống.
+<em>I/O APIC</em> nằm trên bo mạch (QEMU: <code>0xfec00000</code>), có 24 chân nhận IRQ; mỗi chân có một <em>redirection entry</em> 64 bit ghi "vector nào, gửi cho LAPIC nào, che hay không".
+Đọc sâu: <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3, chương APIC.</li>
+<li><strong>PIT 8254.</strong> Chip đếm cũ của PC, nhận xung 1.193182 MHz. Ghi một số chia (<em>divisor</em>) vào kênh 0 thì nó bắn IRQ 0 với tần số 1193182 / divisor. Tần số này cố định
+trên mọi PC, nên dùng được làm đồng hồ chuẩn.</li>
+<li><strong>Đã gặp ở <a href="bai_09_idt_interrupts.html">Bài 9</a>:</strong> IRQ, vector, cổng IDT 32–47, gửi EOI trong <code>handle_interrupt</code>, PIC đã bị remap rồi che hết, cổng 0xFF cho
+ngắt spurious. <strong>Ở <a href="bai_08_acpi.html">Bài 8</a>:</strong> MADT cho địa chỉ I/O APIC và các override (IRQ 0 của PIT nằm ở GSI 2).</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Hai hàm: <code>initiateAPIC()</code> bật chip ngắt khi dựng IDT, <code>initiateApicTimer()</code> đo và chạy timer sau khi paging xong.</em></p>
+<p>File: <code>cpu/apic.c</code>, <code>include/apic.h</code>, <code>cpu/timer.c</code>, <code>include/timer.h</code>, <code>cpu/isr.c</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initiateGDT();
+  LinkedListInit(&amp;dsIrqHandler, sizeof(irqHandler));
+  initiateACPI();      // Bài 8: uACPI, có bảng MADT
+  initiateISR();       // Bài 9: ... set_idt(); initiateAPIC(); sti
+  initiatePaging();
+
+  debugf("\n====== REACHED SYSTEM ======\n");
+  initiateApicTimer(); // mouse needs a timer
+  ...
+  initiateKb();        // Bài 11: ioApicRedirect(1, ...)
+  initiateMouse();     //         ioApicRedirect(12, ...)
+  initiateTasks();     // Bài 12: từ đây tick mới thật sự đổi task</code></pre></div>
+<p><code>initiateAPIC()</code> chạy ở cuối <code>initiateISR()</code>, ngay trước <code>sti</code>. Lúc đó chưa có chân I/O APIC nào được mở, nên <code>sti</code> chưa đưa ngắt nào vào.
+Timer được bật sau, khi kernel đã có heap và paging.</p>
+
+<h3 id="initiate-apic">2. <code>initiateAPIC()</code>: tìm và bật</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/apic.c (rút gọn)
+void initiateAPIC() {
+  if (!apicCheck()) { ...; panic(); }        // CPUID.1:EDX bit 9
+  initiateIrqPerCore();                      // irqPerCpu = calloc(cpu_count)
+  apicPhys = apicGetBase();                  // rdmsr(0x1B) &amp; 0xFFFFF000
+
+  uacpi_table_find_by_signature("APIC", &amp;madtTbl);   // MADT (Bài 8)
+  madt = madtTbl.ptr;
+  if (madt-&gt;local_interrupt_controller_address != apicPhys)
+    apicPhys = madt-&gt;local_interrupt_controller_address;   // tin MADT
+
+  /* duyệt MADT */
+    if (type == IOAPIC) {
+      ioapic-&gt;ioapicPhys = specialized-&gt;address;
+      ioapic-&gt;ioapicVirt = bootloader.hhdmOffset + ioapic-&gt;ioapicPhys;
+      ioapic-&gt;ioapicRedStart = specialized-&gt;gsi_base;
+      int capacity = (ioApicRead(ioapic-&gt;ioapicVirt, 1) &gt;&gt; 16) &amp; 0xFF;  // max redirection index
+      ioapic-&gt;ioapicRedEnd = ioapic-&gt;ioapicRedStart + capacity;
+    } else if (type == LAPIC_ADDRESS_OVERRIDE) {
+      apicPhys = specialized-&gt;address;
+    }
+
+  apicVirt = bootloader.hhdmOffset + apicPhys;           // MMIO đọc qua HHDM
+  debugf("[apic] Detection completed: lapic{%lx} ", apicPhys); ...
+
+  // enable lapic (for the bootstrap core)
+  apicSetBase(apicPhys);                     // wrmsr(0x1B, base | ENABLE 0x800 | BSP 0x100)
+  apicWrite(0xF0, apicRead(0xF0) | 0x1FF);   // SVR: bit 8 bật APIC, vector spurious 0xFF
+}</code></pre></div>
 <ul>
-<li>[ ] Calibrate APIC timer bằng gì (PIT/HPET/TSC)?</li>
-<li>[ ] x2APIC hay xAPIC (MMIO)?</li>
+<li><strong>Hai nguồn cho địa chỉ LAPIC</strong>: MSR <code>IA32_APIC_BASE</code> (<code>0x1B</code>) và MADT. cavOS so hai cái, lệch thì tin MADT, rồi nếu MADT có entry type 5 thì dùng địa chỉ trong đó.</li>
+<li><strong>I/O APIC có bao nhiêu chân</strong> thì phải hỏi chính nó: thanh ghi số 1 (version), bit 23:16 là chỉ số chân lớn nhất. QEMU trả 23, tức 24 chân, GSI 0–23.</li>
+<li><strong>SVR</strong> (Spurious Interrupt Vector Register, offset <code>0xF0</code>): bit 8 là công tắc phần mềm của LAPIC; bit 7:0 là vector cho ngắt <em>spurious</em> (ngắt "ma" khi tín hiệu biến mất
+giữa chừng). cavOS chọn <code>0xFF</code> và đã đặt cổng IDT 0xFF ở Bài 9.</li>
+<li>CPU khác (AP) bật LAPIC của mình bằng <code>smpInitiateAPIC()</code>: chỉ hai dòng cuối.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<p>Các thanh ghi LAPIC cavOS dùng (mỗi thanh ghi 32 bit, cách nhau 16 byte, đọc ghi bằng <code>apicRead</code>/<code>apicWrite</code> = một <code>mov</code> 32 bit qua con trỏ <code>volatile</code>):</p>
+<div class="table-wrap"><table>
+<thead><tr><th>offset</th><th>tên</th><th>cavOS dùng để</th></tr></thead>
+<tbody>
+<tr><td><code>0x020</code></td><td>Local APIC ID</td><td><code>apicCurrentCore()</code>: bit 31:24 = APIC ID</td></tr>
+<tr><td><code>0x0B0</code></td><td>EOI</td><td>ghi 0 khi xử lý xong một IRQ (<code>handle_interrupt</code>)</td></tr>
+<tr><td><code>0x0F0</code></td><td>Spurious Interrupt Vector</td><td>bật APIC, vector 0xFF</td></tr>
+<tr><td><code>0x320</code></td><td>LVT Timer</td><td>vector của timer, bit 16 mask, bit 17 periodic</td></tr>
+<tr><td><code>0x380</code></td><td>Initial Count</td><td>số bắt đầu đếm xuống; ghi vào là timer chạy</td></tr>
+<tr><td><code>0x390</code></td><td>Current Count</td><td>số hiện tại (chỉ đọc)</td></tr>
+<tr><td><code>0x3E0</code></td><td>Divide Configuration</td><td><code>0x3</code> = chia xung vào cho 16</td></tr>
+</tbody>
+</table></div>
+
+<h3 id="ioapic">3. I/O APIC: hai thanh ghi và bảng redirection</h3>
+<p>I/O APIC chỉ lộ ra hai thanh ghi MMIO: <code>IOREGSEL</code> (offset 0) để chọn số thanh ghi bên trong, và <code>IOWIN</code> (offset <code>0x10</code>) để đọc ghi thanh ghi đó.
+Bảng redirection bắt đầu ở thanh ghi <code>0x10</code>, mỗi chân hai thanh ghi 32 bit:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>uint32_t ioApicRead(uint64_t ioapicVirt, uint32_t reg) {
+  uint32_t volatile *ioapic = (uint32_t volatile *)ioapicVirt;
+  ioapic[0] = (reg &amp; 0xff);   // IOREGSEL
+  return ioapic[4];           // IOWIN (4 x 4 byte = offset 0x10)
+}
+
+void ioApicWriteRedEntry(uint64_t ioApicVirt, uint8_t entry, uint8_t vector, uint8_t delivery,
+                         uint8_t destmode, uint8_t polarity, uint8_t mode, uint8_t mask, uint8_t dest) {
+  uint32_t val = vector;
+  val |= (delivery &amp; 0b111) &lt;&lt; 8;
+  val |= (destmode &amp; 1) &lt;&lt; 11;
+  val |= (polarity &amp; 1) &lt;&lt; 13;
+  val |= (mode &amp; 1) &lt;&lt; 15;
+  val |= (mask &amp; 1) &lt;&lt; 16;
+  ioApicWrite(ioApicVirt, 0x10 + entry * 2, val);                  // 32 bit thấp
+  ioApicWrite(ioApicVirt, 0x11 + entry * 2, (uint32_t)dest &lt;&lt; 24); // 32 bit cao: APIC ID đích
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-bai10-redir" role="img" aria-label="I/O APIC redirection entry bit layout: bits 63-56 destination APIC ID, 55-17 reserved, 16 mask, 15 trigger mode, 14 remote IRR, 13 polarity, 12 delivery status, 11 destination mode, 10-8 delivery mode, 7-0 vector" style="max-width:1083px" width="100%" viewBox="0 0 720 170" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-bai10-redir .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai10-redir .lbl{fill:#c2c0b6;}</style>
+</defs>
+<text x="360" y="18" text-anchor="middle" class="lbl" font-size="10">one redirection entry = 64 bits (registers 0x10+2n low, 0x11+2n high)</text>
+<rect x="10" y="30" width="90" height="40" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="55" y="54" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">63:56</text>
+<rect x="100" y="30" width="150" height="40" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="175" y="54" text-anchor="middle" fill="#B4B2A9" font-size="9.5" class="mono">55:17</text>
+<rect x="250" y="30" width="50" height="40" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="275" y="54" text-anchor="middle" fill="#F0C9C9" font-size="9.5" class="mono">16</text>
+<rect x="300" y="30" width="50" height="40" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="325" y="54" text-anchor="middle" fill="#F0DBAE" font-size="9.5" class="mono">15</text>
+<rect x="350" y="30" width="50" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="375" y="54" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">14</text>
+<rect x="400" y="30" width="50" height="40" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="425" y="54" text-anchor="middle" fill="#F0DBAE" font-size="9.5" class="mono">13</text>
+<rect x="450" y="30" width="50" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="475" y="54" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">12</text>
+<rect x="500" y="30" width="50" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="525" y="54" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">11</text>
+<rect x="550" y="30" width="70" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="585" y="54" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">10:8</text>
+<rect x="620" y="30" width="90" height="40" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="665" y="54" text-anchor="middle" fill="#C6E7CC" font-size="9.5" class="mono">7:0</text>
+<text x="55" y="88" text-anchor="middle" class="lbl" font-size="9">dest APIC ID</text>
+<text x="175" y="88" text-anchor="middle" class="lbl" font-size="9">reserved</text>
+<text x="275" y="88" text-anchor="middle" class="lbl" font-size="9">mask</text>
+<text x="325" y="88" text-anchor="middle" class="lbl" font-size="9">trigger</text>
+<text x="325" y="101" text-anchor="middle" class="lbl" font-size="9">1=level</text>
+<text x="375" y="88" text-anchor="middle" class="lbl" font-size="9">remote</text>
+<text x="375" y="101" text-anchor="middle" class="lbl" font-size="9">IRR</text>
+<text x="425" y="88" text-anchor="middle" class="lbl" font-size="9">polarity</text>
+<text x="425" y="101" text-anchor="middle" class="lbl" font-size="9">1=low</text>
+<text x="475" y="88" text-anchor="middle" class="lbl" font-size="9">delivery</text>
+<text x="475" y="101" text-anchor="middle" class="lbl" font-size="9">status</text>
+<text x="525" y="88" text-anchor="middle" class="lbl" font-size="9">dest mode</text>
+<text x="525" y="101" text-anchor="middle" class="lbl" font-size="9">0=phys</text>
+<text x="585" y="88" text-anchor="middle" class="lbl" font-size="9">delivery</text>
+<text x="585" y="101" text-anchor="middle" class="lbl" font-size="9">000=fixed</text>
+<text x="665" y="88" text-anchor="middle" class="lbl" font-size="9">vector</text>
+<text x="10" y="132" class="lbl mono" font-size="9.5">PIT pin 2 in Lab 0x05 after timer_init: 0x0000000000010020</text>
+<text x="10" y="150" class="lbl" font-size="9.5">= dest APIC 0, mask=1, edge, active-high, physical, fixed, vector 0x20 (bits 12 and 14 are read-only status)</text>
+</svg>
+<figcaption>Một redirection entry của I/O APIC. cavOS ghi các trường màu; hai bit xám 12 và 14 là trạng thái chỉ đọc.</figcaption>
+</figure>
+
+<h3 id="redirect">4. Nối một IRQ ISA: <code>ioApicRedirect</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>uint8_t ioApicRedirect(uint8_t irq, bool ignored) {
+  uint8_t polarity = 0; // active high
+  uint8_t trigger = 0;  // edge triggered
+  /* duyệt MADT tìm Interrupt Source Override có source == irq */
+      if (specialized-&gt;source == irq) {
+        irq = specialized-&gt;gsi;                         // IRQ 0 -&gt; GSI 2 trên QEMU
+        polarity = (specialized-&gt;flags &amp; 2) ? 1 : 0;
+        trigger = (specialized-&gt;flags &amp; 8) ? 1 : 0;
+        break;
+      }
+  IOAPIC *ioapic = ioApicFetch(irq);                    // I/O APIC nào giữ GSI này
+  uint32_t lapic = 0;
+  uint8_t  targIrq = irqPerCoreAllocate(irq, &amp;lapic);   // cấp vector 32 + n, chọn LAPIC
+  uint8_t entry = irq - ioapic-&gt;ioapicRedStart;         // GSI -&gt; số chân
+  ioApicWriteRedEntry(ioapic-&gt;ioapicVirt, entry, targIrq, 0, 0, polarity, trigger, ignored, lapic);
+  return targIrq;
+}</code></pre></div>
+<p>Tham số <code>ignored</code> chính là bit mask: <code>true</code> thì entry được ghi nhưng bị che. <code>irqPerCoreAllocate(gsi, &amp;lapic)</code> giữ một mảng "chỉ số → GSI": GSI đã có thì trả
+lại vector cũ, chưa có thì lấy chỉ số kế tiếp, vector = <code>32 + chỉ số</code>, và chọn LAPIC đích (hiện luôn là CPU 0, xem Đọc thêm). Hàm cùng họ
+<code>ioApicPciRegister()</code> làm việc này cho thiết bị PCI, lấy GSI từ bảng <code>_PRT</code> của uACPI (Bài 14).</p>
+<figure class="diagram">
+<svg id="svg-bai10-irq-path" role="img" aria-label="Interrupt path: PIT IRQ 0 enters I/O APIC pin 2, the redirection entry sends vector 0x20 to the local APIC of CPU 0, the CPU runs IDT gate 0x20 and handle_interrupt, which writes EOI back to the local APIC; the local APIC timer raises vector 0x21 by itself" style="max-width:1083px" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-bai10-irq-path-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-bai10-irq-path .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai10-irq-path .lbl{fill:#c2c0b6;} #svg-bai10-irq-path .flow{stroke:#7d7b73;fill:none;} #svg-bai10-irq-path .back{stroke:#D8A54A;fill:none;}</style>
+</defs>
+<rect x="20" y="40" width="130" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="85" y="63" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PIT 8254</text>
+<text x="85" y="81" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">ISA IRQ 0</text>
+<rect x="20" y="120" width="130" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="85" y="143" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PS/2, mouse</text>
+<text x="85" y="161" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">ISA IRQ 1, 12</text>
+<rect x="20" y="200" width="130" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="85" y="223" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PCI devices</text>
+<text x="85" y="241" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">GSI from _PRT</text>
+<rect x="190" y="40" width="180" height="216" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="280" y="64" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">I/O APIC</text>
+<text x="280" y="80" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">0xfec00000, 24 pins</text>
+<text x="280" y="120" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">override: IRQ0 -&gt; pin 2</text>
+<text x="280" y="138" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">pin 2: vec 0x20, dest 0</text>
+<text x="280" y="176" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">one redirection entry</text>
+<text x="280" y="192" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">per pin</text>
+<rect x="410" y="40" width="160" height="216" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="490" y="64" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">Local APIC (CPU 0)</text>
+<text x="490" y="80" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">0xfee00000</text>
+<text x="490" y="138" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">SVR 0xF0: vec 0xff</text>
+<text x="490" y="176" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">timer: LVT 0x320</text>
+<text x="490" y="192" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">-&gt; vec 0x21 periodic</text>
+<text x="490" y="236" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">EOI reg 0xB0</text>
+<rect x="610" y="40" width="90" height="216" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="655" y="64" text-anchor="middle" fill="#F0C9C9" font-size="11" font-weight="600">CPU 0</text>
+<text x="655" y="132" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">IDT[vec]</text>
+<text x="655" y="148" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">isr stub</text>
+<text x="655" y="164" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">handle_</text>
+<text x="655" y="178" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">interrupt</text>
+<line x1="150" y1="68" x2="186" y2="68" class="flow" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<line x1="150" y1="148" x2="186" y2="148" class="flow" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<line x1="150" y1="228" x2="186" y2="228" class="flow" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<line x1="370" y1="110" x2="406" y2="110" class="flow" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<line x1="570" y1="110" x2="606" y2="110" class="flow" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<line x1="606" y1="232" x2="574" y2="232" class="back" stroke-width="1.5" marker-end="url(#svg-bai10-irq-path-arrow)"/>
+<text x="20" y="282" class="lbl" font-size="9.5">gray: interrupt delivery · amber: handle_interrupt writes 0 to EOI (0xB0) so the LAPIC can deliver the next one</text>
+</svg>
+<figcaption>Đường đi của ngắt PIT trong cavOS. LAPIC timer không qua I/O APIC: nó nằm ngay trong Local APIC.</figcaption>
+</figure>
+
+<h3 id="eoi">5. EOI</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/isr.c:handle_interrupt()
+  if (cpu-&gt;interrupt &gt;= 32 &amp;&amp; cpu-&gt;interrupt &lt;= 47) { // IRQ
+    if (cpu-&gt;interrupt &gt;= 40) outportb(0xA0, 0x20);   // EOI PIC slave (thừa, PIC đã che)
+    outportb(0x20, 0x20);                             // EOI PIC master (thừa)
+    apicWrite(0xB0, 0);                               // EOI Local APIC
+    /* gọi các handler đã đăng ký cho vector này */
+  }</code></pre></div>
+<p>Khi giao một ngắt, LAPIC bật bit của vector đó trong thanh ghi ISR (in-service) và không giao ngắt nào cùng mức ưu tiên hay thấp hơn cho tới khi nhận EOI. cavOS gửi EOI <em>trước</em> khi
+gọi handler. Ngắt spurious (0xFF) thì không cần EOI, vì LAPIC không bật bit ISR cho nó; nhánh 0xFF của <code>handle_interrupt</code> không làm gì.</p>
+
+<h3 id="initiate-apic-timer">6. <code>initiateApicTimer()</code>: đo bằng PIT rồi chạy</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/timer.c
+void initiatePitTimer(uint32_t reload_value) {
+  timerFrequency = TIMER_ACCURANCY / reload_value;   // 1193182 / 1000 = 1193 (thật ra là divisor)
+  outportb(0x43, 0b00110100);                        // kênh 0, lo/hi byte, mode 2, nhị phân
+  outportb(0x40, (uint8_t)(timerFrequency &amp; 0xFF));
+  outportb(0x40, (uint8_t)(timerFrequency &gt;&gt; 8 &amp; 0xFF));
+  RTC rtc = {0}; readFromCMOS(&amp;rtc); timerTicks = 0;
+  timerBootUnix = rtcToUnix(&amp;rtc);                   // giờ khởi động, cho đồng hồ hệ thống
+  debugf("[timer] Ready to fire: frequency{%dMHz}\n", timerFrequency);
+}
+
+void initiateApicTimer() {
+  size_t waitfor = 10; // in ms
+  initiatePitTimer(1000);                             // PIT ~1000.15 Hz
+  uint8_t ioapicInt = ioApicRedirect(0, false);       // IRQ 0 -&gt; GSI 2 -&gt; vector 0x20
+  registerIRQhandler(ioapicInt, timerTick);
+
+  apicWrite(APIC_REGISTER_TIMER_DIV, 0x3);            // chia 16
+  apicWrite(APIC_REGISTER_TIMER_INITCNT, 0xFFFFFFFF); // bắt đầu đếm xuống
+
+  // wait using the old pit
+  uint64_t target = timerTicks + waitfor;
+  while (target &gt; timerTicks)
+    ;
+
+  // mask apic timer and get back time passed
+  apicWrite(APIC_REGISTER_LVT_TIMER, 0x10000);
+  uint32_t ticksInXms = 0xFFFFFFFF - apicRead(APIC_REGISTER_TIMER_CURRCNT);
+
+  uint32_t lapicId = 0;
+  uint8_t  targIrq = irqPerCoreAllocate(0, &amp;lapicId);  // vector 0x21
+  apicFreq = ticksInXms / waitfor;                      // tick LAPIC mỗi 1 ms
+
+  // finally configure the it
+  apicWrite(APIC_REGISTER_LVT_TIMER, targIrq | APIC_LVT_TIMER_MODE_PERIODIC);
+  apicWrite(APIC_REGISTER_TIMER_DIV, 0x3);
+  apicWrite(APIC_REGISTER_TIMER_INITCNT, apicFreq);    // 1 ngắt mỗi ms
+  ioapicInt = ioApicRedirect(0, true); // mask the old pit
+  registerIRQhandler(targIrq, timerTick);
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-bai10-calib" role="img" aria-label="Calibration timeline: LAPIC initial count 0xFFFFFFFF is written at time t0 between two PIT ticks; the LAPIC counts down while ten PIT ticks arrive; at the tenth tick the kernel reads the current count; the real wait is between 9 and 10 PIT periods" style="max-width:1083px" width="100%" viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-bai10-calib .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai10-calib .lbl{fill:#c2c0b6;} #svg-bai10-calib .axis{stroke:#7d7b73;}</style>
+</defs>
+<text x="20" y="22" class="lbl" font-size="10">LAPIC current count (div 16)</text>
+<line x1="80" y1="50" x2="604" y2="140" stroke="#8FC79A" stroke-width="2"/>
+<line x1="80" y1="36" x2="80" y2="190" stroke="#85B7EB" stroke-width="1" stroke-dasharray="4 3"/>
+<line x1="604" y1="36" x2="604" y2="190" stroke="#D98A8A" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="86" y="46" fill="#B5D4F4" font-size="9" class="mono">INITCNT = 0xFFFFFFFF</text>
+<text x="598" y="160" text-anchor="end" fill="#F0C9C9" font-size="9" class="mono">read CURRCNT, mask LVT</text>
+<line x1="20" y1="180" x2="700" y2="180" class="axis" stroke-width="1"/>
+<line x1="44" y1="172" x2="44" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="100" y1="172" x2="100" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="156" y1="172" x2="156" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="212" y1="172" x2="212" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="268" y1="172" x2="268" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="324" y1="172" x2="324" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="380" y1="172" x2="380" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="436" y1="172" x2="436" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="492" y1="172" x2="492" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="548" y1="172" x2="548" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="604" y1="172" x2="604" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<line x1="660" y1="172" x2="660" y2="188" stroke="#D8A54A" stroke-width="2"/>
+<text x="100" y="202" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">1</text>
+<text x="324" y="202" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">5</text>
+<text x="604" y="202" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">10</text>
+<text x="80" y="218" text-anchor="middle" fill="#B5D4F4" font-size="9" class="mono">t0</text>
+<text x="360" y="218" text-anchor="middle" class="lbl" font-size="9.5">amber: PIT ticks, ~1 ms apart · the loop starts at t0, anywhere inside a PIT period</text>
+<text x="360" y="236" text-anchor="middle" class="lbl" font-size="9.5">so "10 ticks" lasts 9 to 10 ms; apicFreq = (0xFFFFFFFF - CURRCNT) / 10 inherits that error</text>
+</svg>
+<figcaption>Đo LAPIC timer bằng PIT. Đường xanh: bộ đếm LAPIC giảm đều. Vạch vàng: tick PIT.</figcaption>
+</figure>
 <ul>
-<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — APIC. ACPI MADT.</li>
+<li><strong>Vì sao phải đo</strong>: Intel không quy định tần số xung vào LAPIC timer; nó tuỳ CPU và bo mạch. PIT thì luôn là 1.193182 MHz, nên dùng làm thước.</li>
+<li><strong>Trong lúc đo</strong> LVT timer vẫn bị che (giá trị sau reset có bit 16 = 1), nên LAPIC đếm mà không bắn ngắt. <code>timerTicks</code> tăng nhờ ngắt PIT gọi <code>timerTick</code>.</li>
+<li><strong>Sau khi đo</strong>: LVT = <code>0x21 | bit 17</code> (periodic). Ở chế độ periodic, đếm về 0 thì LAPIC bắn ngắt và tự nạp lại <code>INITCNT</code>. <code>INITCNT = apicFreq</code> = số tick
+LAPIC trong 1 ms, nên một ngắt mỗi ms. Rồi che PIT (cùng vector 0x20, chỉ bật mask).</li>
+<li>Hai vector: PIT nhận chỉ số 0 (GSI 2) → <code>0x20</code>; LAPIC timer gọi <code>irqPerCoreAllocate(0, …)</code>, "GSI 0" mới → chỉ số 1 → <code>0x21</code>. Lab 0x05 in ra đúng hai số này.</li>
 </ul>
+
+<h3 id="tick-scheduler">7. Từ tick tới scheduler</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void timerTick(uint64_t rsp) {   // đăng ký cho cả 0x20 (PIT) và 0x21 (LAPIC)
+  timerTicks++;
+  schedule(rsp);                 // rsp = khung ngắt (Bài 9)
+}
+
+uint32_t sleep(uint32_t time) {  // time tính bằng tick = ms
+  uint64_t target = timerTicks + (time);
+  while (target &gt; timerTicks)
+    handControl();               // nhường CPU trong lúc chờ
+  return 0;
+}</code></pre></div>
+<ul>
+<li><code>timerTicks</code> là đồng hồ của cả kernel: <code>sleep()</code> đếm bằng nó, uACPI đọc nó qua <code>uacpi_kernel_get_nanoseconds_since_boot</code> (<code>timerTicks × 10^6</code> ns),
+scheduler dùng nó cho hẹn giờ đánh thức task và <code>itimer</code>.</li>
+<li><code>schedule(rsp)</code> thoát ngay khi <code>tasksInitiated</code> chưa bật. Sau <code>initiateTasks()</code>, mỗi tick nó chọn task <code>READY</code> kế tiếp và đổi task bằng cách thay khung ngắt
+mà <code>iretq</code> sẽ trả về. Tick 1 ms vì vậy là "lát thời gian" của mỗi task: <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x05 chép <code>initiateAPIC</code> và <code>initiateApicTimer</code>, rồi đếm tick thật theo đồng hồ RTC.</em></p>
+<p><a href="../../thuc_hanh/lab_0x05_acpi_apic.html">Lab 0x05 - ACPI, APIC &amp; Timer</a>, phần sau (<code>apic.c</code>, <code>timer.c</code>): bật LAPIC (map MMIO uncached, <code>SVR |= 0x1FF</code>),
+nối IRQ 0 qua override vào vector <code>0x20</code>, đo LAPIC trong 10 tick PIT, chạy periodic vector <code>0x21</code>, che PIT, rồi in số tick trong mỗi giây RTC.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/05-acpi-apic
+make run
+make clean &amp;&amp; make run DEMO=-DNO_VOLATILE      # timerTicks không volatile như cavOS: treo khi đo</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35 -m 256M</code>, TCG; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[lapic] ID reg=0x0 -&gt; APIC ID 0  version reg=0x50014 -&gt; version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -&gt; 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -&gt; version 0x20, max redirection index 23 -&gt; 24 pins, GSI 0..23
+
+[timer] PIT ch0 mode 2, divisor 1193 -&gt; 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -&gt; override -&gt; GSI 2 = I/O APIC pin 2 -&gt; vector 0x20 -&gt; LAPIC 0 active-high edge
+[timer] LAPIC current count = 0xfff6f5aa -&gt; 592469 LAPIC ticks in 10 ms -&gt; apicFreq = 59246 ticks/ms (div 16 -&gt; timer input clock ~947 MHz)
+[ioapic] ISA IRQ 0 -&gt; override -&gt; GSI 2 = I/O APIC pin 2 -&gt; vector 0x20 -&gt; LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59246 -&gt; one interrupt per ms
+
+[uptime] RTC 03:56:22  timerTicks=1422  uptime ~1.4 s  this second: +1054 LAPIC, +0 PIT
+[uptime] RTC 03:56:23  timerTicks=2477  uptime ~2.4 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:24  timerTicks=3532  uptime ~3.5 s  this second: +1055 LAPIC, +0 PIT</code></pre></div>
+<ul>
+<li>Vector <code>0x20</code> cho PIT và <code>0x21</code> cho LAPIC timer, đúng thứ tự cấp của cavOS.</li>
+<li>Số tick thật mỗi giây là <strong>1055</strong>, không phải 1000: phép đo 10 tick PIT ngắn hơn 10 ms. Bốn cấu hình máy cho 925 đến 1055 tick/giây (bảng trên trang lab).</li>
+<li>Bản <code>NO_VOLATILE</code> dừng ở dòng <code>calibrating…</code>: với <code>-O2</code>, vòng chờ đọc <code>timerTicks</code> một lần rồi so mãi với thanh ghi.</li>
+</ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu kiểm tra hiểu, không phải nhớ.</em></p>
+<details class="quiz"><summary>Vì sao không ghi thẳng một số cố định vào <code>INITCNT</code> mà phải đo bằng PIT?</summary>
+<p>Tần số xung vào LAPIC timer khác nhau giữa các CPU và bo mạch (trên QEMU khoảng 1 GHz trước khi chia). Không đo thì không biết bao nhiêu nhịp là 1 ms. PIT luôn chạy 1.193182 MHz nên dùng làm thước.</p></details>
+<details class="quiz"><summary>cavOS nối PIT vào chân 2 của I/O APIC, không phải chân 0. Lấy số 2 ở đâu?</summary>
+<p>Từ Interrupt Source Override trong MADT: <code>IRQ 0 -&gt; GSI 2</code>. <code>ioApicRedirect(0, …)</code> tra bảng này trước. Bỏ qua nó thì chân 0 được mở, không có tick nào tới (Lab 0x05 đã thử).</p></details>
+<details class="quiz"><summary>Handler timer chạy xong nhưng quên ghi EOI. Chuyện gì xảy ra?</summary>
+<p>LAPIC vẫn coi vector đó đang được xử lý, nên không giao ngắt nào cùng mức ưu tiên hay thấp hơn nữa: timer coi như dừng sau tick đầu. Lab 0x05 bỏ EOI thì treo ngay lúc đo.</p></details>
+<details class="quiz"><summary>Vì sao ngắt spurious (0xFF) không cần EOI, còn timer thì cần?</summary>
+<p>Với ngắt spurious, LAPIC không bật bit ISR nào, nên không có gì để "xong". Ghi EOI lúc đó có thể xoá nhầm bit ISR của một ngắt thật đang được xử lý.</p></details>
+<details class="quiz"><summary>Phép đo cho <code>apicFreq</code> cao hơn thật 5%. <code>sleep(1000)</code> kéo dài bao lâu?</summary>
+<p>Khoảng 1.05 giây. Mỗi tick dài hơn 1 ms đúng tỉ lệ đó, và <code>sleep</code> đếm tick. Ngược lại, Lab 0x05 đo thấp hơn thật nên tick ngắn hơn: 1055 tick mỗi giây, <code>sleep(1000)</code> chỉ còn khoảng 0.95 giây.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, các lỗi tìm thấy trong source có bằng chứng, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Calibrate APIC timer bằng gì (PIT/HPET/TSC)?</strong> Bằng <strong>PIT</strong>: 10 tick ở ~1000.15 Hz (<code>initiateApicTimer</code>). cavOS không dùng HPET (dù có bảng HPET) hay TSC.
+Lab 0x05 đo được sai số của cách này: +5.5% đến −7.5% tuỳ lần chạy và máy ảo.</li>
+<li><strong>x2APIC hay xAPIC (MMIO)?</strong> <strong>xAPIC</strong>: mọi truy cập LAPIC qua MMIO <code>apicVirt + offset</code>. x2APIC đọc ghi thanh ghi bằng <code>rdmsr</code>/<code>wrmsr</code> và
+phải bật bit 10 của <code>IA32_APIC_BASE</code>; cavOS chỉ ghi bit 8 và 11. Dưới KVM, CPUID của Lab 0x05 báo có x2APIC, nhưng không bật thì CPU vẫn ở chế độ xAPIC.</li>
+<li><strong>Tắt PIC 8259 cũ (mask).</strong> Làm ở Bài 9 (<code>remap_pic</code> rồi <code>disable_pic</code> ghi <code>0xFF</code> vào hai thanh ghi mask). PIT vì vậy không đi qua PIC nữa mà qua I/O APIC.
+<code>handle_interrupt</code> vẫn gửi EOI cho PIC, không cần nhưng vô hại.</li>
+<li><strong>Local APIC timer one-shot hay periodic?</strong> Periodic (bit 17 của LVT). One-shot cần nạp lại <code>INITCNT</code> mỗi lần; TSC-deadline (bit 18:17 = <code>10</code>) thì cavOS không dùng.</li>
+</ul>
+
+<h3 id="loi-irq-alloc">Lỗi trong <code>irqPerCoreAllocate</code> (<code>cpu/apic.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>  // spurious vector checks (extendable, hence the while)
+  while (irqLast == 0xff)
+    irqLast++;
+  ...
+  // find the core with the least irqs allocated
+  int    min = MAX_IRQ;
+  size_t minIndex = 0;
+  for (size_t i = 0; i &lt; 1; i++) { // todo: bootloader.smp-&gt;cpu_count
+    if (irqPerCpu[i] &lt; min) {
+      irqPerCpu[i] = min;          // &lt;- gán, ý định là min = irqPerCpu[i]
+      minIndex = i;
+    }
+  }
+  ...
+  irqPerCpu[minIndex]++;
+  return irqGenericIndex + 32;</code></pre></div>
+<ul>
+<li><strong><code>irqPerCpu[i] = min;</code> gán ngược.</strong> Ý định là "tìm CPU có ít IRQ nhất", tức <code>min = irqPerCpu[i]</code>. Viết ngược thì <code>min</code> không bao giờ giảm, nên điều kiện luôn đúng và
+<code>minIndex</code> luôn là CPU cuối cùng được xét; thêm nữa <code>irqPerCpu</code> là <code>uint8_t</code>, gán 256 thành 0, nên bộ đếm không bao giờ vượt 1. Chép nguyên hàm ra chạy trên host
+(<code>host/cavos_irq_alloc.c</code> trong Lab 0x05):
+<div class="code"><div class="code-bar">text</div><pre><code>loop over 1 CPU(s):
+  gsi 16 -&gt; vector 0x20 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 21 -&gt; vector 0x25 lapic 0   irqPerCpu = {1,0,0,0}
+loop over 4 CPU(s):
+  gsi 16 -&gt; vector 0x20 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 21 -&gt; vector 0x25 lapic 3   irqPerCpu = {0,0,0,1}</code></pre></div>
+Hiện vô hại vì vòng lặp chỉ xét CPU 0. Nếu ai đó làm theo <code>todo</code> và đổi thành <code>cpu_count</code>, mọi IRQ sẽ dồn về CPU cuối thay vì được chia đều.</li>
+<li><strong><code>while (irqLast == 0xff)</code> so chỉ số với vector.</strong> <code>irqLast</code> là chỉ số; vector là <code>32 + chỉ số</code>. Muốn né vector spurious 0xFF thì phải so
+<code>irqLast + 32 == 0xff</code> (chỉ số 223). Như đang viết, GSI khác nhau thứ 224 nhận đúng vector 0xFF, trùng ngắt spurious (bản chép trên host in
+<code>224th distinct GSI -&gt; vector 0xff</code>). Thực tế lỗi khác đến trước: từ vector 48 trở đi IDT không có cổng (Bài 9).</li>
+<li><strong><code>for (i &lt; 1) // todo</code> không thể sửa đơn giản.</strong> Đổi thành <code>cpu_count</code> (và sửa phép so) sẽ gửi IRQ sang các CPU khác, mà lúc này chúng còn đang chờ trong Limine,
+chưa có IDT và chưa bật ngắt. Lab 0x05 thử gửi IRQ PIT cho LAPIC 3 với <code>-smp 4</code>: không tick nào tới BSP, vòng đo treo. Phải khởi động các AP trước (gọi <code>smpInitiateAPIC</code>,
+nạp IDT, <code>sti</code>).</li>
+<li>Thêm: <code>debugf("[irq] Irq overflow! index{%d}\n", irqGenericArray)</code> in địa chỉ mảng thay vì chỉ số; và LAPIC đích lấy theo <code>bootloader.smp-&gt;cpus[minIndex]</code> chứ không theo
+<code>smpBspIndex</code> đã tính trong <code>bootloader.c</code>. Trên QEMU <code>cpus[0]</code> là BSP (Lab 0x05: <code>bsp_lapic_id=0 lapic ids: 0 1 2 3</code>), Limine không hứa điều đó.</li>
+</ul>
+
+<h3 id="loi-timer">Các điểm yếu của timer (<code>cpu/timer.c</code>, <code>include/timer.h</code>)</h3>
+<ul>
+<li><strong><code>timerTicks</code> không <code>volatile</code>.</strong> <code>include/timer.h</code>: <code>uint64_t timerTicks;</code>. Vòng <code>while (target &gt; timerTicks);</code> chạy được chỉ vì Makefile kernel
+của cavOS không bật tối ưu: <code>objdump</code> <code>cpu/timer.o</code> cho thấy mỗi vòng đọc lại bộ nhớ (<code>1b8: mov 0x0(%rip),%rax; mov (%rax),%rax; cmp; ja 1b8</code>). Lab 0x05 build
+<code>-O2</code> không volatile thì vòng thành <code>cmp $…,%rax; jbe</code> trên thanh ghi và treo vĩnh viễn. Cùng vấn đề cho <code>sleep()</code> và <code>uacpi_kernel_sleep</code>.</li>
+<li><strong>Sai số đo.</strong> Vòng chờ bắt đầu ở một thời điểm bất kỳ giữa hai tick PIT, nên "10 tick" dài từ 9 đến 10 ms, cộng với độ trễ ngắt của máy ảo. Lab 0x05 đo trên bốn cấu hình:
+1054–1055, 1003, 925–926 và 1051–1052 tick mỗi giây RTC. Cách sửa thường dùng: chờ một tick trước rồi mới nạp <code>INITCNT</code>, đo lâu hơn, hoặc đo bằng HPET hay ACPI PM timer.</li>
+<li><strong>Tên biến gây hiểu nhầm.</strong> <code>timerFrequency</code> chứa <em>divisor</em> 1193, nên log in <code>frequency{1193MHz}</code> trong khi PIT chạy ~1000 Hz. <code>apicFreq</code> là số tick LAPIC
+mỗi ms, không phải tần số.</li>
+<li><strong>"GSI 0" làm khoá cho LAPIC timer.</strong> <code>irqPerCoreAllocate(0, &amp;lapicId)</code> ghi GSI 0 vào mảng. Nếu sau này một thiết bị thật ở GSI 0 được nối qua <code>ioApicRedirect</code>,
+nó sẽ nhận lại vector <code>0x21</code> của timer và <code>timerTick</code> chạy cả khi thiết bị đó ngắt. Trên QEMU GSI 0 không dùng (IRQ 0 bị override sang GSI 2).</li>
+<li><strong>LAPIC đọc qua HHDM có cache.</strong> <code>apicVirt = hhdmOffset + apicPhys</code>; Lab 0x05 cho thấy trang HHDM chứa <code>0xfee00000</code> là trang 2 MiB với PCD=PWT=0 (write-back).
+Chạy đúng vì firmware đặt MTRR dải <code>0xc0000000–0xffffffff</code> (OVMF: từ <code>0x80000000</code>) là UC, và MTRR UC thắng PAT WB. Map riêng với PCD=PWT=1 thì không phụ thuộc firmware.</li>
+<li><strong>Vòng duyệt MADT quá cuối bảng 44 byte</strong> trong cả <code>initiateAPIC</code> và <code>ioApicRedirect</code>: xem <a href="bai_08_acpi.html#diem-yeu">Bài 8, Đọc thêm</a>.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>MADT, override, GSI: <a href="bai_08_acpi.html">Bài 8 - ACPI</a> · IDT, stub, PIC, cổng 0xFF: <a href="bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>.</li>
+<li>IRQ 1 và 12 qua <code>ioApicRedirect</code>: <a href="bai_11_ps2_keyboard_mouse.html">Bài 11 - PS/2 Keyboard &amp; Mouse</a>.</li>
+<li>Tick dùng để đổi task: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>.</li>
+<li>Ngắt PCI qua <code>ioApicPciRegister</code> và <code>_PRT</code>: <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3, chương APIC: bảng "Local APIC Register Address Map" (offset <code>0x20</code>…<code>0x3E0</code>), mục bật/tắt APIC và MSR
+<code>IA32_APIC_BASE</code> (bit 8 BSP, bit 10 x2APIC, bit 11 enable), "APIC Timer" (Divide Configuration, Initial/Current Count, chế độ one-shot/periodic/TSC-deadline), "Local Vector Table",
+"Spurious Interrupt" (SVR, không EOI), "End-of-Interrupt", phần x2APIC.</li>
+<li>Intel SDM Vol.3, chương Memory Cache Control: PAT, MTRR, bảng kiểu bộ nhớ hiệu dụng khi kết hợp MTRR với PAT/PCD/PWT.</li>
+<li>Datasheet Intel 82093AA I/O APIC: <code>IOREGSEL</code>/<code>IOWIN</code>, thanh ghi <code>IOAPICID</code> (0), <code>IOAPICVER</code> (1, bit 23:16 maximum redirection entry), <code>IOREDTBL</code> (0x10–0x3F).</li>
+<li>Datasheet Intel 8254 PIT: control word (<code>0x43</code>), mode 2 rate generator, xung vào 1.193182 MHz. Danh sách tài liệu: <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</li>
+<li>ACPI MADT (§5.2.12): Interrupt Source Override và cờ MPS INTI.</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 10 - APIC &amp; Timer</footer>
 </main>

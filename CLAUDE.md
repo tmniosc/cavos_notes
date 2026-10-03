@@ -125,8 +125,9 @@ Trang bài nằm ở `docs/ly_thuyet/bai/` (tên file dạng `bai_06_virtual_mem
 - [x] Bài 5 - Physical Memory Manager — bitmap 1bit/frame 4KiB, tự host qua HHDM, first-fit + lastDeepFragmented
 - [x] Bài 6 - Virtual Memory & Paging — TÁI DÙNG bảng Limine, ko tự mov cr3; VirtualMap lazy 4 tầng qua HHDM; invlpg; NX chưa dùng
 - [x] Bài 7 - GDT & TSS — long mode bỏ base/limit, vẫn cần CPL+cờ L; lretq đổi CS; TSS chỉ giữ RSP0/IST
-- [ ] Bài 8 - ACPI ← **tiếp theo** (boot log cavOS có sẵn phần uACPI 3.1.0 nạp 54 device để đối chiếu)
+- [x] Bài 8 - ACPI — uACPI 3 bước, RSDP qua HHDM, MADT; lỗi: vòng MADT đọc lố 44 byte; lab 0x05
 - [x] Bài 9 - IDT & Interrupts — idt.c set_idt_gate/set_idt, isr.asm stub + isr_common, handle_interrupt; remap+tắt PIC, spurious APIC; không IST; lab 0x04
+- [x] Bài 10 - APIC & Timer — initiateAPIC/ioApicRedirect/initiateApicTimer, calibrate 10 tick PIT; lỗi: irqPerCoreAllocate gán thay so sánh, timerTicks không volatile; lab 0x05
 
 > Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 

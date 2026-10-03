@@ -44,7 +44,7 @@
   <strong>Tài liệu gốc</strong> cho biết spec nào nói về phần nào.</p>
 
 <h2 id="ban-do">Bản đồ khoá học</h2>
-<p class="lede"><em>18 bài, theo đúng thứ tự <code>_start()</code> gọi. Đã viết 8/18 bài; các bài còn lại mới có dàn ý.</em></p>
+<p class="lede"><em>18 bài, theo đúng thứ tự <code>_start()</code> gọi. Đã viết 10/18 bài; các bài còn lại mới có dàn ý.</em></p>
 <figure class="diagram">
 <svg id="svg-course-map" role="img" aria-label="course map: five stages, lessons 1 to 7 written, 8 to 18 outlined" width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
@@ -80,9 +80,9 @@
 <rect x="160" y="66" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="168" y="84" fill="#C6E7CC">5  Physical memory</text>
 <rect x="160" y="98" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="168" y="116" fill="#C6E7CC">6  Virtual memory</text>
 <rect x="310" y="66" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="318" y="84" fill="#C6E7CC">7  GDT &amp; TSS</text>
-<rect x="310" y="98" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="318" y="116" fill="#D3D1C7">8  ACPI</text>
+<rect x="310" y="98" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="318" y="116" fill="#C6E7CC">8  ACPI</text>
 <rect x="310" y="130" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="318" y="148" fill="#C6E7CC">9  IDT &amp; interrupts</text>
-<rect x="310" y="162" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="318" y="180" fill="#D3D1C7">10 APIC &amp; timer</text>
+<rect x="310" y="162" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="318" y="180" fill="#C6E7CC">10 APIC &amp; timer</text>
 <rect x="460" y="66" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="84" fill="#D3D1C7">11 PS/2 kbd, mouse</text>
 <rect x="460" y="98" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="116" fill="#D3D1C7">12 Multitasking</text>
 <rect x="460" y="130" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="148" fill="#D3D1C7">13 Networking</text>
@@ -111,9 +111,9 @@
 <tr><td><a href="bai_05_physical_memory_manager.html">5 - Physical Memory Manager</a></td><td><code>initiatePMM()</code></td><td><code>memory/pmm.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> §4</td><td><a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td></tr>
 <tr><td><a href="bai_06_virtual_memory_paging.html">6 - Virtual Memory &amp; Paging</a></td><td><code>initiateVMM()</code>; <code>initiatePaging()</code> chạy sau, ngay sau <code>initiateISR()</code></td><td><code>memory/vmm.c</code>, <code>paging.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §4</td><td><a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td></tr>
 <tr><td><a href="bai_07_gdt_tss.html">7 - GDT &amp; TSS</a></td><td><code>initiateGDT()</code></td><td><code>cpu/gdt.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §3, §8</td><td><a href="../../thuc_hanh/lab_0x04_gdt_idt.html">0x04</a></td></tr>
-<tr><td><a href="bai_08_acpi.html">8 - ACPI</a></td><td><code>initiateACPI()</code></td><td><code>acpi/</code></td><td>ACPI Spec</td><td>dàn ý</td></tr>
+<tr><td><a href="bai_08_acpi.html">8 - ACPI</a></td><td><code>initiateACPI()</code></td><td><code>acpi/</code></td><td>ACPI Spec</td><td><a href="../../thuc_hanh/lab_0x05_acpi_apic.html">0x05</a></td></tr>
 <tr><td><a href="bai_09_idt_interrupts.html">9 - IDT &amp; Interrupts</a></td><td><code>initiateISR()</code></td><td><code>cpu/idt.c</code>, <code>isr.*</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §6</td><td><a href="../../thuc_hanh/lab_0x04_gdt_idt.html">0x04</a></td></tr>
-<tr><td><a href="bai_10_apic_timer.html">10 - APIC &amp; Timer</a></td><td><code>initiateApicTimer()</code></td><td><code>cpu/apic.c</code>, <code>timer.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §11</td><td>dàn ý</td></tr>
+<tr><td><a href="bai_10_apic_timer.html">10 - APIC &amp; Timer</a></td><td><code>initiateApicTimer()</code></td><td><code>cpu/apic.c</code>, <code>timer.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §11</td><td><a href="../../thuc_hanh/lab_0x05_acpi_apic.html">0x05</a></td></tr>
 <tr><td><a href="bai_11_ps2_keyboard_mouse.html">11 - PS2 Keyboard &amp; Mouse</a></td><td><code>fsMount("/dev/")</code>, <code>initiateKb()</code>, <code>initiateMouse()</code></td><td><code>drivers/</code></td><td>8042 datasheet</td><td>dàn ý</td></tr>
 <tr><td><a href="bai_12_multitasking_scheduler.html">12 - Multitasking &amp; Scheduler</a></td><td><code>initiateTasks()</code>, <code>initiateKernelThreads()</code></td><td><code>multitasking/</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §8</td><td>dàn ý</td></tr>
 <tr><td><a href="bai_13_networking.html">13 - Networking</a></td><td><code>initiateNetworking()</code></td><td><code>networking/</code></td><td>lwIP, RFC</td><td>dàn ý</td></tr>

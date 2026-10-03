@@ -1,0 +1,410 @@
+# Lab 0x05 - ACPI, APIC & Timer — real serial output
+# date: 2026-10-03, QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2), WSL Ubuntu-26.04, Limine 8.7.0 (base revision 2), cross gcc x86_64-cavos-gcc -O2
+# each run: timeout N make run QEMU_FLAGS="..." (kernel ends with cli; hlt, so timeout kills QEMU)
+
+====================================================================================================
+# RUN q35: QEMU -M q35 -m 256M, TCG, SeaBIOS (QEMU default BIOS), 1 CPU
+====================================================================================================
+### q35: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown
+qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -display none -drive file=os.img,format=raw,if=ide
+=== Lab 0x05 - ACPI, APIC & Timer ===
+
+[boot] pmm + own PML4 + GDT/TSS ready
+
+[acpi] Limine RSDP response->address = 0xffff8000000f5290 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2351 XSDT=0x0 -> using RSDT (4-byte pointers)
+[acpi] RSDT PA=0x000000000ffe2351 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 5 tables listed:
+[acpi]   FACP PA=0x000000000ffe2149 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe223d len=0x78 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000ffe22b5 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000ffe22ed len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000ffe2329 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2109 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8421 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -> needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000ffe0000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -> GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -> GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -> GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -> GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -> GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 1 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+[madt] cavOS loop end = start + hdr.length -> walks 44 bytes past the table; bytes there:
+[madt]   48 50 45 54 38 00 00 00 01 b4 42 4f 43 48 53 20 42 58 50 43 20 20 
+[madt]   20 20 01 00 00 00 42 58 50 43 01 00 00 00 01 a2 86 80 00 00 00 00 
+[madt]   cavOS would read a fake entry: type 72 len 80
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=0  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -> match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -> 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -> 4K page entry=0x00000000fee0007b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0xc0000000 mask=0xffc0000000 type=0 (UC)  <- covers the LAPIC page
+[lapic] ID reg=0x0 -> APIC ID 0  version reg=0x50014 -> version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -> 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -> version 0x20, max redirection index 23 -> 24 pins, GSI 0..23
+[smp] Limine: cpu_count=1 bsp_lapic_id=0 lapic ids: 0
+
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6f5aa -> 592469 LAPIC ticks in 10 ms -> apicFreq = 59246 ticks/ms (div 16 -> timer input clock ~947 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59246 -> one interrupt per ms
+[ioapic] redirection entries after timer_init:
+[ioapic]   pin  0: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  1: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  2: 0x0000000000010020  vector=0x20 masked edge high dest=0
+[ioapic]   pin  3: 0x0000000000010000  vector=0x0 masked edge high dest=0
+
+[uptime] RTC 03:56:21  start: timerTicks=368 (lapic 358, pit 10)
+[uptime] RTC 03:56:22  timerTicks=1422  uptime ~1.4 s  this second: +1054 LAPIC, +0 PIT
+[uptime] RTC 03:56:23  timerTicks=2477  uptime ~2.4 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:24  timerTicks=3532  uptime ~3.5 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:25  timerTicks=4587  uptime ~4.5 s  this second: +1055 LAPIC, +0 PIT
+[uptime] RTC 03:56:26  timerTicks=5642  uptime ~5.6 s  this second: +1055 LAPIC, +0 PIT
+[lapic] spurious interrupts seen: 0
+[kernel] done, cli; hlt
+qemu-system-x86_64: terminating on signal 15 from pid 14264 (make)
+
+====================================================================================================
+# RUN q35-smp4: QEMU -M q35 -m 256M -smp 4, TCG, SeaBIOS
+====================================================================================================
+### q35-smp4: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4
+qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4 -display none -drive file=os.img,format=raw,if=ide
+=== Lab 0x05 - ACPI, APIC & Timer ===
+
+[boot] pmm + own PML4 + GDT/TSS ready
+
+[acpi] Limine RSDP response->address = 0xffff8000000f5290 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2468 XSDT=0x0 -> using RSDT (4-byte pointers)
+[acpi] RSDT PA=0x000000000ffe2468 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 5 tables listed:
+[acpi]   FACP PA=0x000000000ffe2248 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe233c len=0x90 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000ffe23cc len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000ffe2404 len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000ffe2440 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2208 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8676 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -> needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000ffe0000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=1 apic_id=1 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=2 apic_id=2 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=3 apic_id=3 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -> GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -> GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -> GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -> GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -> GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 4 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+[madt] cavOS loop end = start + hdr.length -> walks 44 bytes past the table; bytes there:
+[madt]   48 50 45 54 38 00 00 00 01 b4 42 4f 43 48 53 20 42 58 50 43 20 20 
+[madt]   20 20 01 00 00 00 42 58 50 43 01 00 00 00 01 a2 86 80 00 00 00 00 
+[madt]   cavOS would read a fake entry: type 72 len 80
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=0  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -> match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -> 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -> 4K page entry=0x00000000fee0007b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0xc0000000 mask=0xffc0000000 type=0 (UC)  <- covers the LAPIC page
+[lapic] ID reg=0x0 -> APIC ID 0  version reg=0x50014 -> version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -> 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -> version 0x20, max redirection index 23 -> 24 pins, GSI 0..23
+[smp] Limine: cpu_count=4 bsp_lapic_id=0 lapic ids: 0 1 2 3
+
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff67e04 -> 623099 LAPIC ticks in 10 ms -> apicFreq = 62309 ticks/ms (div 16 -> timer input clock ~996 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 62309 -> one interrupt per ms
+[ioapic] redirection entries after timer_init:
+[ioapic]   pin  0: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  1: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  2: 0x0000000000010020  vector=0x20 masked edge high dest=0
+[ioapic]   pin  3: 0x0000000000010000  vector=0x0 masked edge high dest=0
+
+[uptime] RTC 03:56:37  start: timerTicks=291 (lapic 280, pit 11)
+[uptime] RTC 03:56:38  timerTicks=1294  uptime ~1.2 s  this second: +1003 LAPIC, +0 PIT
+[uptime] RTC 03:56:39  timerTicks=2297  uptime ~2.2 s  this second: +1003 LAPIC, +0 PIT
+[uptime] RTC 03:56:40  timerTicks=3300  uptime ~3.3 s  this second: +1003 LAPIC, +0 PIT
+[uptime] RTC 03:56:41  timerTicks=4303  uptime ~4.3 s  this second: +1003 LAPIC, +0 PIT
+[uptime] RTC 03:56:42  timerTicks=5306  uptime ~5.3 s  this second: +1003 LAPIC, +0 PIT
+[lapic] spurious interrupts seen: 0
+[kernel] done, cli; hlt
+qemu-system-x86_64: terminating on signal 15 from pid 14271 (timeout)
+
+====================================================================================================
+# RUN q35-kvm-smp4: QEMU -M q35 -m 256M -smp 4 -enable-kvm, SeaBIOS
+====================================================================================================
+### q35-kvm-smp4: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4 -enable-kvm
+qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -smp 4 -enable-kvm -display none -drive file=os.img,format=raw,if=ide
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+=== Lab 0x05 - ACPI, APIC & Timer ===
+
+[boot] pmm + own PML4 + GDT/TSS ready
+
+[acpi] Limine RSDP response->address = 0xffff8000000f5290 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2468 XSDT=0x0 -> using RSDT (4-byte pointers)
+[acpi] RSDT PA=0x000000000ffe2468 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 5 tables listed:
+[acpi]   FACP PA=0x000000000ffe2248 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe233c len=0x90 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000ffe23cc len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000ffe2404 len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000ffe2440 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2208 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8676 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -> needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000ffe0000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=1 apic_id=1 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=2 apic_id=2 flags=0x1 (enabled)
+[madt]   type 0 len  8  Processor Local APIC  uid=3 apic_id=3 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -> GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -> GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -> GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -> GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -> GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 4 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+[madt] cavOS loop end = start + hdr.length -> walks 44 bytes past the table; bytes there:
+[madt]   48 50 45 54 38 00 00 00 01 b4 42 4f 43 48 53 20 42 58 50 43 20 20 
+[madt]   20 20 01 00 00 00 42 58 50 43 01 00 00 00 01 a2 86 80 00 00 00 00 
+[madt]   cavOS would read a fake entry: type 72 len 80
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=1  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -> match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -> 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -> 4K page entry=0x00000000fee0001b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0xc0000000 mask=0xffc0000000 type=0 (UC)  <- covers the LAPIC page
+[lapic] ID reg=0x0 -> APIC ID 0  version reg=0x50014 -> version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -> 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170011 -> version 0x11, max redirection index 23 -> 24 pins, GSI 0..23
+[smp] Limine: cpu_count=4 bsp_lapic_id=0 lapic ids: 0 1 2 3
+
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff5b174 -> 675467 LAPIC ticks in 10 ms -> apicFreq = 67546 ticks/ms (div 16 -> timer input clock ~1080 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 67546 -> one interrupt per ms
+[ioapic] redirection entries after timer_init:
+[ioapic]   pin  0: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  1: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  2: 0x0000000000010020  vector=0x20 masked edge high dest=0
+[ioapic]   pin  3: 0x0000000000010000  vector=0x0 masked edge high dest=0
+
+[uptime] RTC 03:56:52  start: timerTicks=560 (lapic 548, pit 12)
+[uptime] RTC 03:56:53  timerTicks=1485  uptime ~1.4 s  this second: +925 LAPIC, +0 PIT
+[uptime] RTC 03:56:54  timerTicks=2410  uptime ~2.4 s  this second: +925 LAPIC, +0 PIT
+[uptime] RTC 03:56:55  timerTicks=3336  uptime ~3.3 s  this second: +926 LAPIC, +0 PIT
+[uptime] RTC 03:56:56  timerTicks=4261  uptime ~4.2 s  this second: +925 LAPIC, +0 PIT
+[uptime] RTC 03:56:57  timerTicks=5186  uptime ~5.1 s  this second: +925 LAPIC, +0 PIT
+[lapic] spurious interrupts seen: 0
+[kernel] done, cli; hlt
+qemu-system-x86_64: terminating on signal 15 from pid 14281 (timeout)
+
+====================================================================================================
+# RUN q35-ovmf: QEMU -M q35 -m 256M -bios /usr/share/ovmf/OVMF.fd (UEFI boot via Limine BOOTX64.EFI), TCG; ANSI escape codes printed by OVMF removed
+====================================================================================================
+### q35-ovmf: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -bios /usr/share/ovmf/OVMF.fd
+qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -bios /usr/share/ovmf/OVMF.fd -display none -drive file=os.img,format=raw,if=ide
+BdsDxe: loading Boot0002 "UEFI QEMU HARDDISK QM00001 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x0,0xFFFF,0x0)
+BdsDxe: starting Boot0002 "UEFI QEMU HARDDISK QM00001 " from PciRoot(0x0)/Pci(0x1F,0x2)/Sata(0x0,0xFFFF,0x0)
+=== Lab 0x05 - ACPI, APIC & Timer ===
+
+[boot] pmm + own PML4 + GDT/TSS ready
+
+[acpi] Limine RSDP response->address = 0xffff80000f77e014 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x000000000f77e014 sig="RSD PTR " rev=2 OEM=(BOCHS ) checksum(20B) OK ext-checksum(36B) OK
+[acpi] RSDT=0xf77d074 XSDT=0xf77d0e8 -> using XSDT (8-byte pointers)
+[acpi] XSDT PA=0x000000000f77d0e8 len=0x54 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 6 tables listed:
+[acpi]   FACP PA=0x000000000f779000 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000f778000 len=0x78 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000f777000 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000f776000 len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000f775000 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   BGRT PA=0x000000000f774000 len=0x38 rev=1 OEM=(INTEL  EDK2    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000f77a000 len=0x2109 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8421 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -> needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000f7dd000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -> GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -> GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -> GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -> GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -> GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 1 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+[madt] cavOS loop end = start + hdr.length -> walks 44 bytes past the table; bytes there:
+[madt]   af af af af af af af af af af af af af af af af af af af af af af 
+[madt]   af af af af af af af af af af af af af af af af af af af af af af 
+[madt]   cavOS would read a fake entry: type 175 len 175
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=0  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -> match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -> 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -> 4K page entry=0x00000000fee0007b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0x80000000 mask=0xff80000000 type=0 (UC)  <- covers the LAPIC page
+[mtrr]   var 1: base=0xc000000000 mask=0xe000000000 type=0 (UC)
+[lapic] ID reg=0x0 -> APIC ID 0  version reg=0x50014 -> version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x10f after |= 0x1FF -> 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -> version 0x20, max redirection index 23 -> 24 pins, GSI 0..23
+[smp] Limine: cpu_count=1 bsp_lapic_id=0 lapic ids: 0
+
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6ed4a -> 594613 LAPIC ticks in 10 ms -> apicFreq = 59461 ticks/ms (div 16 -> timer input clock ~951 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59461 -> one interrupt per ms
+[ioapic] redirection entries after timer_init:
+[ioapic]   pin  0: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  1: 0x0000000000010000  vector=0x0 masked edge high dest=0
+[ioapic]   pin  2: 0x0000000000010020  vector=0x20 masked edge high dest=0
+[ioapic]   pin  3: 0x0000000000010000  vector=0x0 masked edge high dest=0
+
+[uptime] RTC 03:57:08  start: timerTicks=305 (lapic 295, pit 10)
+[uptime] RTC 03:57:09  timerTicks=1357  uptime ~1.3 s  this second: +1052 LAPIC, +0 PIT
+[uptime] RTC 03:57:10  timerTicks=2408  uptime ~2.4 s  this second: +1051 LAPIC, +0 PIT
+[uptime] RTC 03:57:11  timerTicks=3459  uptime ~3.4 s  this second: +1051 LAPIC, +0 PIT
+[uptime] RTC 03:57:12  timerTicks=4510  uptime ~4.5 s  this second: +1051 LAPIC, +0 PIT
+[uptime] RTC 03:57:13  timerTicks=5561  uptime ~5.5 s  this second: +1051 LAPIC, +0 PIT
+[lapic] spurious interrupts seen: 0
+[kernel] done, cli; hlt
+qemu-system-x86_64: terminating on signal 15 from pid 14294 (timeout)
+
+====================================================================================================
+# RUN novolatile: QEMU -M q35 -m 256M, TCG, build: make DEMO=-DNO_VOLATILE (timerTicks not volatile, like cavOS) -> hangs in calibration, killed by timeout 10
+====================================================================================================
+### novolatile: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown
+qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -display none -drive file=os.img,format=raw,if=ide
+=== Lab 0x05 - ACPI, APIC & Timer ===
+
+[boot] pmm + own PML4 + GDT/TSS ready
+
+[acpi] Limine RSDP response->address = 0xffff8000000f5290 (HHDM VA, base revision 2)
+[acpi] RSDP PA=0x00000000000f5290 sig="RSD PTR " rev=0 OEM=(BOCHS ) checksum(20B) OK
+[acpi] RSDT=0xffe2351 XSDT=0x0 -> using RSDT (4-byte pointers)
+[acpi] RSDT PA=0x000000000ffe2351 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi] 5 tables listed:
+[acpi]   FACP PA=0x000000000ffe2149 len=0xf4 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   APIC PA=0x000000000ffe223d len=0x78 rev=3 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   HPET PA=0x000000000ffe22b5 len=0x38 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   MCFG PA=0x000000000ffe22ed len=0x3c rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   WAET PA=0x000000000ffe2329 len=0x28 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]   (via FADT) DSDT PA=0x000000000ffe0040 len=0x2109 rev=1 OEM=(BOCHS  BXPC    ) checksum OK
+[acpi]        DSDT body = 8421 bytes of AML, first opcode 0x10 (0x10 = ScopeOp) -> needs an AML interpreter (uACPI in cavOS)
+[acpi]   (via FADT) FACS PA=0x000000000ffe0000 len=0x40 (no checksum field)
+[fadt] SCI_INT=9 SMI_CMD=0xb2 PM1a_CNT=0x604 PM_TMR=0x608 century=0x32 IAPC_BOOT_ARCH=0x2
+[madt] local APIC address = 0xfee00000  flags = 0x1 (PCAT_COMPAT: legacy 8259 PICs present)
+[madt]   type 0 len  8  Processor Local APIC  uid=0 apic_id=0 flags=0x1 (enabled)
+[madt]   type 1 len 12  I/O APIC  id=0 address=0xfec00000 gsi_base=0
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 0 -> GSI 2  flags=0x0 (bus-default, bus-default)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 5 -> GSI 5  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 9 -> GSI 9  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 10 -> GSI 10  flags=0xd (active-high, level)
+[madt]   type 2 len 10  Interrupt Source Override  bus=0 IRQ 11 -> GSI 11  flags=0xd (active-high, level)
+[madt]   type 4 len  6  Local APIC NMI  uid=0xff (all CPUs) LINT1 flags=0x0
+[madt] totals: 1 local APIC, 1 I/O APIC, 5 overrides, 1 LAPIC NMI
+[madt] cavOS loop end = start + hdr.length -> walks 44 bytes past the table; bytes there:
+[madt]   48 50 45 54 38 00 00 00 01 b4 42 4f 43 48 53 20 42 58 50 43 20 20 
+[madt]   20 20 01 00 00 00 42 58 50 43 01 00 00 00 01 a2 86 80 00 00 00 00 
+[madt]   cavOS would read a fake entry: type 72 len 80
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[apic] CPUID.1: EDX.APIC(bit9)=1 ECX.x2APIC(bit21)=0  (cavOS uses xAPIC MMIO only)
+[apic] IA32_APIC_BASE (MSR 0x1B) before=0xfee00900 after=0xfee00900  (bits 31:12 base, bit 8 BSP, bit 11 enable)
+[apic] MADT says 0xfee00000, MSR says 0xfee00000 -> match
+[apic] HHDM view of LAPIC 0xffff8000fee00000 -> 2M page entry=0x00000000fee00083 PWT=0 PCD=0 (WB, cached)
+[apic] lab MMIO map        0xfffffe8000000000 -> 4K page entry=0x00000000fee0007b PWT=1 PCD=1 (UC)
+[mtrr] MTRRdefType=0xc06 (default type 6, enabled)  variable ranges=8
+[mtrr]   var 0: base=0xc0000000 mask=0xffc0000000 type=0 (UC)  <- covers the LAPIC page
+[lapic] ID reg=0x0 -> APIC ID 0  version reg=0x50014 -> version 0x14, 6 LVT entries
+[lapic] SVR (0xF0) before=0x1ff after |= 0x1FF -> 0x1ff (bit 8 APIC enabled, spurious vector 0xff)
+[ioapic] id=0 PA=0xfec00000 version reg=0x170020 -> version 0x20, max redirection index 23 -> 24 pins, GSI 0..23
+[smp] Limine: cpu_count=1 bsp_lapic_id=0 lapic ids: 0
+
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+qemu-system-x86_64: terminating on signal 15 from pid 14384 (timeout)
+
+====================================================================================================
+# QUIZ CHECKS (lab page "Tu kiem tra"): one-line source edits in a /tmp copy, QEMU -M q35 -m 256M, TCG, timeout 12; output filtered with grep "timer]|uptime|ISA IRQ|terminating" | tail -6
+====================================================================================================
+######## noiso (apic.c: ignore Interrupt Source Override)
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> (no override) GSI 0 = I/O APIC pin 0 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+qemu-system-x86_64: terminating on signal 15 from pid 15676 (timeout)
+######## noeoi (isr.c: apic_eoi() removed)
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+qemu-system-x86_64: terminating on signal 15 from pid 15772 (timeout)
+######## div1 (timer.c: both TIMER_DIV writes 0x3 -> 0xB, divide by 1)
+[uptime] RTC 04:05:42  timerTicks=1471  uptime ~1.4 s  this second: +1080 LAPIC, +0 PIT
+[uptime] RTC 04:05:43  timerTicks=2550  uptime ~2.5 s  this second: +1079 LAPIC, +0 PIT
+[uptime] RTC 04:05:44  timerTicks=3630  uptime ~3.6 s  this second: +1080 LAPIC, +0 PIT
+[uptime] RTC 04:05:45  timerTicks=4710  uptime ~4.7 s  this second: +1080 LAPIC, +0 PIT
+[uptime] RTC 04:05:46  timerTicks=5790  uptime ~5.7 s  this second: +1080 LAPIC, +0 PIT
+qemu-system-x86_64: terminating on signal 15 from pid 15867 (timeout)
+######## lapic3 (apic.c: send IRQs to the last CPU's LAPIC), -smp 4
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 3 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+qemu-system-x86_64: terminating on signal 15 from pid 15962 (timeout)
+
+====================================================================================================
+# host/cavos_irq_alloc.c (cavOS irqPerCoreAllocate copied verbatim, host gcc -O0)
+====================================================================================================
+loop over 1 CPU(s):
+  gsi 16 -> vector 0x20 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 17 -> vector 0x21 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 18 -> vector 0x22 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 19 -> vector 0x23 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 20 -> vector 0x24 lapic 0   irqPerCpu = {1,0,0,0}
+  gsi 21 -> vector 0x25 lapic 0   irqPerCpu = {1,0,0,0}
+loop over 4 CPU(s):
+  gsi 16 -> vector 0x20 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 17 -> vector 0x21 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 18 -> vector 0x22 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 19 -> vector 0x23 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 20 -> vector 0x24 lapic 3   irqPerCpu = {0,0,0,1}
+  gsi 21 -> vector 0x25 lapic 3   irqPerCpu = {0,0,0,1}
+224th distinct GSI -> vector 0xff (= APIC spurious vector 0xff)

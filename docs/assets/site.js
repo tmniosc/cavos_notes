@@ -42,22 +42,22 @@ window.SITE = {
        "h": "ly_thuyet/bai/bai_07_gdt_tss.html"
       },
       {
+       "t": "Bài 8 - ACPI",
+       "h": "ly_thuyet/bai/bai_08_acpi.html"
+      },
+      {
        "t": "Bài 9 - IDT & Interrupts",
        "h": "ly_thuyet/bai/bai_09_idt_interrupts.html"
+      },
+      {
+       "t": "Bài 10 - APIC & Timer",
+       "h": "ly_thuyet/bai/bai_10_apic_timer.html"
       }
      ]
     },
     {
      "t": "Sắp tới (mới có dàn ý)",
      "c": [
-      {
-       "t": "Bài 8 - ACPI",
-       "h": "ly_thuyet/bai/bai_08_acpi.html"
-      },
-      {
-       "t": "Bài 10 - APIC & Timer",
-       "h": "ly_thuyet/bai/bai_10_apic_timer.html"
-      },
       {
        "t": "Bài 11 - PS2 Keyboard & Mouse",
        "h": "ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html"
@@ -199,6 +199,10 @@ window.SITE = {
     {
      "t": "Lab 0x04 - GDT, TSS & IDT",
      "h": "thuc_hanh/lab_0x04_gdt_idt.html"
+    },
+    {
+     "t": "Lab 0x05 - ACPI, APIC & Timer",
+     "h": "thuc_hanh/lab_0x05_acpi_apic.html"
     }
    ],
    "h": "thuc_hanh/thuc_hanh.html"
