@@ -226,8 +226,31 @@ lretq                     ; far return: pop RIP rồi pop CS -&gt; CS = 0x28
 </ul>
 
 <h2 id="tu-lam">Tự làm</h2>
-<p class="lede"><em>Boot cavOS thật, hỏi QEMU giá trị GDTR/TR/CS, rồi tự giải mã từng byte của GDT.</em></p>
-<p>Chưa có lab riêng cho bài này. Bài tập dưới đây dùng QEMU monitor trên bản cavOS đã build (<code>~/cavOS/disk.img</code>, xem
+<p class="lede"><em>Tự dựng đúng bảng của cavOS trong kernel lab và in nó ra; sau đó soi bảng thật của cavOS bằng QEMU monitor.</em></p>
+<h3 id="tu-lam-lab">Việc 1: Lab 0x04 - GDT, TSS &amp; IDT</h3>
+<p><a href="../../thuc_hanh/lab_0x04_gdt_idt.html">Lab 0x04</a> có <code>gdt.c</code> chép <code>initiateGDT()</code>: cùng 11 descriptor, cùng byte <code>access</code>/<code>granularity</code>, rồi
+<code>lgdt</code> + <code>lretq</code> + <code>ltr 0x58</code>. Sau đó nó tự in GDTR, các selector và từng qword của bảng (lab này cũng dựng IDT cho Bài 9).</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/04-gdt-idt
+make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35 -m 256M</code>; trích phần GDT/TSS):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[gdt] before: CS=0x28 (Limine's GDT)
+[gdt] lgdt + lretq + ltr done
+[gdt] sgdt: base = 0xffffffff80005420  limit = 0x67 (104 bytes)
+[gdt] selectors: CS=0x28 DS=0x30 ES=0x30 FS=0x30 GS=0x30 SS=0x30 TR=0x58
+[gdt]   +0x28 0x00209a0000000000  kernel code 64
+[gdt]   +0x30 0x0000930000000000  kernel data 64
+[gdt]   +0x48 0x0000f20000000000  user data 64
+[gdt]   +0x50 0x0020fa0000000000  user code 64
+[gdt]   +0x58 0x80008b0053a00068  TSS low
+[gdt]   +0x60 0x00000000ffffffff  TSS high
+[tss] base = 0xffffffff800053a0  size = 104  rsp0 = 0x0  ist1 = 0xffffffff8000a4c0  iomap base = 0x0</code></pre></div>
+<ul>
+<li>Các byte access (<code>9a</code>, <code>93</code>, <code>f2</code>, <code>fa</code>) và cờ L (<code>2</code>) khớp bảng ở mục 2; TSS đã thành busy (<code>8b</code>) sau <code>ltr</code>.</li>
+<li>Lab chạy dưới TCG nên code 64 vẫn là <code>9a</code> (bit A chưa bật). Chạy cùng ảnh với <code>-enable-kvm</code> thì ra <code>9b</code>, giống dump cavOS ở việc 2 bên dưới.</li>
+<li><code>ist1</code> khác 0 là cải tiến của lab (stack riêng cho double fault). cavOS để mọi IST = 0; trang lab cho thấy khác biệt đó bằng một double fault thật.</li>
+</ul>
+<h3 id="tu-lam-qemu">Việc 2: soi GDT thật của cavOS bằng QEMU monitor</h3>
+<p>Bài tập này dùng QEMU monitor trên bản cavOS đã build (<code>~/cavOS/disk.img</code>, xem
 <a href="../../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>). Lệnh giống <code>make qemu</code> nhưng không mở cửa sổ, ghi serial ra file và
 đưa monitor ra terminal. <code>-snapshot</code> giữ <code>disk.img</code> không bị ghi. Máy không có KVM thì bỏ <code>-enable-kvm</code>.</p>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/cavOS/src/kernel

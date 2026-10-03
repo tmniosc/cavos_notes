@@ -1,0 +1,105 @@
+Lab 0x04 - GDT, TSS & IDT - real serial output (2026-10-03, QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2))
+Source: ~/oskernel-lab/04-gdt-idt  (toolchain : cross (/home/thinker/opt/cross/bin/x86_64-cavos-gcc))
+Machine: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -display none (TCG, no KVM) ; run under 'timeout', halts in cli;hlt
+================================================================================
+
+### 1. make run  (default build)
+
+=== Lab 0x04 - GDT, TSS & IDT ===
+
+[mem] pmm + own PML4 ready, free frames = 65166
+
+[gdt] before: CS=0x28 (Limine's GDT)
+[gdt] lgdt + lretq + ltr done
+[pic] remapped IRQ0-7 -> 0x20, IRQ8-15 -> 0x28; mask master=0xff slave=0xff (all masked, like cavOS)
+[gdt] sgdt: base = 0xffffffff80005420  limit = 0x67 (104 bytes)
+[gdt] selectors: CS=0x28 DS=0x30 ES=0x30 FS=0x30 GS=0x30 SS=0x30 TR=0x58
+[gdt]   +0x0  0x0000000000000000  null
+[gdt]   +0x8  0x00009a000000ffff  kernel code 16
+[gdt]   +0x10 0x000092000000ffff  kernel data 16
+[gdt]   +0x18 0x00cf9a000000ffff  kernel code 32
+[gdt]   +0x20 0x00cf92000000ffff  kernel data 32
+[gdt]   +0x28 0x00209a0000000000  kernel code 64
+[gdt]   +0x30 0x0000930000000000  kernel data 64
+[gdt]   +0x38 0x0000000000000000  (empty, SYSENTER)
+[gdt]   +0x40 0x0000000000000000  (empty)
+[gdt]   +0x48 0x0000f20000000000  user data 64
+[gdt]   +0x50 0x0020fa0000000000  user code 64
+[gdt]   +0x58 0x80008b0053a00068  TSS low
+[gdt]   +0x60 0x00000000ffffffff  TSS high
+[tss] base = 0xffffffff800053a0  size = 104  rsp0 = 0x0  ist1 = 0xffffffff8000a4c0  iomap base = 0x0
+[idt] sidt: base = 0xffffffff800054c0  limit = 0xfff (256 gates x 16 bytes)
+[idt] present gates = 50 (0-47, 0x80, 0xff like cavOS; the rest P=0)
+[idt]   vec 0x0  0x00000000ffffffff 0x80008e0000282234  off=0xffffffff80002234 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x3  0x00000000ffffffff 0x8000ee0000282246  off=0xffffffff80002246 sel=0x28 ist=0 P=1 DPL=3 interrupt-gate
+[idt]   vec 0x8  0x00000000ffffffff 0x80008e0100282267  off=0xffffffff80002267 sel=0x28 ist=1 P=1 DPL=0 interrupt-gate
+[idt]   vec 0xe  0x00000000ffffffff 0x80008e0000282293  off=0xffffffff80002293 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x20 0x00000000ffffffff 0x80008e000028232b  off=0xffffffff8000232b sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x40 0x0000000000000000 0x0000000000000000  off=0x0000000000000000 sel=0x0 ist=0 P=0 DPL=0 (empty)
+[idt]   vec 0x80 0x00000000ffffffff 0x8000ee00002823bb  off=0xffffffff800023bb sel=0x28 ist=0 P=1 DPL=3 interrupt-gate
+[idt]   vec 0xff 0x00000000ffffffff 0x80008e00002823c7  off=0xffffffff800023c7 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+
+[isr] vector 0x3 #BP Breakpoint  err=0x0
+      RIP=0xffffffff80000116 CS=0x28 RFLAGS=0x46 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      -> trap: RIP already points past int3, just iretq
+[demo] address right after int3 = 0xffffffff80000116
+[demo] int3 returned -> back in kmain
+
+[isr] vector 0x0 #DE Division By Zero  err=0x0
+      RIP=0xffffffff80000166 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      -> expected fault: RIP += 2 (skip the faulting instruction), iretq
+[demo] address of the div = 0xffffffff80000166
+[demo] #DE reported -> back in kmain
+
+[isr] vector 0x6 #UD Invalid Opcode  err=0x0
+      RIP=0xffffffff800001a8 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      -> expected fault: RIP += 2 (skip the faulting instruction), iretq
+[demo] address of the ud2 = 0xffffffff800001a8
+[demo] #UD reported -> back in kmain
+
+[isr] vector 0xd #GP General Protection Fault  err=0x202
+      RIP=0xffffffff800001e3 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      selector error code: EXT=0 IDT=1 TI=0 -> IDT vector 0x40
+      -> expected fault: RIP += 2 (skip the faulting instruction), iretq
+[demo] int 0x40 on an empty gate reported -> back in kmain
+
+[isr] int 0x80 (syscall gate, DPL 3) rax=0x1234
+[demo] int 0x80 returned
+
+[demo] reading unmapped VA 0x0000500000000000 ...
+[isr] vector 0xe #PF Page Fault  err=0x0
+      RIP=0xffffffff8000022d CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      CR2=0x0000500000000000  err bits: P=0 W=0 U=0 RSVD=0 I=0  (page not present)
+      RAX=0x000000000000000a RBX=0x0000500000000000 RCX=0x00000000000003fd RDX=0x00000000000003f8
+      RSI=0x0000000000000000 RDI=0xffffffff800031de RBP=0xffff80000ff98ff0 DS=0x30
+[isr] Kernel panic: Page Fault!
+[kernel] Kernel panic triggered! (cli; hlt)
+
+### 2. make run DEMO=-DDF_DEMO  (RSP -> unmapped page, int3 -> #PF while pushing -> #DF on IST1)
+### (only the part after the IDT dump; GDT/IDT dump identical apart from addresses)
+
+[demo] RSP = unmapped page, then int3
+[isr] vector 0x8 #DF Double Fault  err=0x0
+      RIP=0xffffffff800000c2 CS=0x28 RFLAGS=0x46 RSP=0x0000500000001000 SS=0x30
+      handler running on RSP=0xffffffff800093d0
+      RAX=0x0000500000001000 RBX=0x0000000000000000 RCX=0x00000000000003fd RDX=0x00000000000003f8
+      RSI=0x0000000000000000 RDI=0xffffffff8000318e RBP=0xffff80000ff98ff0 DS=0x30
+[isr] Kernel panic: Double Fault!
+[kernel] Kernel panic triggered! (cli; hlt)
+
+### 3. make run DEMO='-DDF_DEMO -DNO_IST'  (gate 8 ist=0, like cavOS)
+### serial stops after '[demo] RSP = unmapped page, then int3'; QEMU -d int,cpu_reset -D log shows:
+
+check_exception old: 0xffffffff new 0xe
+check_exception old: 0xe new 0xe
+check_exception old: 0x8 new 0xe
+Triple fault
+
+### 4. same default build with -enable-kvm: the only GDT difference
+
+[gdt]   +0x28 0x00209b0000000000  kernel code 64

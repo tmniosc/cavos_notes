@@ -40,6 +40,10 @@ window.SITE = {
       {
        "t": "Bài 7 - GDT & TSS",
        "h": "ly_thuyet/bai/bai_07_gdt_tss.html"
+      },
+      {
+       "t": "Bài 9 - IDT & Interrupts",
+       "h": "ly_thuyet/bai/bai_09_idt_interrupts.html"
       }
      ]
     },
@@ -49,10 +53,6 @@ window.SITE = {
       {
        "t": "Bài 8 - ACPI",
        "h": "ly_thuyet/bai/bai_08_acpi.html"
-      },
-      {
-       "t": "Bài 9 - IDT & Interrupts",
-       "h": "ly_thuyet/bai/bai_09_idt_interrupts.html"
       },
       {
        "t": "Bài 10 - APIC & Timer",
@@ -195,6 +195,10 @@ window.SITE = {
     {
      "t": "Lab 0x03 - PMM & VMM",
      "h": "thuc_hanh/lab_0x03_pmm_vmm.html"
+    },
+    {
+     "t": "Lab 0x04 - GDT, TSS & IDT",
+     "h": "thuc_hanh/lab_0x04_gdt_idt.html"
     }
    ],
    "h": "thuc_hanh/thuc_hanh.html"

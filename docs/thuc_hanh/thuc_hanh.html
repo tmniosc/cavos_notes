@@ -22,44 +22,24 @@
 Nửa còn lại là <a href="../ly_thuyet/ly_thuyet.html">Lý thuyết</a> — đọc code cavOS và spec.</em></p>
 </div>
 <p>Về trang chủ: <a href="../index.html">Home</a></p>
-<h2 id="vì-sao-lab-không-map-11-với-step">Vì sao lab không map 1:1 với Step</h2>
-<p class="lede"><em>Nhiều Step phụ thuộc nhau, tách lẻ ra thì mỗi lab chẳng chạy được gì để mà xem.</em></p>
+<h2 id="vì-sao-lab-không-map-11-với-step">Vì sao lab không map 1:1 với bài</h2>
+<p class="lede"><em>Nhiều bài phụ thuộc nhau, tách lẻ ra thì mỗi lab chẳng chạy được gì để mà xem.</em></p>
 <p>Lab gộp theo <strong>cụm "chạy thấy được"</strong>. Tiêu chí: <strong>1 lab = 1 thứ quan sát được bằng mắt</strong> — chữ hiện ra
 serial, hình vẽ lên màn hình, một con số in ra chứng minh điều vừa học.</p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
 <th>Lab</th>
-<th>Phụ trách Step</th>
+<th>Đi cùng bài</th>
 <th>Thấy được gì</th>
 </tr>
 </thead>
 <tbody>
-<tr>
-<td><a href="lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a></td>
-<td>00 + 01</td>
-<td>dòng chữ đầu tiên chui ra cổng COM1</td>
-</tr>
-<tr>
-<td><a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a></td>
-<td>02</td>
-<td>HHDM offset, địa chỉ kernel, bản đồ bộ nhớ vật lý</td>
-</tr>
-<tr>
-<td><a href="lab_0x02_framebuffer.html">Lab 0x02 - Framebuffer</a></td>
-<td>03</td>
-<td>pixel và chữ vẽ lên màn hình</td>
-</tr>
-<tr>
-<td><a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a></td>
-<td>04 + 05</td>
-<td>cấp phát frame, tự dựng page table, <code>mov cr3</code></td>
-</tr>
-<tr>
-<td>0x04 (chưa làm)</td>
-<td>06 → 09</td>
-<td>GDT/TSS, ngắt, timer</td>
-</tr>
+<tr><td><a href="lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a></td><td><a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1</a> + <a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2</a></td><td>dòng chữ đầu tiên chui ra cổng COM1</td></tr>
+<tr><td><a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a></td><td><a href="../ly_thuyet/bai/bai_03_bootloader_parser.html">Bài 3</a></td><td>HHDM offset, địa chỉ kernel, bản đồ bộ nhớ vật lý</td></tr>
+<tr><td><a href="lab_0x02_framebuffer.html">Lab 0x02 - Framebuffer</a></td><td><a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4</a></td><td>pixel và chữ vẽ lên màn hình</td></tr>
+<tr><td><a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a></td><td><a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5</a> + <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6</a></td><td>cấp phát frame, tự dựng page table, <code>mov cr3</code></td></tr>
+<tr><td><a href="lab_0x04_gdt_idt.html">Lab 0x04 - GDT, TSS &amp; IDT</a></td><td><a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7</a> + <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9</a></td><td>GDT/TSS cavOS in ra, <code>int3</code>, #DE, #UD, #PF có CR2, double fault trên IST1</td></tr>
 </tbody>
 </table></div>
 <h2 id="nguyên-tắc">Nguyên tắc</h2>

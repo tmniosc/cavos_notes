@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x04 - GDT, TSS &amp; IDT · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x04_gdt_idt.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x04 - GDT, TSS &amp; IDT</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, cpu, interrupt</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a> + <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a></strong>.
+Kernel tự dựng GDT + TSS giống hệt cavOS, rồi dựng IDT, cố tình gây lỗi CPU và xem handler của mình bắt được từng lỗi.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/04-gdt-idt/</code> (chép từ <code>03-pmm-vmm/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make run</code>.
+Source lưu ở <code>lab/src/oskernel-lab/04-gdt-idt/</code>, log đầy đủ ở <code>lab/outputs/lab-0x04-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên các module của Lab 0x03, thêm ba cặp file mới: gdt, idt, isr.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>io.h          outb/inb
+serial.{h,c}  UART 16550 (Bài 2) + serial_puthex_short (mới)
+boot.{h,c}    Limine requests, HHDM, memset8 (Bài 1/3)
+pmm.{h,c}     bitmap PMM (Bài 5)
+paging.{h,c}  PML4 riêng + vmap (Bài 6)
+gdt.{h,c}     MỚI, theo cavOS cpu/gdt.c: GDT 11 descriptor + TSS,
+              lgdt + lretq + ltr, gdt_dump
+idt.{h,c}     MỚI, theo cavOS cpu/idt.c: mảng 256 cổng, set_idt_gate,
+              lidt, idt_dump
+isr.{h,c}     MỚI, theo cavOS cpu/isr.asm + isr.c: stub isr0..47/128/255,
+              isr_common, handle_interrupt, remap PIC, IST1 cho #DF
+kernel.c      kmain: pmm, paging, gdt_init, isr_init, dump, các demo lỗi</code></pre></div>
+<p><code>SRCS := kernel.c boot.c serial.c pmm.c paging.c gdt.c idt.c isr.c</code>. cavOS viết stub bằng NASM (<code>isr.asm</code>); lab viết cùng logic bằng
+GNU as trong một khối <code>__asm__</code> ở <code>isr.c</code>, để <code>common.mk</code> chỉ cần biên dịch file <code>.c</code>.</p>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Đi đúng thứ tự cavOS <code>_start()</code>: PMM, VMM, rồi <code>initiateGDT()</code>, rồi <code>initiateISR()</code>.</em></p>
+<ol>
+<li><strong>GDT + TSS</strong> (<code>gdt_init</code> = <code>initiateGDT</code>): 11 descriptor cùng thứ tự, cùng byte <code>access</code>/<code>granularity</code> với cavOS; <code>lgdt</code>,
+đẩy <code>0x28</code> + địa chỉ nhãn rồi <code>lretq</code> để đổi CS, nạp <code>0x30</code> vào DS/ES/FS/GS/SS; xoá TSS về 0, điền base vào descriptor <code>0x58</code>, <code>ltr 0x58</code>.</li>
+<li><strong>PIC + IDT</strong> (<code>isr_init</code> = <code>initiateISR</code> bỏ phần APIC): remap PIC 8259 về vector 0x20–0x2F rồi che hết; cổng 0–47 = <code>0x8E</code>,
+cổng 3 và 0x80 = <code>0xEE</code> (DPL 3), cổng 0xFF; <code>lidt</code>. Không <code>sti</code>: chưa có APIC và timer (Bài 10).</li>
+<li><strong>In trạng thái</strong>: <code>sgdt</code>, <code>sidt</code>, <code>str</code>, các selector, từng qword của GDT, TSS và một số cổng IDT.</li>
+<li><strong>Demo lỗi</strong>: <code>int3</code>; chia cho 0; <code>ud2</code>; <code>int $0x40</code> vào cổng trống; <code>int $0x80</code>; cuối cùng đọc một địa chỉ chưa map để có #PF thật → panic → <code>cli; hlt</code>.</li>
+</ol>
+<p>Để tiếp tục sau một lỗi có chủ đích, kernel gọi <code>isr_expect(mask_vector, số_byte)</code> trước lệnh gây lỗi. Handler thấy vector khớp thì cộng số byte đó
+vào RIP đã lưu (bỏ qua lệnh lỗi) rồi <code>iretq</code>. Đây chỉ là công cụ cho demo, cavOS không có.</p>
+
+<figure class="diagram">
+<svg id="svg-lab04-int-path" role="img" aria-label="Path of one interrupt through the lab kernel: CPU looks up IDT gate, jumps to the stub, isr_common saves registers and calls handle_interrupt, then iretq returns" style="max-width:1083px" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab04-int-path-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab04-int-path .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab04-int-path .lbl{fill:#c2c0b6;} #svg-lab04-int-path .flow{stroke:#7d7b73;}</style>
+</defs>
+<!-- row 1 -->
+<rect x="20" y="30" width="150" height="70" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="95" y="56" text-anchor="middle" fill="#F0C9C9" font-size="11" font-weight="600">event, vector n</text>
+<text x="95" y="74" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">int3 / div 0 / ud2</text>
+<text x="95" y="88" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">bad read / IRQ</text>
+<rect x="210" y="30" width="150" height="70" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="285" y="56" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">IDT[n] gate</text>
+<text x="285" y="74" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">IDTR.base + n*16</text>
+<text x="285" y="88" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">offset, CS=0x28, ist</text>
+<rect x="400" y="30" width="150" height="70" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="475" y="56" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">CPU pushes frame</text>
+<text x="475" y="74" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">SS RSP RFLAGS CS RIP</text>
+<text x="475" y="88" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">(+ error code)</text>
+<rect x="590" y="30" width="110" height="70" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="645" y="56" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">isrN stub</text>
+<text x="645" y="74" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">push 0 (if none)</text>
+<text x="645" y="88" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">push n</text>
+<line x1="170" y1="65" x2="206" y2="65" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<line x1="360" y1="65" x2="396" y2="65" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<line x1="550" y1="65" x2="586" y2="65" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<!-- down -->
+<line x1="645" y1="100" x2="645" y2="166" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<!-- row 2 -->
+<rect x="520" y="170" width="180" height="70" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="610" y="196" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">isr_common</text>
+<text x="610" y="214" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">push 15 regs + DS</text>
+<text x="610" y="228" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">DS=ES=SS=0x30, rdi=rsp</text>
+<rect x="290" y="170" width="190" height="70" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="385" y="196" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">handle_interrupt(rsp)</text>
+<text x="385" y="214" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">0-31 report / panic</text>
+<text x="385" y="228" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">32-47 EOI + IRQ list</text>
+<rect x="20" y="170" width="230" height="70" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="135" y="196" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">asm_isr_exit</text>
+<text x="135" y="214" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">pop regs, add rsp,16</text>
+<text x="135" y="228" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">iretq: pop RIP CS RFLAGS RSP SS</text>
+<line x1="520" y1="205" x2="484" y2="205" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<line x1="290" y1="205" x2="254" y2="205" class="flow" stroke-width="1.5" marker-end="url(#svg-lab04-int-path-arrow)"/>
+<text x="360" y="272" text-anchor="middle" class="lbl" font-size="9.5">a fault saves the RIP of the faulting instruction, a trap saves the RIP of the next one;</text>
+<text x="360" y="288" text-anchor="middle" class="lbl" font-size="9.5">the handler may change the saved RIP before iretq (the lab's "skip" for demo faults)</text>
+</svg>
+<figcaption>Đường đi của một ngắt trong lab, giống cavOS: cổng IDT → stub → <code>isr_common</code> → C → <code>iretq</code>.</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Ba bản build: bản thường, bản gây double fault có IST, và bản double fault không IST như cavOS.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/04-gdt-idt
+make run                                   # demo chính, dừng ở panic do #PF
+make clean &amp;&amp; make run DEMO=-DDF_DEMO      # stack hỏng -&gt; #DF chạy trên IST1
+make clean &amp;&amp; make run DEMO="-DDF_DEMO -DNO_IST" \
+  QEMU_FLAGS="-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -d int,cpu_reset -D /tmp/qint.log"
+grep "check_exception\|Triple" /tmp/qint.log</code></pre></div>
+<p>Kernel kết thúc bằng <code>cli; hlt</code>, nên QEMU không tự thoát; bấm <code>Ctrl+C</code> (log ở trên được chạy trong <code>timeout 8</code>).
+Mọi output dưới đây là thật: QEMU 10.2.1, <code>-M q35 -m 256M</code>, TCG, cross gcc <code>x86_64-cavos-gcc</code>, chạy ngày 2026-10-03.</p>
+
+<h2 id="gdt-tss">Kết quả 1: GDT và TSS</h2>
+<p class="lede"><em>Bảng đã nạp khớp từng byte với bảng của cavOS trong Bài 7.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[gdt] before: CS=0x28 (Limine's GDT)
+[gdt] lgdt + lretq + ltr done
+[pic] remapped IRQ0-7 -&gt; 0x20, IRQ8-15 -&gt; 0x28; mask master=0xff slave=0xff (all masked, like cavOS)
+[gdt] sgdt: base = 0xffffffff80005420  limit = 0x67 (104 bytes)
+[gdt] selectors: CS=0x28 DS=0x30 ES=0x30 FS=0x30 GS=0x30 SS=0x30 TR=0x58
+[gdt]   +0x0  0x0000000000000000  null
+[gdt]   +0x8  0x00009a000000ffff  kernel code 16
+[gdt]   +0x10 0x000092000000ffff  kernel data 16
+[gdt]   +0x18 0x00cf9a000000ffff  kernel code 32
+[gdt]   +0x20 0x00cf92000000ffff  kernel data 32
+[gdt]   +0x28 0x00209a0000000000  kernel code 64
+[gdt]   +0x30 0x0000930000000000  kernel data 64
+[gdt]   +0x38 0x0000000000000000  (empty, SYSENTER)
+[gdt]   +0x40 0x0000000000000000  (empty)
+[gdt]   +0x48 0x0000f20000000000  user data 64
+[gdt]   +0x50 0x0020fa0000000000  user code 64
+[gdt]   +0x58 0x80008b0053a00068  TSS low
+[gdt]   +0x60 0x00000000ffffffff  TSS high
+[tss] base = 0xffffffff800053a0  size = 104  rsp0 = 0x0  ist1 = 0xffffffff8000a4c0  iomap base = 0x0</code></pre></div>
+<ul>
+<li><strong>Trước <code>lgdt</code>, CS đã là 0x28.</strong> GDT của Limine cũng đặt code 64-bit ở 0x28 (Limine protocol quy định). cavOS chọn cùng chỗ nên selector không đổi, chỉ bảng phía sau đổi.</li>
+<li><strong><code>limit = 0x67</code></strong> = 11 × 8 + 16 − 1. Bảng là biến <code>static</code>, nên base nằm trong ảnh kernel (<code>0xffffffff8…</code>).</li>
+<li><strong>Đọc một descriptor</strong>: <code>0x0020fa0000000000</code> ở +0x50 → byte 5 = <code>fa</code> = <code>1111 1010</code> (P=1, DPL=3, S=1, code, đọc được), nửa byte cờ = <code>2</code> = L=1. Đó là user code 64.
+Ngay trước nó, +0x48 là user data (<code>f2</code>): <strong>data đứng trước code</strong> vì <code>sysret</code> lấy SS = STAR[63:48] + 8 và CS = STAR[63:48] + 16.</li>
+<li><strong>Bit A (accessed)</strong>: data 64 ở +0x30 là <code>93</code> (CPU đã bật bit 0 khi nạp DS/SS). Code 64 ở +0x28 vẫn là <code>9a</code> dưới TCG. Chạy cùng ảnh với <code>-enable-kvm</code>
+thì dòng đó là <code>0x00209b0000000000</code> (CPU thật bật bit A khi <code>lretq</code> nạp CS), giống dump cavOS trong Bài 7. Khác biệt này đến từ trình giả lập, không phải từ code.</li>
+<li><strong>TSS descriptor 16 byte</strong>: <code>0x80008b0053a00068</code> + <code>0x00000000ffffffff</code> → limit <code>0x0068</code>, base = <code>ffffffff</code>‧<code>80</code>‧<code>00</code>‧<code>53a0</code>
+= <code>0xffffffff800053a0</code>, đúng dòng <code>[tss] base</code>. Byte type là <code>8b</code>, dù code ghi <code>0x89</code>: <code>ltr</code> tự đổi TSS sang trạng thái busy.</li>
+<li><strong>TSS</strong>: <code>rsp0 = 0</code> như cavOS lúc boot (chưa có task user). <code>ist1</code> là đỉnh stack 16 KiB riêng cho #DF, cải tiến của lab (xem mục <a href="#khac-cavos">Khác cavOS</a>).</li>
+</ul>
+
+<h2 id="idt">Kết quả 2: IDT</h2>
+<p class="lede"><em>256 ô, nhưng chỉ 50 ô có handler; mỗi ô 16 byte.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[idt] sidt: base = 0xffffffff800054c0  limit = 0xfff (256 gates x 16 bytes)
+[idt] present gates = 50 (0-47, 0x80, 0xff like cavOS; the rest P=0)
+[idt]   vec 0x0  0x00000000ffffffff 0x80008e0000282234  off=0xffffffff80002234 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x3  0x00000000ffffffff 0x8000ee0000282246  off=0xffffffff80002246 sel=0x28 ist=0 P=1 DPL=3 interrupt-gate
+[idt]   vec 0x8  0x00000000ffffffff 0x80008e0100282267  off=0xffffffff80002267 sel=0x28 ist=1 P=1 DPL=0 interrupt-gate
+[idt]   vec 0xe  0x00000000ffffffff 0x80008e0000282293  off=0xffffffff80002293 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x20 0x00000000ffffffff 0x80008e000028232b  off=0xffffffff8000232b sel=0x28 ist=0 P=1 DPL=0 interrupt-gate
+[idt]   vec 0x40 0x0000000000000000 0x0000000000000000  off=0x0000000000000000 sel=0x0 ist=0 P=0 DPL=0 (empty)
+[idt]   vec 0x80 0x00000000ffffffff 0x8000ee00002823bb  off=0xffffffff800023bb sel=0x28 ist=0 P=1 DPL=3 interrupt-gate
+[idt]   vec 0xff 0x00000000ffffffff 0x80008e00002823c7  off=0xffffffff800023c7 sel=0x28 ist=0 P=1 DPL=0 interrupt-gate</code></pre></div>
+<p>Tách qword thấp của cổng 8, <code>0x80008e0100282267</code>, từ byte thấp lên:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>byte</th><th>giá trị</th><th>trường</th><th>nghĩa</th></tr></thead>
+<tbody>
+<tr><td>0–1</td><td><code>2267</code></td><td>offset 15:0</td><td rowspan="1">3 mảnh offset ghép lại = <code>0xffffffff80002267</code> (<code>isr8</code>)</td></tr>
+<tr><td>2–3</td><td><code>0028</code></td><td>selector</td><td>CS khi vào handler = kernel code 64</td></tr>
+<tr><td>4</td><td><code>01</code></td><td>IST</td><td>dùng <code>TSS.ist1</code> làm stack (cavOS: luôn 0)</td></tr>
+<tr><td>5</td><td><code>8e</code></td><td>P | DPL | type</td><td>P=1, DPL=0, type <code>1110</code> = interrupt gate 64-bit (CPU xoá IF khi vào)</td></tr>
+<tr><td>6–7</td><td><code>8000</code></td><td>offset 31:16</td><td></td></tr>
+<tr><td>8–11</td><td><code>ffffffff</code></td><td>offset 63:32</td><td>qword cao; 4 byte cuối dự trữ = 0</td></tr>
+</tbody>
+</table></div>
+<p>Cổng 3 và 0x80 có byte <code>ee</code> = DPL 3: code ring 3 được phép gọi <code>int3</code> và <code>int $0x80</code>. Các cổng khác DPL 0, nên user gọi <code>int n</code> vào đó sẽ bị #GP.</p>
+
+<h2 id="demo">Kết quả 3: bắt lỗi</h2>
+<p class="lede"><em>Bốn lỗi được báo rồi chạy tiếp, một lỗi cuối dừng máy, và mỗi lỗi để lại dấu vết khác nhau trên stack.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[isr] vector 0x3 #BP Breakpoint  err=0x0
+      RIP=0xffffffff80000116 CS=0x28 RFLAGS=0x46 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      -&gt; trap: RIP already points past int3, just iretq
+[demo] address right after int3 = 0xffffffff80000116
+[demo] int3 returned -&gt; back in kmain
+
+[isr] vector 0x0 #DE Division By Zero  err=0x0
+      RIP=0xffffffff80000166 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      -&gt; expected fault: RIP += 2 (skip the faulting instruction), iretq
+[demo] address of the div = 0xffffffff80000166
+[demo] #DE reported -&gt; back in kmain
+
+[isr] vector 0x6 #UD Invalid Opcode  err=0x0
+      RIP=0xffffffff800001a8 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      -&gt; expected fault: RIP += 2 (skip the faulting instruction), iretq
+[demo] address of the ud2 = 0xffffffff800001a8
+
+[isr] vector 0xd #GP General Protection Fault  err=0x202
+      RIP=0xffffffff800001e3 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      selector error code: EXT=0 IDT=1 TI=0 -&gt; IDT vector 0x40
+[demo] int 0x40 on an empty gate reported -&gt; back in kmain
+
+[isr] int 0x80 (syscall gate, DPL 3) rax=0x1234
+[demo] int 0x80 returned
+
+[demo] reading unmapped VA 0x0000500000000000 ...
+[isr] vector 0xe #PF Page Fault  err=0x0
+      RIP=0xffffffff8000022d CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+      handler running on RSP=0xffff80000ff98ef0
+      CR2=0x0000500000000000  err bits: P=0 W=0 U=0 RSVD=0 I=0  (page not present)
+      RAX=0x000000000000000a RBX=0x0000500000000000 RCX=0x00000000000003fd RDX=0x00000000000003f8
+      RSI=0x0000000000000000 RDI=0xffffffff800031de RBP=0xffff80000ff98ff0 DS=0x30
+[isr] Kernel panic: Page Fault!
+[kernel] Kernel panic triggered! (cli; hlt)</code></pre></div>
+<ul>
+<li><strong>Trap và fault lưu RIP khác nhau.</strong> <code>int3</code> là trap: RIP đã lưu (<code>…116</code>) bằng đúng địa chỉ lệnh <strong>sau</strong> <code>int3</code>, nên chỉ cần <code>iretq</code>.
+<code>div</code> và <code>ud2</code> là fault: RIP đã lưu bằng địa chỉ <strong>chính</strong> lệnh lỗi (<code>…166</code>, <code>…1a8</code>). Nếu handler không sửa RIP, <code>iretq</code> sẽ chạy lại lệnh đó và lỗi mãi.</li>
+<li><strong>RFLAGS <code>0x10046</code> ở fault, <code>0x46</code> ở trap.</strong> Bit 16 là RF (resume flag). CPU bật RF trong RFLAGS đã lưu khi xảy ra fault, để lệnh chạy lại không bị breakpoint lệnh bắt lần nữa.</li>
+<li><strong>Không đổi stack.</strong> Ngắt xảy ra ở ring 0 và cổng có <code>ist = 0</code>, nên CPU đẩy khung ngay trên stack đang dùng: RSP đã lưu <code>…8fe0</code>, handler chạy ở <code>…8ef0</code>, cùng một stack (Limine cấp, nằm trong HHDM).</li>
+<li><strong>Cổng trống cho #GP, không phải #NP.</strong> Error code <code>0x202</code> = <code>0x40 × 8 + 2</code>: bit 1 (IDT) = 1 nghĩa là "chỉ số này là của IDT", chỉ số = 0x40.
+Cổng toàn số 0 có type 0, không phải interrupt/trap gate, và CPU kiểm type trước bit P. Chạy lại với <code>-enable-kvm</code> (lệnh chạy trên CPU thật) cũng ra
+<code>vector 0xd … err=0x202</code>.</li>
+<li><strong>#PF</strong>: CR2 giữ đúng địa chỉ đã đọc. Error code 0: P=0 (trang không có), W=0 (đọc), U=0 (từ ring 0). Không có <code>isr_expect</code> cho #PF, nên handler in thanh ghi rồi
+<code>cli; hlt</code>, giống cavOS <code>panic()</code>. RBX đang giữ địa chỉ lỗi vì compiler để con trỏ trong RBX.</li>
+</ul>
+
+<h2 id="double-fault">Kết quả 4: double fault, có và không có IST</h2>
+<p class="lede"><em>Khi chính stack hỏng, handler chỉ chạy được nếu CPU đổi sang một stack khác; đó là việc của IST.</em></p>
+<p>Bản <code>DF_DEMO</code> đặt RSP vào một trang chưa map rồi gọi <code>int3</code>. CPU đẩy khung ngắt vào stack đó → #PF. Để vào handler #PF, CPU lại đẩy vào cùng stack → #PF lần
+hai trong lúc đang chuyển giao #PF → CPU biến thành #DF (vector 8).</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[tss] ... ist1 = 0xffffffff800094c0
+[demo] RSP = unmapped page, then int3
+[isr] vector 0x8 #DF Double Fault  err=0x0
+      RIP=0xffffffff800000c2 CS=0x28 RFLAGS=0x46 RSP=0x0000500000001000 SS=0x30
+      handler running on RSP=0xffffffff800093d0
+[isr] Kernel panic: Double Fault!
+[kernel] Kernel panic triggered! (cli; hlt)</code></pre></div>
+<p>Khung lưu RSP hỏng <code>0x500000001000</code>, còn handler chạy ở <code>0xffffffff800093d0</code>, ngay dưới đỉnh <code>ist1</code>. #DF là loại abort: RIP đã lưu không bảo đảm
+trỏ đúng lệnh gây lỗi, nên handler chỉ báo cáo rồi dừng.</p>
+<p>Bản <code>-DNO_IST</code> để cổng 8 có <code>ist = 0</code> như cavOS. Serial dừng sau dòng <code>[demo] RSP = unmapped page, then int3</code>; log <code>-d int</code> của QEMU cho thấy chuỗi lỗi:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>check_exception old: 0xffffffff new 0xe
+check_exception old: 0xe new 0xe
+check_exception old: 0x8 new 0xe
+Triple fault</code></pre></div>
+<p>#PF → #PF trong lúc chuyển giao #PF (thành #DF) → #PF trong lúc chuyển giao #DF → <strong>triple fault</strong>: CPU reset, không còn handler nào chạy được.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Lab chép cách làm của cavOS; mỗi chỗ khác đều có lý do và được ghi ra đây.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab</th></tr></thead>
+<tbody>
+<tr><td>IST cho #DF</td><td><code>set_idt_gate</code> ghi <code>ist = 0</code> cho mọi cổng; <strong>cavOS không dùng IST</strong></td><td>cổng 8 dùng IST1 (stack 16 KiB). <code>-DNO_IST</code> quay về cách cavOS</td></tr>
+<tr><td>Vector có error code</td><td><code>isr.asm</code> chỉ coi 8, 10–14 là có error code</td><td>thêm 17 (#AC), 21 (#CP) theo Intel SDM Vol.3 bảng 6-1, và 29 (#VC), 30 (#SX) theo AMD APM Vol.2</td></tr>
+<tr><td>Căn stack trước <code>call</code></td><td>gọi <code>handle_interrupt</code> khi RSP lệch 8 so với 16 (23 qword đã push)</td><td><code>sub $8, %rsp</code> trước <code>call</code></td></tr>
+<tr><td>Ngôn ngữ stub</td><td>NASM, <code>%macro</code> + <code>%rep</code></td><td>GNU as trong <code>__asm__</code>, <code>.macro</code> + <code>.irp</code></td></tr>
+<tr><td>Danh sách IRQ handler</td><td>linked list <code>dsIrqHandler</code></td><td>mảng 16 chỗ (chưa có <code>malloc</code>)</td></tr>
+<tr><td>APIC, <code>sti</code></td><td><code>initiateISR</code> gọi <code>initiateAPIC()</code> rồi <code>sti</code></td><td>chưa làm, IF giữ 0 (Bài 10)</td></tr>
+<tr><td>Lỗi trong kernel</td><td>luôn <code>registerDump</code> + <code>panic()</code></td><td>như vậy, trừ lỗi đã khai bằng <code>isr_expect</code> (công cụ demo)</td></tr>
+</tbody>
+</table></div>
+<div class="callout warn">
+<p><strong>Một điều thấy được từ dòng <code>iomap base = 0x0</code></strong> (suy ra từ Intel SDM Vol.1, chương Input/Output, mục "I/O Permission Bit Map"; chưa thử bằng chương trình ring 3).
+cavOS và lab đều <code>memset</code> TSS về 0, nên trường I/O map base (2 byte ở offset 102) = 0, trong khi limit TSS là 0x68. SDM nói: base nhỏ hơn limit thì bitmap quyền I/O
+bắt đầu tại đó, tức tại byte 0 của chính TSS. Task user của cavOS có <code>rflags = 0x200</code> (<code>multitasking/task.c</code>), tức IOPL = 0, nên CPU tra bitmap này cho mọi lệnh
+<code>in</code>/<code>out</code> từ ring 3. Bit 0 nghĩa là cho phép, mà phần lớn TSS là số 0 (<code>rsp1</code>, <code>rsp2</code>, <code>ist1..7</code>). Ví dụ cổng 0x60/0x64 (bàn phím PS/2)
+và 0x70/0x71 (CMOS) rơi vào byte của <code>rsp1</code> = 0, nên chương trình user có thể đọc ghi trực tiếp. Cách chặn thường dùng: đặt I/O map base ≥ limit (ví dụ 104).</p>
+</div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Sửa một dòng, đoán kết quả, rồi chạy để xem mình đoán đúng không.</em></p>
+<details class="quiz"><summary>Bỏ <code>isr_expect(1ULL &lt;&lt; 0, 2)</code> trước phép chia cho 0. Chuyện gì xảy ra?</summary>
+<p>Handler không thấy vector 0 trong mask, nên in thanh ghi rồi panic ngay ở #DE; các demo sau không chạy.</p></details>
+<details class="quiz"><summary>Giữ <code>isr_expect</code> nhưng cho số byte bỏ qua là 0. Chuyện gì xảy ra?</summary>
+<p>RIP vẫn trỏ vào <code>div</code>, <code>iretq</code> chạy lại nó, lại #DE. Lần thứ hai mask đã bị xoá về 0 nên handler panic. Không sửa RIP thì fault lặp lại mãi.</p></details>
+<details class="quiz"><summary>Đổi byte attribute của cổng 0x40 thành <code>0x8E</code> trỏ vào <code>isr0</code>. <code>int $0x40</code> báo gì?</summary>
+<p>Không còn #GP. Handler chạy nhưng báo <code>vector 0x0 #DE</code>, vì số vector trong khung là do stub <code>isr0</code> tự đẩy, CPU không đẩy số vector.</p></details>
+<details class="quiz"><summary>Vì sao bản <code>NO_IST</code> reset máy còn bản có IST thì in được báo cáo?</summary>
+<p>Không có IST, CPU đẩy khung #DF vào cùng stack hỏng, lại #PF, thành triple fault. Có IST, CPU nạp RSP = <code>TSS.ist1</code> trước khi đẩy, nên khung #DF nằm trên stack tốt.</p></details>
+<details class="quiz"><summary>Bỏ <code>sub $8, %rsp</code> trong <code>isr_common</code>. Lab có hỏng không?</summary>
+<p>Gần như chắc là không: kernel biên dịch với <code>-mno-sse</code>, không có lệnh nào đòi stack căn 16 byte. Đó cũng là lý do cavOS chạy được dù gọi C khi RSP lệch.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>, <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a> · nền <a href="../ly_thuyet/khai_niem/gdt.html">GDT</a>, <a href="../ly_thuyet/khai_niem/x86_segmentation.html">x86 Segmentation</a>.</li>
+<li>Lab trước: <a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (PMM và PML4 riêng vẫn chạy trong lab này).</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x04 - GDT, TSS &amp; IDT</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

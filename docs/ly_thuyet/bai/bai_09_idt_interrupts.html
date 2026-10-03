@@ -3,41 +3,426 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 9 — IDT &amp; Interrupts · Học cavOS</title>
+<title>Bài 9 - IDT &amp; Interrupts · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_09_idt_interrupts.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 9 — IDT &amp; Interrupts</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, cpu, interrupt</span></div>
+    <h1>Bài 9 - IDT &amp; Interrupts</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, cpu, interrupt</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateIDT()</code> · <strong>Spec:</strong> <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 (interrupt/exception)</p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Cho CPU biết chạy hàm nào khi có ngắt/ngoại lệ.</strong> IDT là bảng 256 vector → handler. Không có nó, mọi lỗi
-CPU (#PF, #GP, chia 0...) hay ngắt thiết bị (bàn phím, timer) đều khiến máy treo/reset. Đây là cơ chế để
-kernel <strong>giành lại quyền điều khiển</strong> khỏi code đang chạy — nền cho timer (<a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>),
-preempt scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>), và xử lý page fault.</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Cho CPU biết phải chạy hàm nào khi có lỗi hoặc khi thiết bị cần kernel.</em></p>
+<p>Bài này dựng <strong>IDT</strong>: bảng 256 ô, mỗi ô trỏ tới một handler. Không có nó, mọi lỗi CPU (#PF, #GP, chia cho 0…) hay ngắt thiết bị (bàn phím, timer) đều làm máy
+treo hoặc reset. Đây là cách kernel <strong>giành lại quyền điều khiển</strong> từ code đang chạy: nền cho timer (<a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>),
+cho scheduler cắt ngang task (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>) và cho việc xử lý page fault.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Hãy hình dung CPU là một người đang làm việc, và IDT là <strong>tờ danh bạ khẩn cấp</strong> dán trên bàn, có 256 dòng. Khi có chuyện, CPU chỉ biết một con số
+(số <em>vector</em>): "chuyện số 14" là truy cập trang nhớ không có, "chuyện số 33" có thể là bàn phím. CPU tra dòng đó và gọi ngay người phụ trách.</p>
+<p>Trước khi đi xử lý, phải ghi lại mình đang làm dở cái gì. CPU tự ghi vài thứ quan trọng nhất (đang ở lệnh nào, cờ, stack). Phần còn lại, tức các thanh ghi chung,
+do một đoạn mã nhỏ gọi là <em>stub</em> ghi giúp. Xử lý xong, đọc lại tờ ghi chú và quay về đúng chỗ cũ bằng lệnh <code>iretq</code>.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Năm ý về ngắt trên x86-64; GDT và TSS đã học ở Bài 7.</em></p>
 <ul>
-<li>Dựng IDT 256 entry (gate descriptor), <code>lidt</code>.</li>
-<li>ISR stub (đẩy errcode/vector, lưu register, gọi handler C).</li>
-<li>Xử lý exception CPU (#PF, #GP, #DF…) — đọc CR2 cho page fault.</li>
+<li><strong>Interrupt và exception.</strong> <em>Exception</em> do chính lệnh đang chạy gây ra (chia cho 0, đọc trang không có). <em>Interrupt</em> đến từ bên ngoài (thiết bị gửi IRQ)
+hoặc từ lệnh <code>int n</code>. Exception chia ba loại: <strong>fault</strong> lưu RIP của chính lệnh lỗi để chạy lại được (#PF, #DE, #UD, #GP); <strong>trap</strong> lưu RIP của lệnh
+kế tiếp (<code>int3</code>); <strong>abort</strong> không bảo đảm quay lại được (#DF, #MC). Đọc sâu: <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 §6.5.</li>
+<li><strong>Vector và IDT.</strong> Mỗi nguồn ngắt có một số 0–255. Vector 0–31 dành cho exception của CPU, từ 32 trở lên tuỳ OS. IDT là mảng 256 <em>cổng</em> (gate),
+mỗi cổng 16 byte ở 64-bit: địa chỉ handler, selector CS (<code>0x28</code>), số IST, và một byte <code>P | DPL | type</code>. Thanh ghi <code>IDTR</code> giữ địa chỉ + kích thước bảng,
+nạp bằng <code>lidt</code>.</li>
+<li><strong>Interrupt gate và trap gate.</strong> Hai loại cổng chỉ khác một điều: vào qua <em>interrupt gate</em> (type <code>0xE</code>) thì CPU xoá cờ IF, nên không ngắt nào chen
+vào giữa handler; <em>trap gate</em> (type <code>0xF</code>) giữ nguyên IF. cavOS chỉ dùng interrupt gate.</li>
+<li><strong>Error code.</strong> Một số exception (8, 10–14, 17, 21, 29, 30) đẩy thêm một số 8 byte mô tả lỗi; các vector khác thì không. Để mọi handler thấy cùng một
+bố cục stack, stub tự đẩy số 0 giả cho vector không có error code. Với #PF, địa chỉ gây lỗi nằm ở thanh ghi <code>CR2</code>.</li>
+<li><strong>PIC 8259.</strong> Chip ngắt cũ của PC, gom 16 đường IRQ thành vector. Mặc định BIOS cho IRQ 0–7 vào vector 8–15, trùng exception của CPU, nên OS phải
+<em>remap</em> (đổi vector gốc) trước khi dùng. cavOS remap rồi che hết, vì nó dùng APIC thay thế (Bài 10).</li>
+<li><strong>Đã gặp ở <a href="bai_07_gdt_tss.html">Bài 7</a>:</strong> selector kernel code <code>0x28</code> (ghi trong mỗi cổng), TSS với <code>RSP0</code> (stack khi từ ring 3 vào ring 0)
+và IST (7 stack dự phòng mà cổng có thể chọn).</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Một hàm <code>initiateISR()</code> dựng mọi thứ; một hàm <code>handle_interrupt()</code> nhận mọi ngắt.</em></p>
+<p>File: <code>cpu/idt.c</code>, <code>include/idt.h</code>, <code>cpu/isr.asm</code>, <code>cpu/isr.c</code>, <code>include/isr.h</code> (cavOS <code>2ba0edb</code>). Không có hàm
+<code>initiateIDT()</code>: IDT được điền bên trong <code>initiateISR()</code>.</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initiatePMM();
+  initiateVMM();
+
+  initiateGDT();                                     // Bài 7
+  LinkedListInit(&amp;dsIrqHandler, sizeof(irqHandler)); // danh sách IRQ handler rỗng
+  initiateACPI(); // needed for APIC setup           // Bài 8
+  initiateISR();                                     // bài này
+  initiatePaging();</code></pre></div>
+<p>IDT cần GDT có trước (cổng ghi selector <code>0x28</code>). <code>initiateISR()</code> gọi <code>initiateAPIC()</code> ở cuối, mà APIC đọc bảng MADT của ACPI, nên ACPI phải đứng trước.</p>
+
+<h3 id="cau-truc-idt">2. Cấu trúc bảng (<code>idt.h</code>, <code>idt.c</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct {
+  uint16_t isr_low;      // offset handler 15:0
+  uint16_t kernel_cs;    // selector CS khi vào handler
+  uint8_t  ist;          // 0 = không đổi stack, 1..7 = TSS.istN
+  uint8_t  attributes;   // P | DPL | 0 | type
+  uint16_t isr_mid;      // offset 31:16
+  uint32_t isr_high;     // offset 63:32
+  uint32_t reserved;
+} __attribute__((packed)) idt_gate_t;   // 16 byte
+
+#define IDT_ENTRIES 256
+static idt_gate_t     idt[IDT_ENTRIES] = {0};
+static idt_register_t idt_reg;          // { uint16_t limit; uint64_t base; }
+
+void set_idt_gate(int n, uint64_t handler, uint8_t flags) {
+  idt[n].isr_low = (uint16_t)handler;
+  idt[n].kernel_cs = GDT_KERNEL_CODE;   // 0x28
+  idt[n].ist = 0;                       // không bao giờ dùng IST
+  idt[n].reserved = 0;
+  idt[n].attributes = flags;
+  idt[n].isr_mid = (uint16_t)(handler &gt;&gt; 16);
+  idt[n].isr_high = (uint32_t)(handler &gt;&gt; 32);
+}
+
+void set_idt() {
+  idt_reg.base = (size_t)&amp;idt;
+  idt_reg.limit = IDT_ENTRIES * sizeof(idt_gate_t) - 1;   // 4095
+  asm volatile("lidt %0" ::"m"(idt_reg) : "memory");
+}</code></pre></div>
+<p>Địa chỉ handler 64-bit bị chia làm 3 mảnh vì định dạng cổng được nới rộng từ cổng 32-bit cũ. Hai giá trị <code>flags</code> cavOS dùng:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>flags</th><th>bit</th><th>nghĩa</th><th>dùng cho</th></tr></thead>
+<tbody>
+<tr><td><code>0x8E</code></td><td><code>1 00 0 1110</code></td><td>P=1, DPL=0, interrupt gate</td><td>mọi cổng kernel</td></tr>
+<tr><td><code>0xEE</code></td><td><code>1 11 0 1110</code></td><td>P=1, DPL=3, interrupt gate</td><td>vector 3 (<code>int3</code>) và 0x80 (syscall): ring 3 được gọi bằng <code>int n</code></td></tr>
+</tbody>
+</table></div>
+<p>DPL của cổng chỉ được kiểm khi ngắt do lệnh <code>int n</code>/<code>int3</code> gây ra. IRQ và exception thật thì vào được mọi cổng có P=1, bất kể ring đang chạy.</p>
+
+<h3 id="initiate-isr">3. Điền IDT (<code>initiateISR</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiateISR() {
+  // IRQs 0 - 15 -&gt; 32 - 48
+  remap_pic();
+
+  // ISR exceptions 0 - 31
+  for (int i = 0; i &lt; 48; i++) {
+    set_idt_gate(i, (uint64_t)asm_isr_redirect_table[i], 0x8E);
+  }
+
+  // Allow userspace to use breakpoints (like int3)
+  set_idt_gate(3, (uint64_t)asm_isr_redirect_table[3], 0xEE);
+
+  // APIC Spurious Interrupts
+  set_idt_gate(0xff, (uint64_t)isr255, 0x8E);
+
+  // Syscalls having DPL 3
+  set_idt_gate(0x80, (uint64_t)isr128, 0xEE);
+
+  // Finalize
+  set_idt();
+  initiateAPIC();
+  asm volatile("sti");
+}</code></pre></div>
+<p><strong><code>remap_pic()</code></strong> gửi chuỗi 4 "ICW" (initialization command word) cho hai chip PIC: master ở cổng I/O <code>0x20/0x21</code>, slave ở <code>0xA0/0xA1</code>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>bước</th><th>master</th><th>slave</th><th>nghĩa</th></tr></thead>
+<tbody>
+<tr><td>ICW1</td><td><code>0x20 ← 0x11</code></td><td><code>0xA0 ← 0x11</code></td><td>bắt đầu khởi tạo, sẽ có ICW4</td></tr>
+<tr><td>ICW2</td><td><code>0x21 ← 0x20</code></td><td><code>0xA1 ← 0x28</code></td><td>vector gốc: IRQ 0–7 → 0x20–0x27, IRQ 8–15 → 0x28–0x2F</td></tr>
+<tr><td>ICW3</td><td><code>0x21 ← 0x04</code></td><td><code>0xA1 ← 0x02</code></td><td>slave nối vào chân IRQ2 của master</td></tr>
+<tr><td>ICW4</td><td><code>0x21 ← 0x01</code></td><td><code>0xA1 ← 0x01</code></td><td>chế độ 8086</td></tr>
+<tr><td>mask</td><td><code>0x21 ← 0xFF</code></td><td><code>0xA1 ← 0xFF</code></td><td><code>disable_pic()</code>: che cả 16 IRQ</td></tr>
+</tbody>
+</table></div>
+<p>Remap rồi che ngay nghe có vẻ thừa, nhưng nếu PIC còn gửi gì tới CPU (ví dụ một IRQ đến ngay trước khi che, hoặc ngắt "spurious" ở IRQ 7/15 khi yêu cầu biến mất
+giữa chừng), nó sẽ rơi vào 0x20–0x2F, cổng IRQ có handler, thay vì bị hiểu nhầm là exception 8–15 của CPU.</p>
+<p><strong><code>initiateAPIC()</code></strong> (chi tiết ở <a href="bai_10_apic_timer.html">Bài 10</a>) tìm bảng MADT qua uACPI, ghi lại các I/O APIC, rồi bật Local APIC bằng
+<code>apicWrite(0xF0, apicRead(0xF0) | 0x1FF)</code>: thanh ghi 0xF0 là <em>Spurious Interrupt Vector</em>, <code>0x1FF</code> = bit 8 (bật APIC) + vector 0xFF. Đó là lý do có
+cổng 0xFF. Cuối cùng <code>sti</code> bật IF: từ đây CPU nhận IRQ.</p>
+<figure class="diagram">
+<svg id="svg-bai09-vector-map" role="img" aria-label="How cavOS uses the 256 IDT vectors: 0-31 CPU exceptions, 32-47 IRQs, 48-127 empty, 128 syscall, 129-254 empty, 255 APIC spurious" style="max-width:1083px" width="100%" viewBox="0 0 720 210" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-bai09-vector-map .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai09-vector-map .lbl{fill:#c2c0b6;}</style>
+</defs>
+<text x="360" y="22" text-anchor="middle" class="lbl" font-size="10">cavOS IDT: 256 vectors, 50 gates present (not to scale)</text>
+<text x="20" y="46" class="lbl mono" font-size="9">0</text>
+<text x="150" y="46" class="lbl mono" font-size="9">32</text>
+<text x="250" y="46" class="lbl mono" font-size="9">48</text>
+<text x="432" y="46" class="lbl mono" font-size="9">0x80</text>
+<text x="660" y="46" class="lbl mono" font-size="9">0xff</text>
+<rect x="20" y="54" width="130" height="60" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="85" y="80" text-anchor="middle" fill="#F0C9C9" font-size="10.5" font-weight="600">CPU exceptions</text>
+<text x="85" y="97" text-anchor="middle" fill="#EEC2C2" font-size="9" class="mono">0-31, 0x8E</text>
+<rect x="150" y="54" width="100" height="60" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="200" y="80" text-anchor="middle" fill="#F0DBAE" font-size="10.5" font-weight="600">IRQs</text>
+<text x="200" y="97" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">32-47, 0x8E</text>
+<rect x="250" y="54" width="182" height="60" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="341" y="80" text-anchor="middle" fill="#B4B2A9" font-size="10">empty (P=0)</text>
+<text x="341" y="97" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">48-127</text>
+<rect x="432" y="54" width="44" height="60" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="454" y="80" text-anchor="middle" fill="#B5D4F4" font-size="9.5" font-weight="600">sys</text>
+<text x="454" y="97" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">0xEE</text>
+<rect x="476" y="54" width="184" height="60" fill="none" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="568" y="80" text-anchor="middle" fill="#B4B2A9" font-size="10">empty (P=0)</text>
+<text x="568" y="97" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">129-254</text>
+<rect x="660" y="54" width="40" height="60" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="680" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600">spur</text>
+<text x="680" y="97" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">0x8E</text>
+<text x="20" y="140" class="lbl" font-size="9.5">0-31: names in exceptions[] (cpu/isr.c); vector 3 re-set to 0xEE so ring 3 may use int3</text>
+<text x="20" y="158" class="lbl" font-size="9.5">32-47: PIC remapped here, then masked; IOAPIC/LAPIC IRQs get 32 + n from irqPerCoreAllocate()</text>
+<text x="20" y="176" class="lbl" font-size="9.5">0x80: legacy "int 0x80" syscall, DPL 3 · 0xff: LAPIC spurious vector (register 0xF0 = 0x1FF)</text>
+<text x="20" y="194" class="lbl" font-size="9.5">an "int n" into an empty gate raises #GP with error code n*8+2 (seen in Lab 0x04)</text>
+</svg>
+<figcaption>256 vector của cavOS: chỉ 50 cổng có handler.</figcaption>
+</figure>
+
+<h3 id="stub">4. Stub và <code>isr_common</code> (<code>isr.asm</code>)</h3>
+<p>Mỗi vector có một stub vài lệnh, sinh bằng macro NASM. Stub đưa stack về cùng một hình rồi nhảy vào phần chung:</p>
+<div class="code"><div class="code-bar">asm</div><pre><code>%macro ISR_ERROR_CODE 1
+global isr%1
+isr%1:
+    push %1   ; interrupt number       (error code CPU đã đẩy sẵn)
+    jmp isr_common
+%endmacro
+
+%macro ISR_NO_ERROR_CODE 1
+global isr%1
+isr%1:
+    push 0    ; dummy error code to align with TrapFrame
+    push %1   ; interrupt number
+    jmp isr_common
+%endmacro
+
+ISR_NO_ERROR_CODE 0 ... 7,  ISR_ERROR_CODE 8,  ISR_NO_ERROR_CODE 9,
+ISR_ERROR_CODE 10 ... 14,   ISR_NO_ERROR_CODE 15 ... 47,  ISR_NO_ERROR_CODE 128
+
+asm_isr_redirect_table:      ; 48 con trỏ isr0..isr47 cho vòng for trong initiateISR
+%assign i 0
+%rep 48
+  dq isr%+i
+%assign i i+1
+%endrep</code></pre></div>
+<div class="code"><div class="code-bar">asm</div><pre><code>isr_common:
+    push rax / rbx / rcx / rdx / rsi / rdi / rbp / r8 ... r15   ; 15 thanh ghi
+    mov rbp, ds
+    push rbp                 ; DS cũ
+    mov bx, 0x30             ; kernel data 64
+    mov ds, bx
+    mov es, bx
+    mov ss, bx
+    mov rdi, rsp             ; tham số 1 = địa chỉ khung
+    call handle_interrupt
+asm_isr_exit:
+    pop rbp
+    mov es, ebp              ; dòng "mov ds, ebp" bị comment
+    pop r15 ... rax
+    add rsp, 16              ; bỏ vector + error code
+    iretq                    ; pop RIP, CS, RFLAGS, RSP, SS</code></pre></div>
+<p>Khi <code>handle_interrupt</code> chạy, <code>rdi</code> trỏ vào một khối 184 byte trên stack. <code>include/isr.h</code> mô tả đúng khối đó bằng struct
+<code>AsmPassedInterrupt</code>; thứ tự trường là thứ tự ngược của các lệnh <code>push</code>:</p>
+<figure class="diagram">
+<svg id="svg-bai09-stack-frame" role="img" aria-label="Stack frame seen by handle_interrupt: CPU pushes SS, RSP, RFLAGS, CS, RIP and maybe an error code; the stub pushes a dummy error code and the vector; isr_common pushes 15 registers and DS; RDI points at DS" style="max-width:1083px" width="100%" viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-bai09-stack-frame-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-bai09-stack-frame .mono{font-family:'SF Mono',Consolas,monospace;} #svg-bai09-stack-frame .lbl{fill:#c2c0b6;} #svg-bai09-stack-frame .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="250" y="22" text-anchor="middle" class="lbl" font-size="10">higher addresses</text>
+<!-- CPU part -->
+<rect x="150" y="30" width="200" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="250" y="47" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">SS</text>
+<rect x="150" y="56" width="200" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="250" y="73" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">RSP (before the interrupt)</text>
+<rect x="150" y="82" width="200" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="250" y="99" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">RFLAGS</text>
+<rect x="150" y="108" width="200" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="250" y="125" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">CS</text>
+<rect x="150" y="134" width="200" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="250" y="151" text-anchor="middle" fill="#C6E7CC" font-size="10" class="mono">RIP</text>
+<rect x="150" y="160" width="200" height="26" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="250" y="177" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">error code (CPU) or 0 (stub)</text>
+<rect x="150" y="186" width="200" height="26" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="250" y="203" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">vector number (stub)</text>
+<rect x="150" y="212" width="200" height="26" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="250" y="229" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">RAX</text>
+<rect x="150" y="238" width="200" height="40" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="250" y="262" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">RBX ... R14 (13 regs)</text>
+<rect x="150" y="278" width="200" height="26" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="250" y="295" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">R15</text>
+<rect x="150" y="304" width="200" height="26" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="250" y="321" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">DS</text>
+<text x="250" y="348" text-anchor="middle" class="lbl" font-size="10">lower addresses (stack grows down)</text>
+<!-- offsets -->
+<text x="140" y="47" text-anchor="end" class="lbl mono" font-size="9">+176</text>
+<text x="140" y="151" text-anchor="end" class="lbl mono" font-size="9">+144</text>
+<text x="140" y="177" text-anchor="end" class="lbl mono" font-size="9">+136</text>
+<text x="140" y="203" text-anchor="end" class="lbl mono" font-size="9">+128</text>
+<text x="140" y="229" text-anchor="end" class="lbl mono" font-size="9">+120</text>
+<text x="140" y="321" text-anchor="end" class="lbl mono" font-size="9">+0</text>
+<!-- pointer -->
+<line x1="70" y1="317" x2="118" y2="317" class="flow" stroke-width="1.5" marker-end="url(#svg-bai09-stack-frame-arrow)"/>
+<text x="20" y="312" class="lbl mono" font-size="9">RSP = RDI</text>
+<!-- legend / who pushes -->
+<rect x="400" y="40" width="14" height="14" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="422" y="51" class="lbl" font-size="10">pushed by the CPU (aligned to 16 first)</text>
+<rect x="400" y="66" width="14" height="14" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="422" y="77" class="lbl" font-size="10">pushed by isrN (error code only if missing)</text>
+<rect x="400" y="92" width="14" height="14" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="422" y="103" class="lbl" font-size="10">pushed by isr_common</text>
+<text x="400" y="140" class="lbl" font-size="10">struct AsmPassedInterrupt (include/isr.h):</text>
+<text x="400" y="158" class="lbl mono" font-size="9">ds, r15 .. rax, interrupt, error,</text>
+<text x="400" y="174" class="lbl mono" font-size="9">rip, cs, rflags, usermode_rsp, usermode_ss</text>
+<text x="400" y="210" class="lbl" font-size="10">23 qwords = 184 bytes</text>
+<text x="400" y="228" class="lbl" font-size="10">iretq pops the five green slots back</text>
+<text x="400" y="246" class="lbl" font-size="10">changing cpu-&gt;rip or cpu-&gt;rsp here</text>
+<text x="400" y="264" class="lbl" font-size="10">changes where the CPU resumes</text>
+<text x="400" y="282" class="lbl" font-size="10">(the scheduler uses this to switch task)</text>
+</svg>
+<figcaption>Khung stack mà <code>handle_interrupt</code> nhận. Xanh lá: CPU đẩy; vàng: stub; xanh dương: <code>isr_common</code>.</figcaption>
+</figure>
+
+<h3 id="handle-interrupt">5. Một hàm nhận mọi ngắt (<code>handle_interrupt</code>)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void handle_interrupt(uint64_t rsp) {
+  AsmPassedInterrupt *cpu = (AsmPassedInterrupt *)rsp;
+  if (cpu-&gt;interrupt &gt;= 32 &amp;&amp; cpu-&gt;interrupt &lt;= 47) { // IRQ
+    if (cpu-&gt;interrupt &gt;= 40) outportb(0xA0, 0x20);   // EOI cho PIC slave
+    outportb(0x20, 0x20);                             // EOI cho PIC master
+    apicWrite(0xB0, 0);                               // EOI cho Local APIC
+    /* duyệt dsIrqHandler, gọi mọi handler có id == vector */
+  } else if (cpu-&gt;interrupt &gt;= 0 &amp;&amp; cpu-&gt;interrupt &lt;= 31) { // exception
+    /* (a) page fault "cố ý" của scheduler -&gt; schedule() */
+    /* (b) lỗi trong task user -&gt; handleTaskFault()       */
+    /* (c) lỗi trong kernel -&gt; in CR2 nếu #PF, registerDump, panic() */
+  } else if (cpu-&gt;interrupt == 0x80) {
+    syscallHandler(cpu);
+  }
+}</code></pre></div>
 <ul>
-<li>[ ] Interrupt gate vs trap gate (IF bit)?</li>
-<li>[ ] Liên hệ IST trong <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>.</li>
+<li><strong>IRQ (32–47).</strong> Báo "xong" (EOI, end of interrupt) cho cả PIC lẫn Local APIC, rồi gọi các handler đã đăng ký cho vector đó. Nếu handler đăng ký kèm
+<code>argument</code>, nó nhận <code>argument</code> thay vì khung ngắt.</li>
+<li><strong>(a) Page fault cố ý.</strong> Khi <code>currentTask-&gt;schedPageFault</code> bật và <code>CR2 == SCHED_PAGE_FAULT_MAGIC_ADDRESS</code> (<code>0x5FFFFFFFF000</code>,
+<code>include/paging.h</code>), handler tăng RIP rồi gọi <code>schedule()</code>. Đó là cách một đoạn code tự nhường CPU cho scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12</a>).</li>
+<li><strong>(b) Lỗi trong task user</strong> (đã có task, task không phải kernel, không đang ở giữa syscall): <code>handleTaskFault()</code>. Với <code>int3</code> nó bật tín hiệu
+<code>SIGTRAP</code> cho task; với lỗi khác nó in thanh ghi rồi <code>taskKill(id, 139)</code>. Kernel sống tiếp.</li>
+<li><strong>(c) Lỗi trong kernel</strong>: in <code>[isr] Page fault occured at cr2{…} rip{…}</code> nếu là #PF, <code>registerDump()</code> in toàn bộ khung, in
+<code>[isr] Kernel panic: &lt;tên&gt;!</code> lấy từ mảng <code>exceptions[]</code>, rồi <code>panic()</code> = <code>cli</code> + vòng <code>hlt</code>.</li>
+<li>Vector 0xFF (spurious) không rơi vào nhánh nào: handler không làm gì. Đúng theo Intel: ngắt spurious của APIC không cần EOI.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="dang-ky-irq">6. Ai đăng ký IRQ handler</h3>
+<p><code>registerIRQhandler(id, handler)</code> thêm một phần tử vào linked list <code>dsIrqHandler</code>. Số <code>id</code> là vector, cấp động bởi
+<code>irqPerCoreAllocate()</code> trong <code>cpu/apic.c</code>: lần lượt <code>32 + 0</code>, <code>32 + 1</code>… cho từng GSI mới, không theo số IRQ của PIC. Những chỗ gọi:
+<code>cpu/timer.c</code> (PIT rồi APIC timer), <code>drivers/kb.c</code>, <code>drivers/mouse.c</code>, <code>drivers/ahci.c</code>, các NIC (<code>e1000.c</code>, <code>rtl8139.c</code>,
+<code>rtl8169.c</code>) và <code>acpi/uacpi_glue.c</code>. Cách I/O APIC đưa IRQ tới vector đó là chuyện của <a href="bai_10_apic_timer.html">Bài 10</a> và
+<a href="bai_11_ps2_keyboard_mouse.html">Bài 11</a>.</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Dựng IDT như cavOS trong kernel lab, rồi tự gây lỗi và xem handler bắt được.</em></p>
+<p><a href="../../thuc_hanh/lab_0x04_gdt_idt.html">Lab 0x04 - GDT, TSS &amp; IDT</a> chép <code>initiateISR()</code> (bỏ phần APIC và <code>sti</code>): remap + che PIC, 50 cổng như cavOS,
+stub + <code>isr_common</code> + <code>handle_interrupt</code>. Sau đó nó gây lần lượt <code>int3</code>, chia cho 0, <code>ud2</code>, <code>int $0x40</code> vào cổng trống, <code>int $0x80</code>,
+và cuối cùng đọc một địa chỉ chưa map.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/04-gdt-idt
+make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35 -m 256M</code>; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[idt] sidt: base = 0xffffffff800054c0  limit = 0xfff (256 gates x 16 bytes)
+[idt] present gates = 50 (0-47, 0x80, 0xff like cavOS; the rest P=0)
+
+[isr] vector 0x3 #BP Breakpoint  err=0x0
+      RIP=0xffffffff80000116 CS=0x28 RFLAGS=0x46 RSP=0xffff80000ff98fe0 SS=0x30
+[demo] address right after int3 = 0xffffffff80000116
+
+[isr] vector 0x0 #DE Division By Zero  err=0x0
+      RIP=0xffffffff80000166 CS=0x28 RFLAGS=0x10046 RSP=0xffff80000ff98fe0 SS=0x30
+[demo] address of the div = 0xffffffff80000166
+
+[isr] vector 0xd #GP General Protection Fault  err=0x202
+      selector error code: EXT=0 IDT=1 TI=0 -&gt; IDT vector 0x40
+
+[isr] vector 0xe #PF Page Fault  err=0x0
+      CR2=0x0000500000000000  err bits: P=0 W=0 U=0 RSVD=0 I=0  (page not present)
+[isr] Kernel panic: Page Fault!
+[kernel] Kernel panic triggered! (cli; hlt)</code></pre></div>
 <ul>
-<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — IDT, exception vectors (0–31).</li>
+<li><code>int3</code> (trap) lưu RIP của lệnh <em>sau</em> nó; <code>div</code> (fault) lưu RIP của <em>chính</em> nó. Lab cộng 2 vào RIP đã lưu để bỏ qua lệnh lỗi rồi <code>iretq</code>.</li>
+<li>Cổng trống (P=0) gây #GP với error code <code>0x40 × 8 + 2</code>, không phải #NP. Kết quả giống nhau dưới TCG và KVM.</li>
+<li>Bản <code>make run DEMO=-DDF_DEMO</code> làm hỏng stack để có double fault: có IST1 thì handler chạy và báo cáo, bỏ IST như cavOS (<code>-DNO_IST</code>) thì máy triple fault.
+Xem trang lab.</li>
 </ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu kiểm tra hiểu, không phải nhớ.</em></p>
+<details class="quiz"><summary>Vì sao stub của vector không có error code phải đẩy thêm số 0?</summary>
+<p>Để khung stack của mọi vector có cùng bố cục. Nhờ vậy một <code>isr_common</code>, một struct <code>AsmPassedInterrupt</code> và một lệnh <code>add rsp, 16</code> dùng được cho tất cả.</p></details>
+<details class="quiz"><summary>Handler #PF trả về mà không sửa gì. Chuyện gì xảy ra?</summary>
+<p>#PF là fault, RIP đã lưu trỏ đúng lệnh lỗi. <code>iretq</code> chạy lại lệnh đó, trang vẫn chưa map, lại #PF: vòng lặp vô tận. Handler phải map trang, đổi RIP, hoặc dừng.</p></details>
+<details class="quiz"><summary>Vì sao cổng 3 và 0x80 có DPL 3, còn các cổng khác DPL 0?</summary>
+<p>DPL của cổng quyết định ring nào được gọi nó bằng <code>int n</code>. Chương trình user cần <code>int3</code> (debugger) và <code>int 0x80</code> (syscall), nhưng không được tự gọi handler page fault hay IRQ.</p></details>
+<details class="quiz"><summary>Vì sao cavOS phải remap PIC dù sau đó che hết IRQ của nó?</summary>
+<p>Mặc định IRQ 0–7 rơi vào vector 8–15, trùng exception của CPU. Nếu PIC còn gửi ngắt nào (trước lúc che, hoặc spurious), remap bảo đảm nó rơi vào 0x20–0x2F chứ không bị hiểu nhầm thành #DF hay #GP.</p></details>
+<details class="quiz"><summary>Stack kernel của cavOS bị tràn và gây #PF. Vì sao máy reset thay vì in "Kernel panic"?</summary>
+<p>Mọi cổng có <code>ist = 0</code>, nên CPU đẩy khung #PF vào chính stack hỏng, lỗi tiếp thành #DF, rồi đẩy khung #DF cũng vào đó, lỗi lần ba thành triple fault và CPU reset. IST cho #DF sẽ tránh được, như Lab 0x04 cho thấy.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi mở của dàn ý cũ, các điểm yếu tìm thấy trong source, và ánh xạ spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Interrupt gate và trap gate khác nhau ở đâu (cờ IF)?</strong> Vào qua interrupt gate (type <code>0xE</code>) thì CPU xoá IF trước khi chạy handler; trap gate (type <code>0xF</code>)
+giữ IF. Cả hai đều lưu RFLAGS cũ trong khung, nên <code>iretq</code> trả IF về như trước. cavOS dùng <code>0x8E</code>/<code>0xEE</code> cho mọi cổng, tức chỉ interrupt gate: handler
+không bao giờ bị IRQ chen ngang.</li>
+<li><strong>Liên hệ IST trong <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>?</strong> Byte <code>ist</code> của cổng chọn một trong 7 con trỏ <code>TSS.ist1..7</code>; khác 0 thì CPU
+luôn nạp RSP từ đó trước khi đẩy khung, kể cả khi không đổi ring. cavOS ghi <code>ist = 0</code> ở mọi cổng, nên chỉ có <code>RSP0</code> (khi từ ring 3 vào) và không có stack dự phòng
+cho #DF/NMI/#MC.</li>
+</ul>
+
+<h3 id="diem-yeu">Điểm yếu tìm thấy trong source</h3>
+<ul>
+<li><strong>Bốn vector có error code bị khai là không có.</strong> <code>isr.asm</code> dùng <code>ISR_NO_ERROR_CODE</code> cho 17 (#AC), 21 (#CP), 29 (#VC), 30 (#SX), trong khi
+chúng có error code: 17 và 21 theo Intel SDM Vol.3 bảng 6-1, 29 và 30 theo AMD APM Vol.2 (hai vector này chỉ AMD định nghĩa). Nếu xảy ra, stub đẩy thêm số 0 nên khung lệch 8 byte: <code>cpu-&gt;rip</code> đọc phải error code.
+Hiện chưa xảy ra được: #AC chỉ có khi bật <code>CR0.AM</code> + <code>RFLAGS.AC</code> ở ring 3, #CP cần CET, #VC/#SX chỉ có trong máy ảo AMD SEV.</li>
+<li><strong>Không IST, nên tràn stack kernel = triple fault.</strong> Lab 0x04 tái hiện: với <code>ist = 0</code>, log QEMU <code>-d int</code> ghi
+<code>check_exception old: 0xe new 0xe</code> → <code>old: 0x8 new 0xe</code> → <code>Triple fault</code>; với IST1 thì handler #DF chạy được.</li>
+<li><strong>Vector IRQ cấp tới <code>MAX_IRQ = 256</code>, nhưng chỉ 32–47 có cổng.</strong> <code>irqPerCoreAllocate()</code> trả <code>32 + chỉ số</code> với chỉ số tới 255, trong khi
+<code>initiateISR()</code> chỉ điền 48 cổng đầu và <code>handle_interrupt()</code> chỉ coi 32–47 là IRQ. GSI thứ 17 trở đi sẽ nhận vector 48+, cổng trống, và thiết bị ngắt lần đầu
+là #GP. Với số thiết bị hiện có thì chưa chạm tới.</li>
+<li><strong>Gọi C khi stack chưa căn 16.</strong> Tính cả 5 qword CPU đẩy, khung có 23 qword (lẻ), nên lúc <code>call handle_interrupt</code> RSP lệch 8 so với yêu cầu của System V ABI.
+Không gây lỗi vì kernel biên dịch với <code>-mno-sse -mno-sse2</code> (<code>src/kernel/Makefile</code>), không có lệnh nào đòi căn 16. Lab 0x04 thêm <code>sub $8, %rsp</code>.</li>
+<li><strong>Chỉ khôi phục ES.</strong> <code>asm_isr_exit</code> comment dòng <code>mov ds, ebp</code>, và <code>isr_common</code> không nạp FS/GS. Đó là lý do dump cavOS ở Bài 7 thấy
+<code>FS=0000 GS=0000</code> dù <code>gdt_reload</code> đã nạp 0x30.</li>
+<li>Tên trong <code>exceptions[]</code> theo kiểu cũ: vector 15 là "Unknown Interrupt", 16 là "Coprocessor Fault" (#MF), 19–31 đều "Reserved" (19 thật ra là #XM, lỗi SIMD).</li>
+</ul>
+
+<h3 id="ten-ham">Hàm tên gì</h3>
+<p>Dàn ý cũ ghi <code>initiateIDT()</code>. Source cavOS không có hàm đó: <code>_start()</code> gọi <code>initiateISR()</code>; IDT nằm trong <code>cpu/idt.c</code>
+(<code>set_idt_gate</code>, <code>set_idt</code>).</p>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Selector, TSS, RSP0, IST: <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a> · descriptor từng bit: <a href="../khai_niem/gdt.html">GDT</a>.</li>
+<li>APIC, I/O APIC, vector cấp động, timer: <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>.</li>
+<li>IRQ bàn phím và chuột: <a href="bai_11_ps2_keyboard_mouse.html">Bài 11 - PS/2 Keyboard &amp; Mouse</a>.</li>
+<li>Đổi task bằng cách sửa khung ngắt, <code>schedPageFault</code>: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>.</li>
+<li>Syscall nhanh thay <code>int 0x80</code>: <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 chương 6 (Interrupt and Exception Handling): bảng 6-1 (vector 0–31, có/không error code), §6.5 (fault/trap/abort),
+§6.10 (IDT, IDTR), §6.12 (handler, interrupt gate xoá IF), §6.13 (error code), §6.14 (64-bit mode: định dạng cổng 16 byte, căn RSP 16 byte, §6.14.5 IST),
+§6.15 (từng exception, ví dụ error code và CR2 của #PF).</li>
+<li>Intel SDM Vol.2: lệnh <code>LIDT</code>, <code>INT n</code>/<code>INT3</code> (kiểm type cổng và DPL), <code>IRETQ</code>.</li>
+<li>Intel SDM Vol.3 chương về APIC: thanh ghi Spurious Interrupt Vector (offset 0xF0), EOI (offset 0xB0).</li>
+<li>Datasheet Intel 8259A PIC: chuỗi ICW1–ICW4, OCW1 (mask), lệnh EOI <code>0x20</code>.</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 9 - IDT &amp; Interrupts</footer>
 </main>
