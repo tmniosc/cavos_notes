@@ -129,6 +129,7 @@ Trang bài nằm ở `docs/ly_thuyet/bai/` (tên file dạng `bai_06_virtual_mem
 - [x] Bài 9 - IDT & Interrupts — idt.c set_idt_gate/set_idt, isr.asm stub + isr_common, handle_interrupt; remap+tắt PIC, spurious APIC; không IST; lab 0x04
 - [x] Bài 10 - APIC & Timer — initiateAPIC/ioApicRedirect/initiateApicTimer, calibrate 10 tick PIT; lỗi: irqPerCoreAllocate gán thay so sánh, timerTicks không volatile; lab 0x05
 - [x] Bài 11 - PS2 Keyboard & Mouse — initiateKb/kbIrq/handleKbEvent, kbEvdevGenerate, initiateMouse/mouseIrq, /dev/input + /dev/stdin; lỗi: Caps/Shift/mũi tên, init race 0x20 bị kbIrq ăn; lab 0x06
+- [x] Bài 12 - Multitasking & Scheduler — Task struct, schedule(rsp) dựng khung ở đỉnh stack TSS, handControl qua page fault cố ý, taskSleepMs, kernel threads; lỗi: rip++ sai độ dài lệnh, lost wakeup kbTaskRead, use-after-free helperReaper, task idle không bao giờ chạy; lab 0x07
 
 > Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 

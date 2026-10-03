@@ -1,0 +1,538 @@
+# Lab 0x07 - Multitasking & Scheduler: real serial output (COM1), captured 2026-10-03 11:57-11:58 +07
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2); Limine 8.7.0 (BIOS); toolchain : cross (/home/thinker/opt/cross/bin/x86_64-cavos-gcc) -O2
+# Base QEMU flags: -M q35 -m 256M -serial stdio -display none -no-reboot -no-shutdown -monitor unix:/tmp/lab07-monitor-PID.sock,server,nowait  (SeaBIOS)
+# Input is real: scripts/tasks_input.py waits for a line of serial output, then sends QEMU monitor 'sendkey'.
+# Lines '##### harness: ...' are written by the harness, not by the kernel; their position relative to kernel lines is approximate.
+# Line prefix [t=N] [id name] = timerTicks (1 tick = 1 ms LAPIC timer) and the task that printed the line.
+
+########## Run 1 (main demo): make && make image; python3 scripts/tasks_input.py os.img run.txt   (TCG)
+=== Lab 0x07 - Multitasking & Scheduler ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff72475 -> 580490 LAPIC ticks in 10 ms -> apicFreq = 58049 ticks/ms (div 16 -> timer input clock ~928 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 58049 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer 1 ms, PS/2 ready
+
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -> 65039
+[tasks] task A first frame: RIP=0xffffffff80000570 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006d60 (taskKernelReturn)
+[tasks] list right after creation (firstTask -> next -> ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()
+[t=  215] [3 A      ] started: rdi=0 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x75fa8 CR3=0x6d000 IF=1
+[t=  217] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x7efa8 CR3=0x76000 IF=1
+[t=  218] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x87fa8 CR3=0x7f000 IF=1
+[t=  219] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x90fa8 CR3=0x88000 IF=1
+[t=  219] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x99fa8 CR3=0x91000 IF=1
+[t=  219] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 &local=0x7fffffffff38 -> PA 0x103f38 CR3=0x9a000 IF=1
+[t=  219] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  219] [0 kernel ] task 0 (kmain) blocks until all threads are done
+[t=  261] [3 A      ] round 1/4 done: own cpu ticks=16 switched in 17 times, loop spins=7606648
+[t=  262] [4 B      ] round 1/4 done: own cpu ticks=15 switched in 17 times, loop spins=8230551
+[t=  263] [5 C      ] round 1/2 done: own cpu ticks=15 switched in 17 times, loop spins=8449043
+[t=  270] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=219, running again at t=270 (+51 ms), switched in 3 times so far
+[t=  270] [7 poller ] sleep(50) #1: t=219 -> 270, but was switched in 17 times while 'sleeping' (stays READY)
+##### harness: sendkey h
+[t=  276] [8 kbd    ] key 'h' IRQ1 at t=273, task running at t=276 (3 ms later), woken by IRQ1
+[t=  306] [3 A      ] round 2/4 done: own cpu ticks=31 switched in 32 times, loop spins=7501819
+[t=  307] [4 B      ] round 2/4 done: own cpu ticks=30 switched in 32 times, loop spins=7952063
+[t=  308] [5 C      ] round 2/2 done: own cpu ticks=30 switched in 32 times, loop spins=8398911
+[t=  308] [5 C      ] returning -> taskKernelReturn() -> taskKill()
+[t=  311] [2 helper ] reaper: task 5 (C) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65039 -> 65048
+[t=  321] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=270, running again at t=321 (+51 ms), switched in 4 times so far
+[t=  321] [7 poller ] sleep(50) #2: t=270 -> 321, but was switched in 19 times while 'sleeping' (stays READY)
+[t=  337] [3 A      ] round 3/4 done: own cpu ticks=46 switched in 47 times, loop spins=7621876
+[t=  338] [4 B      ] round 3/4 done: own cpu ticks=45 switched in 47 times, loop spins=8588896
+[t=  367] [3 A      ] round 4/4 done: own cpu ticks=61 switched in 62 times, loop spins=8452218
+[t=  367] [3 A      ] returning -> taskKernelReturn() -> taskKill()
+[t=  368] [4 B      ] round 4/4 done: own cpu ticks=60 switched in 62 times, loop spins=8391969
+[t=  368] [4 B      ] returning -> taskKernelReturn() -> taskKill()
+[t=  370] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -> 65057
+[t=  371] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=321, running again at t=371 (+50 ms), switched in 5 times so far
+[t=  375] [2 helper ] reaper: task 4 (B) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65057 -> 65066
+[t=  421] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=371, running again at t=421 (+50 ms), switched in 6 times so far
+##### harness: sendkey e
+[t=  436] [8 kbd    ] key 'e' IRQ1 at t=435, task running at t=436 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t=  598] [8 kbd    ] key 'l' IRQ1 at t=597, task running at t=598 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t=  760] [8 kbd    ] key 'l' IRQ1 at t=759, task running at t=760 (1 ms later), woken by IRQ1
+##### harness: sendkey o
+[t=  922] [8 kbd    ] key 'o' IRQ1 at t=921, task running at t=922 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 1084] [8 kbd    ] key '\n' IRQ1 at t=1083, task running at t=1084 (1 ms later), woken by IRQ1
+[t= 1084] [8 kbd    ] read() returns "hello" (5 chars, first key at t=273)
+##### harness: sendkey q
+[t= 1892] [8 kbd    ] key 'q' IRQ1 at t=1891, task running at t=1892 (1 ms later), woken by IRQ1
+##### harness: sendkey u
+[t= 2054] [8 kbd    ] key 'u' IRQ1 at t=2053, task running at t=2054 (1 ms later), woken by IRQ1
+##### harness: sendkey i
+[t= 2215] [8 kbd    ] key 'i' IRQ1 at t=2214, task running at t=2215 (1 ms later), woken by IRQ1
+##### harness: sendkey t
+[t= 2377] [8 kbd    ] key 't' IRQ1 at t=2376, task running at t=2377 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 2539] [8 kbd    ] key '\n' IRQ1 at t=2538, task running at t=2539 (1 ms later), woken by IRQ1
+[t= 2539] [8 kbd    ] read() returns "quit" (4 chars, first key at t=1891)
+[t= 2540] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65066 -> 65075
+
+[kernel] all threads done after 2324 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  1          118      116  0x56000  (Limine boot stack)
+   1  dummy    DUMMY               2171          555        0  0x5b000  0x63000
+   2  helper   BLOCKED                0          461      460  0x64000  0x6c000
+   6  sleeper  BLOCKED                0            8        6  0x88000  0x90000
+   7  poller   BLOCKED                0           40        2  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                31           32        0  at t=311
+   3  A        reaped                62           62        0  at t=370
+   4  B        reaped                63           63        0  at t=375
+   8  kbd      reaped                 1           13       11  at t=2540
+[kernel] sum of cpu ticks = 2329, timerTicks = 2543 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt
+
+########## Run 2: same kernel under KVM: python3 scripts/tasks_input.py os.img run-kvm.txt -- -enable-kvm
+########## (with the print lock: 0 lines contain two '[t=' prefixes)
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+=== Lab 0x07 - Multitasking & Scheduler ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff4db25 -> 730330 LAPIC ticks in 10 ms -> apicFreq = 73033 ticks/ms (div 16 -> timer input clock ~1168 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 73033 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer 1 ms, PS/2 ready
+
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -> 65039
+[tasks] task A first frame: RIP=0xffffffff80000570 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006d60 (taskKernelReturn)
+[tasks] list right after creation (firstTask -> next -> ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()
+[t=  578] [3 A      ] started: rdi=0 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x75fa8 CR3=0x6d000 IF=1
+[t=  581] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x7efa8 CR3=0x76000 IF=1
+[t=  584] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x87fa8 CR3=0x7f000 IF=1
+[t=  588] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x90fa8 CR3=0x88000 IF=1
+[t=  592] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x99fa8 CR3=0x91000 IF=1
+[t=  600] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 &local=0x7fffffffff38 -> PA 0x103f38 CR3=0x9a000 IF=1
+[t=  608] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  612] [0 kernel ] task 0 (kmain) blocks until all threads are done
+[t=  631] [3 A      ] round 1/4 done: own cpu ticks=17 switched in 18 times, loop spins=104159565
+[t=  635] [4 B      ] round 1/4 done: own cpu ticks=16 switched in 20 times, loop spins=105326257
+[t=  639] [5 C      ] round 1/2 done: own cpu ticks=16 switched in 21 times, loop spins=108369359
+[t=  643] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=592, running again at t=643 (+51 ms), switched in 8 times so far
+[t=  650] [7 poller ] sleep(50) #1: t=600 -> 650, but was switched in 16 times while 'sleeping' (stays READY)
+##### harness: sendkey h
+[t=  657] [8 kbd    ] key 'h' IRQ1 at t=655, task running at t=657 (2 ms later), woken by IRQ1
+[t=  682] [3 A      ] round 2/4 done: own cpu ticks=33 switched in 35 times, loop spins=91005123
+[t=  686] [4 B      ] round 2/4 done: own cpu ticks=32 switched in 36 times, loop spins=104558208
+[t=  690] [5 C      ] round 2/2 done: own cpu ticks=32 switched in 36 times, loop spins=107735960
+[t=  693] [5 C      ] returning -> taskKernelReturn() -> taskKill()
+[t=  697] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=647, running again at t=697 (+50 ms), switched in 10 times so far
+[t=  703] [2 helper ] reaper: task 5 (C) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65039 -> 65048
+[t=  711] [7 poller ] sleep(50) #2: t=654 -> 711, but was switched in 20 times while 'sleeping' (stays READY)
+[t=  725] [3 A      ] round 3/4 done: own cpu ticks=49 switched in 51 times, loop spins=103488250
+[t=  728] [4 B      ] round 3/4 done: own cpu ticks=48 switched in 52 times, loop spins=107476488
+[t=  753] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=703, running again at t=753 (+50 ms), switched in 13 times so far
+[t=  758] [3 A      ] round 4/4 done: own cpu ticks=65 switched in 67 times, loop spins=98343050
+[t=  760] [3 A      ] returning -> taskKernelReturn() -> taskKill()
+[t=  762] [4 B      ] round 4/4 done: own cpu ticks=64 switched in 68 times, loop spins=106294560
+[t=  763] [4 B      ] returning -> taskKernelReturn() -> taskKill()
+[t=  766] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -> 65057
+[t=  773] [2 helper ] reaper: task 4 (B) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65057 -> 65066
+##### harness: sendkey e
+[t=  785] [8 kbd    ] key 'e' IRQ1 at t=784, task running at t=785 (1 ms later), woken by IRQ1
+[t=  806] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=756, running again at t=806 (+50 ms), switched in 14 times so far
+##### harness: sendkey l
+[t=  914] [8 kbd    ] key 'l' IRQ1 at t=913, task running at t=914 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t= 1042] [8 kbd    ] key 'l' IRQ1 at t=1041, task running at t=1042 (1 ms later), woken by IRQ1
+##### harness: sendkey o
+[t= 1171] [8 kbd    ] key 'o' IRQ1 at t=1170, task running at t=1171 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 1300] [8 kbd    ] key '\n' IRQ1 at t=1299, task running at t=1300 (1 ms later), woken by IRQ1
+[t= 1301] [8 kbd    ] read() returns "hello" (5 chars, first key at t=655)
+##### harness: sendkey q
+[t= 1942] [8 kbd    ] key 'q' IRQ1 at t=1941, task running at t=1942 (1 ms later), woken by IRQ1
+##### harness: sendkey u
+[t= 2071] [8 kbd    ] key 'u' IRQ1 at t=2070, task running at t=2071 (1 ms later), woken by IRQ1
+##### harness: sendkey i
+[t= 2200] [8 kbd    ] key 'i' IRQ1 at t=2199, task running at t=2200 (1 ms later), woken by IRQ1
+##### harness: sendkey t
+[t= 2328] [8 kbd    ] key 't' IRQ1 at t=2327, task running at t=2328 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 2457] [8 kbd    ] key '\n' IRQ1 at t=2456, task running at t=2457 (1 ms later), woken by IRQ1
+[t= 2458] [8 kbd    ] read() returns "quit" (4 chars, first key at t=1941)
+[t= 2460] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 
+[kernel] all threads done after 1845 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  2          104       92  0x56000  (Limine boot stack)
+   1  dummy    DUMMY               1673          428        0  0x5b000  0x63000
+   2  helper   READY                  7          373      366  0x64000  0x6c000
+   6  sleeper  BLOCKED                7           15        5  0x88000  0x90000
+   7  poller   BLOCKED                5           46        1  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                35           38        0  at t=698
+   3  A        reaped                68           68        0  at t=766
+   4  B        reaped                69           71        0  at t=773
+   8  kbd      reaped                18           26       11  at t=2460
+[kernel] sum of cpu ticks = 1884, timerTicks = 2461 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt
+
+########## Run 3: make DEMO=-DNO_PRINT_LOCK, under KVM (-- -enable-kvm): lines from different tasks are cut and mixed.
+########## (the same build under TCG printed 0 mixed lines: there a whole line takes far less than one 1 ms tick)
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+=== Lab 0x07 - Multitasking & Scheduler ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff596c0 -> 682303 LAPIC ticks in 10 ms -> apicFreq = 68230 ticks/ms (div 16 -> timer input clock ~1091 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 68230 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer 1 ms, PS/2 ready
+
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -> 65039
+[tasks] task A first frame: RIP=0xffffffff80000570 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006d60 (taskKernelReturn)
+[tasks] list right after creation (firstTask -> next -> ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()
+[t=  615] [3 A      ] started: rdi=0 RSP=0x7ff[t=  616] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 [t=  617] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 [t=  618] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &[t=  619] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 [t=  620] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 [t=  621] [0 kernel ] task 0 (kmain) blocks until allfffffffa0 &local=0x7fffffffffa8 -> PA 0x75fa8 CR3=0x6d000 IF&local=0x7fffffffffa8 -> PA 0x7efa8 CR3=0x76000 IF=1
+&local=0x7fffffffffa8 -> PA 0x87fa8 CR3=0x7f000 IF=1
+local=0x7fffffffffa8 -> PA 0x90fa8 CR3=0x88000 IF=1
+&local&local=0x7fffffffff38 -> PA 0x103f38 CR3=0x9a000 IF=1
+ threads are done
+=1
+=0x7fffffffffa8 -> PA 0x99fa8 CR3=0x91000 IF=1
+[t=  630] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  672] [4 B      ] round 1/4 done: own cpu ticks=16 switched in 17 times, loo[t=  673] [5 C      ] round 1/2 done: own cpu[t=  674] [3 A      ] round 1/4 done: own cpu ticks=17 switchep spins=92535830
+ ticks=17 switched in 18 times, loop spins=99760290
+[t=  677] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=62d in 19 times, loop spins=98107876
+##### harness: sendkey h
+5, running again at t=677 (+52 ms), switched in 4 times so[t=  682] [7 poller ] sleep(50) #1: t=630 -> 682, but w far
+as switched in 17 times while 'sleeping' (stays RE[t=  687] [8 kbd    ] key 'h' IRQ1 at t=684, task rADY)
+unning at t=687 (3 ms later), woken by IRQ1
+[t=  726] [4 B      ] round 2/4 done:[t=  727] [5 C      ] round 2/2 done: own cpu ticks=32[t=  728] [3 A      ] round 2/4 done: own cpu ticks=33 swi own cpu ticks=33 switched in 34 times, loop spins=94986312 switched in 34 times, loop spins=97583698
+[t=  730] [5 C tched in 35 times, loop spins=100122253
+
+     ] returning -> taskKernelReturn() -> taskKill()
+[t=  737] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=686[t=  738] [2 helper ] reaper: task 5 (C) freed: 5 fr, running again at t=737 (+51 ms), switched in 7 times so [t=  742] [7 poller ] sleep(50) #2: t=691 -> 742, but wasames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PTfar
+ switched in 17 times while 'sleeping' (stays READY)
+, PML4); pmm free 65039 -> 65048
+[t=  769] [3 A      ] round 3/4 done: own cpu ticks=49 switched in 50[t=  770] [4 B      ] round 3/4 done: own cpu ticks=49 swi times, loop spins=90733546
+tched in 51 times, loop spins=101121853
+[t=  797] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=746, running again at t=797 (+51 ms), switched in 10 times so far
+[t=  802] [3 A      ] round 4/4 done: own cpu ticks=65 swi[t=  803] [4 B      ] round 4/4 done: own cpu ticks=65 switched in 67 times, loop spins=91919986
+[t=  804] [3 A   tched in 67 times, loop spins=93917644
+[t=  805] [4 B      ] returning -> taskKernelReturn() -> taskKill()
+   ] returning -> taskKernelReturn() -> taskKill()
+[t=  809] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -> 65057
+[t=  817] [2 helper ] reaper: task 4 (B) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65057 -> 65066
+##### harness: sendkey e
+[t=  823] [8 kbd    ] key 'e' IRQ1 at t=822, task running at t=823 (1 ms later), woken by IRQ1
+[t=  850] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=800, running again at t=850 (+50 ms), switched in 12 times so far
+##### harness: sendkey l
+[t=  960] [8 kbd    ] key 'l' IRQ1 at t=959, task running at t=960 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t= 1098] [8 kbd    ] key 'l' IRQ1 at t=1097, task running at t=1098 (1 ms later), woken by IRQ1
+##### harness: sendkey o
+[t= 1236] [8 kbd    ] key 'o' IRQ1 at t=1235, task running at t=1236 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 1374] [8 kbd    ] key '\n' IRQ1 at t=1373, task running at t=1374 (1 ms later), woken by IRQ1
+[t= 1376] [8 kbd    ] read() returns "hello" (5 chars, first key at t=684)
+##### harness: sendkey q
+[t= 2062] [8 kbd    ] key 'q' IRQ1 at t=2061, task running at t=2062 (1 ms later), woken by IRQ1
+##### harness: sendkey u
+[t= 2199] [8 kbd    ] key 'u' IRQ1 at t=2198, task running at t=2199 (1 ms later), woken by IRQ1
+##### harness: sendkey i
+[t= 2337] [8 kbd    ] key 'i' IRQ1 at t=2336, task running at t=2337 (1 ms later), woken by IRQ1
+##### harness: sendkey t
+[t= 2475] [8 kbd    ] key 't' IRQ1 at t=2474, task running at t=2475 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 2613] [8 kbd    ] key '\n' IRQ1 at t=2612, task running at t=2613 (1 ms later), woken by IRQ1
+[t= 2615] [8 kbd    ] read() returns "quit" (4 chars, first key at t=2061)
+[t= 2619] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65066 -> 65075
+
+[kernel] all threads done after 2004 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  2          102      100  0x56000  (Limine boot stack)
+   1  dummy    DUMMY               1795          460        0  0x5b000  0x63000
+   2  helper   BLOCKED               11          399      392  0x64000  0x6c000
+   6  sleeper  BLOCKED                8           13        5  0x88000  0x90000
+   7  poller   BLOCKED                5           39        1  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                36           36        0  at t=738
+   3  A        reaped                68           68        0  at t=809
+   4  B        reaped                70           72        0  at t=817
+   8  kbd      reaped                22           21       11  at t=2619
+[kernel] sum of cpu ticks = 2017, timerTicks = 2631 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt
+
+########## Run 4: make DEMO=-DLOST_WAKEUP; python3 scripts/tasks_input.py os.img run.txt --lost-wakeup   (TCG)
+########## kbd checks 'ring empty', then waits 300 ms before setting WAITING_INPUT (no cli). 'h' arrives in that gap.
+=== Lab 0x07 - Multitasking & Scheduler ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6c279 -> 605574 LAPIC ticks in 10 ms -> apicFreq = 60557 ticks/ms (div 16 -> timer input clock ~968 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 60557 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer 1 ms, PS/2 ready
+
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -> 65039
+[tasks] task A first frame: RIP=0xffffffff800005b0 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006da0 (taskKernelReturn)
+[tasks] list right after creation (firstTask -> next -> ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()
+[t=  214] [0 kernel ] task 0 (kmain) blocks until all threads are done
+[t=  214] [3 A      ] started: rdi=0 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x75fa8 CR3=0x6d000 IF=1
+[t=  215] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x7efa8 CR3=0x76000 IF=1
+[t=  216] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x87fa8 CR3=0x7f000 IF=1
+[t=  217] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x90fa8 CR3=0x88000 IF=1
+[t=  217] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x99fa8 CR3=0x91000 IF=1
+[t=  217] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 &local=0x7fffffffff38 -> PA 0x103f38 CR3=0x9a000 IF=1
+[t=  217] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  217] [8 kbd    ] LOST_WAKEUP: ring empty, 300 ms gap before WAITING_INPUT
+[t=  269] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=217, running again at t=269 (+52 ms), switched in 2 times so far
+[t=  269] [7 poller ] sleep(50) #1: t=217 -> 269, but was switched in 13 times while 'sleeping' (stays READY)
+[t=  274] [3 A      ] round 1/4 done: own cpu ticks=15 switched in 16 times, loop spins=11615005
+[t=  275] [4 B      ] round 1/4 done: own cpu ticks=15 switched in 16 times, loop spins=8577837
+[t=  276] [5 C      ] round 1/2 done: own cpu ticks=15 switched in 16 times, loop spins=9040542
+##### harness: key 'h' typed inside the 300 ms gap
+##### harness: sendkey h
+[t=  321] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=269, running again at t=321 (+52 ms), switched in 3 times so far
+[t=  321] [7 poller ] sleep(50) #2: t=269 -> 321, but was switched in 13 times while 'sleeping' (stays READY)
+[t=  334] [3 A      ] round 2/4 done: own cpu ticks=30 switched in 31 times, loop spins=8437632
+[t=  335] [4 B      ] round 2/4 done: own cpu ticks=30 switched in 31 times, loop spins=8758856
+[t=  336] [5 C      ] round 2/2 done: own cpu ticks=30 switched in 31 times, loop spins=8482242
+[t=  336] [5 C      ] returning -> taskKernelReturn() -> taskKill()
+[t=  341] [2 helper ] reaper: task 5 (C) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65039 -> 65048
+[t=  373] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=321, running again at t=373 (+52 ms), switched in 4 times so far
+[t=  380] [3 A      ] round 3/4 done: own cpu ticks=45 switched in 46 times, loop spins=7974356
+[t=  381] [4 B      ] round 3/4 done: own cpu ticks=45 switched in 46 times, loop spins=8683934
+[t=  424] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=373, running again at t=424 (+51 ms), switched in 5 times so far
+[t=  425] [3 A      ] round 4/4 done: own cpu ticks=60 switched in 61 times, loop spins=8915950
+[t=  425] [3 A      ] returning -> taskKernelReturn() -> taskKill()
+[t=  426] [4 B      ] round 4/4 done: own cpu ticks=60 switched in 61 times, loop spins=8945662
+[t=  426] [4 B      ] returning -> taskKernelReturn() -> taskKill()
+[t=  430] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -> 65057
+[t=  435] [2 helper ] reaper: task 4 (B) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65057 -> 65066
+##### harness: key 'i' typed 1 s later
+##### harness: sendkey i
+[t= 1508] [8 kbd    ] key 'h' IRQ1 at t=321, task running at t=1508 (1187 ms later), woken by IRQ1
+[t= 1508] [8 kbd    ] key 'i' IRQ1 at t=1507, task running at t=1508 (1 ms later), woken by IRQ1
+[t= 1508] [8 kbd    ] 2 keys were waiting in the ring at this wakeup
+##### harness: sendkey ret
+[t= 2179] [8 kbd    ] key '\n' IRQ1 at t=2178, task running at t=2179 (1 ms later), woken by IRQ1
+[t= 2179] [8 kbd    ] read() returns "hi" (2 chars, first key at t=321)
+##### harness: sendkey q
+[t= 2844] [8 kbd    ] key 'q' IRQ1 at t=2843, task running at t=2844 (1 ms later), woken by IRQ1
+##### harness: sendkey u
+[t= 2999] [8 kbd    ] key 'u' IRQ1 at t=2998, task running at t=2999 (1 ms later), woken by IRQ1
+##### harness: sendkey i
+[t= 3154] [8 kbd    ] key 'i' IRQ1 at t=3153, task running at t=3154 (1 ms later), woken by IRQ1
+##### harness: sendkey t
+[t= 3309] [8 kbd    ] key 't' IRQ1 at t=3308, task running at t=3309 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 3465] [8 kbd    ] key '\n' IRQ1 at t=3464, task running at t=3465 (1 ms later), woken by IRQ1
+[t= 3465] [8 kbd    ] read() returns "quit" (4 chars, first key at t=2843)
+[t= 3470] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65066 -> 65075
+
+[kernel] all threads done after 3265 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0          163      163  0x56000  (Limine boot stack)
+   1  dummy    DUMMY               2961          751        0  0x5b000  0x63000
+   2  helper   BLOCKED                0          641      640  0x64000  0x6c000
+   6  sleeper  BLOCKED                0            8        7  0x88000  0x90000
+   7  poller   BLOCKED                0           30        3  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                31           31        0  at t=341
+   3  A        reaped                61           61        0  at t=430
+   4  B        reaped                61           65        0  at t=435
+   8  kbd      reaped               151           93        7  at t=3470
+[kernel] sum of cpu ticks = 3265, timerTicks = 3479 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt
+
+########## Run 5: make DEMO=-DHELPER_SPIN (helper loops on handControl() exactly like cavOS kernelHelpEntry)   (TCG)
+=== Lab 0x07 - Multitasking & Scheduler ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6fe32 -> 590285 LAPIC ticks in 10 ms -> apicFreq = 59028 ticks/ms (div 16 -> timer input clock ~944 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59028 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer 1 ms, PS/2 ready
+
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -> 65039
+[tasks] task A first frame: RIP=0xffffffff80000570 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006d60 (taskKernelReturn)
+[tasks] list right after creation (firstTask -> next -> ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()
+[t=  217] [3 A      ] started: rdi=0 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x75fa8 CR3=0x6d000 IF=1
+[t=  218] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x7efa8 CR3=0x76000 IF=1
+[t=  219] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x87fa8 CR3=0x7f000 IF=1
+[t=  220] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x90fa8 CR3=0x88000 IF=1
+[t=  220] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 &local=0x7fffffffffa8 -> PA 0x99fa8 CR3=0x91000 IF=1
+[t=  220] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 &local=0x7fffffffff38 -> PA 0x103f38 CR3=0x9a000 IF=1
+[t=  220] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  221] [0 kernel ] task 0 (kmain) blocks until all threads are done
+[t=  263] [3 A      ] round 1/4 done: own cpu ticks=15 switched in 16 times, loop spins=7138946
+[t=  264] [4 B      ] round 1/4 done: own cpu ticks=15 switched in 16 times, loop spins=8070919
+[t=  265] [5 C      ] round 1/2 done: own cpu ticks=15 switched in 16 times, loop spins=7528419
+[t=  272] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=220, running again at t=272 (+52 ms), switched in 2 times so far
+[t=  272] [7 poller ] sleep(50) #1: t=220 -> 272, but was switched in 17 times while 'sleeping' (stays READY)
+##### harness: sendkey h
+[t=  284] [8 kbd    ] key 'h' IRQ1 at t=283, task running at t=284 (1 ms later), woken by IRQ1
+[t=  308] [3 A      ] round 2/4 done: own cpu ticks=30 switched in 31 times, loop spins=6737234
+[t=  309] [4 B      ] round 2/4 done: own cpu ticks=30 switched in 31 times, loop spins=7511350
+[t=  310] [5 C      ] round 2/2 done: own cpu ticks=30 switched in 31 times, loop spins=7541189
+[t=  310] [5 C      ] returning -> taskKernelReturn() -> taskKill()
+[t=  311] [2 helper ] reaper: task 5 (C) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65039 -> 65048
+[t=  322] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=272, running again at t=322 (+50 ms), switched in 3 times so far
+[t=  322] [7 poller ] sleep(50) #2: t=272 -> 322, but was switched in 18 times while 'sleeping' (stays READY)
+[t=  340] [3 A      ] round 3/4 done: own cpu ticks=45 switched in 46 times, loop spins=7127127
+[t=  341] [4 B      ] round 3/4 done: own cpu ticks=45 switched in 46 times, loop spins=7676639
+[t=  370] [3 A      ] round 4/4 done: own cpu ticks=60 switched in 61 times, loop spins=8274326
+[t=  370] [3 A      ] returning -> taskKernelReturn() -> taskKill()
+[t=  371] [4 B      ] round 4/4 done: own cpu ticks=60 switched in 61 times, loop spins=8314872
+[t=  371] [4 B      ] returning -> taskKernelReturn() -> taskKill()
+[t=  371] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -> 65057
+[t=  372] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=322, running again at t=372 (+50 ms), switched in 4 times so far
+[t=  373] [2 helper ] reaper: task 4 (B) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65057 -> 65066
+[t=  422] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=372, running again at t=422 (+50 ms), switched in 5 times so far
+##### harness: sendkey e
+[t=  443] [8 kbd    ] key 'e' IRQ1 at t=442, task running at t=443 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t=  602] [8 kbd    ] key 'l' IRQ1 at t=601, task running at t=602 (1 ms later), woken by IRQ1
+##### harness: sendkey l
+[t=  757] [8 kbd    ] key 'l' IRQ1 at t=757, task running at t=757 (0 ms later), woken by IRQ1
+##### harness: sendkey o
+[t=  916] [8 kbd    ] key 'o' IRQ1 at t=916, task running at t=916 (0 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 1076] [8 kbd    ] key '\n' IRQ1 at t=1075, task running at t=1076 (1 ms later), woken by IRQ1
+[t= 1076] [8 kbd    ] read() returns "hello" (5 chars, first key at t=283)
+##### harness: sendkey q
+[t= 1871] [8 kbd    ] key 'q' IRQ1 at t=1870, task running at t=1871 (1 ms later), woken by IRQ1
+##### harness: sendkey u
+[t= 2030] [8 kbd    ] key 'u' IRQ1 at t=2029, task running at t=2030 (1 ms later), woken by IRQ1
+##### harness: sendkey i
+[t= 2189] [8 kbd    ] key 'i' IRQ1 at t=2189, task running at t=2189 (0 ms later), woken by IRQ1
+##### harness: sendkey t
+[t= 2346] [8 kbd    ] key 't' IRQ1 at t=2346, task running at t=2346 (0 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 2506] [8 kbd    ] key '\n' IRQ1 at t=2505, task running at t=2506 (1 ms later), woken by IRQ1
+[t= 2506] [8 kbd    ] read() returns "quit" (4 chars, first key at t=1870)
+[t= 2507] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65066 -> 65075
+
+[kernel] all threads done after 2291 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  1          116      115  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY               2141          184        0  0x64000  0x6c000
+   6  sleeper  BLOCKED                0            7        6  0x88000  0x90000
+   7  poller   BLOCKED                0           38        2  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                31           31        0  at t=311
+   3  A        reaped                61           61        0  at t=371
+   4  B        reaped                61           62        0  at t=372
+   8  kbd      reaped                 2           12       11  at t=2507
+[kernel] sum of cpu ticks = 2297, timerTicks = 2512 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt

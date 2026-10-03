@@ -364,8 +364,8 @@ uint32_t sleep(uint32_t time) {  // time tính bằng tick = ms
 <ul>
 <li><code>timerTicks</code> là đồng hồ của cả kernel: <code>sleep()</code> đếm bằng nó, uACPI đọc nó qua <code>uacpi_kernel_get_nanoseconds_since_boot</code> (<code>timerTicks × 10^6</code> ns),
 scheduler dùng nó cho hẹn giờ đánh thức task và <code>itimer</code>.</li>
-<li><code>schedule(rsp)</code> thoát ngay khi <code>tasksInitiated</code> chưa bật. Sau <code>initiateTasks()</code>, mỗi tick nó chọn task <code>READY</code> kế tiếp và đổi task bằng cách thay khung ngắt
-mà <code>iretq</code> sẽ trả về. Tick 1 ms vì vậy là "lát thời gian" của mỗi task: <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
+<li><code>schedule(rsp)</code> thoát ngay khi <code>tasksInitiated</code> chưa bật. Sau <code>initiateTasks()</code>, mỗi tick nó chọn task <code>READY</code> kế tiếp và đổi task bằng cách dựng một khung ngắt mới cho task đó ở đỉnh
+stack kernel của nó (stack trong TSS) rồi <code>iretq</code> từ khung ấy. Tick 1 ms vì vậy là "lát thời gian" của mỗi task: <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
 </ul>
 
 <h2 id="tu-lam">Tự làm</h2>

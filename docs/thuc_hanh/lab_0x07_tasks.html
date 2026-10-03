@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x07 - Multitasking &amp; Scheduler · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x07_tasks.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x07 - Multitasking &amp; Scheduler</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, tasks, scheduler, context switch</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a></strong>.
+Kernel chạy nhiều kernel thread cùng lúc trên một CPU, theo đúng cách cavOS làm: danh sách task liên kết đơn, mỗi task một PML4 và một stack riêng, tick LAPIC 1 ms gọi
+<code>schedule()</code>, và đổi task bằng cách dựng khung ngắt của task mới rồi <code>iretq</code>. Có ngủ theo tick, task idle, task thoát và được dọn, và một thread chờ phím được IRQ1 đánh thức.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/07-tasks/</code> (chép từ <code>06-ps2/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image</code> rồi
+<code>python3 scripts/tasks_input.py os.img run.txt</code>. Source lưu ở <code>lab/src/oskernel-lab/07-tasks/</code>, log đầy đủ (5 lần chạy) ở <code>lab/outputs/lab-0x07-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x06, thêm năm cặp file theo đúng tên file của cavOS, và sửa nhẹ bốn file cũ.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>io.h serial boot pmm gdt idt acpi apic ps2 mouse   như Lab 0x06
+boot.c        + memcpy/memset (rep movsb/stosb): GCC tự sinh lời gọi khi chép struct 176 byte
+paging.{h,c}  + vmap_in/vresolve_in (map vào PML4 của task khác), paging_alloc_pagedir
+                (= PageDirectoryAllocate), paging_free_pagedir
+isr.c         + asm_finalize (= cavOS isr.asm), + nhánh "page fault ma thuật" -&gt; schedule()
+timer.c       timerTick = timerTicks++ + schedule(rsp), như cavOS; sleep() gọi handControl()
+input.c/kb.c  ring tty_q mang thêm tick; kbIrq đánh thức task đang WAITING_INPUT
+task.{h,c}    MỚI, theo multitasking/task.c + stack.c: Task, initiateTasks, taskCreateKernel,
+              stackGenerateKernel, taskKill, taskKernelReturn, handControl, taskSleepMs
+schedule.{h,c} MỚI, theo multitasking/schedule.c: schedule(rsp)
+spinlock.{h,c} MỚI, theo utilities/spinlock.c: test_and_set, bận thì handControl()
+kernel_helper.{h,c} MỚI, theo entry/kernel_helper.c: initiateKernelThreads, helperReaper
+kout.{h,c}    MỚI (lab): khoá một dòng in, tiền tố [t=tick] [id tên]
+kernel.c      kmain: ... initiateKb, initiateMouse, initiateTasks, initiateKernelThreads,
+              tạo 6 thread demo, chờ, in bảng tick CPU
+scripts/tasks_input.py  chạy QEMU với -monitor unix:..., chờ một dòng serial rồi sendkey</code></pre></div>
+<p><code>SRCS</code> thêm <code>task.c schedule.c spinlock.c kernel_helper.c kout.c</code>. Chuỗi lab từ 03 tới 07 không có console framebuffer, nên mọi thứ in ra serial.</p>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Sau <code>initiateMouse()</code>, gọi <code>initiateTasks()</code> và <code>initiateKernelThreads()</code> đúng chỗ cavOS gọi, rồi tạo sáu thread để quan sát.</em></p>
+<ol>
+<li><strong><code>initiateTasks()</code></strong>: luồng <code>kmain</code> đang chạy trở thành <strong>task 0</strong> (id 0, tên <code>kernel</code>, PML4 = CR3 hiện tại, stack = stack boot của Limine).
+Tạo <strong>task dummy</strong> (state <code>DUMMY</code>): scheduler dùng nó khi không còn task nào READY. Lab cho dummy chạy <code>hlt</code>; cavOS chạy <code>pause</code>.</li>
+<li><strong><code>initiateKernelThreads()</code></strong>: tạo thread <code>helper</code>, mỗi vòng gọi <code>helperReaper()</code> để dọn task đã chết.</li>
+<li><strong>Sáu thread demo</strong>, tạo bằng <code>taskCreateKernel(hàm, rdi)</code>:
+<ul>
+<li><code>A</code>, <code>B</code>, <code>C</code>: vòng lặp bận, không bao giờ tự nhường CPU. Chỉ timer cắt được chúng. Mỗi vòng xong khi task đã nhận thêm 15 tick CPU. <code>C</code> return sau 2 vòng.</li>
+<li><code>sleeper</code>: <code>taskSleepMs(50)</code> bốn lần. Task chuyển sang <code>BLOCKED</code>, scheduler đánh thức khi tới giờ.</li>
+<li><code>poller</code>: <code>sleep(50)</code> hai lần, kiểu <code>sleep()</code> của cavOS: task vẫn READY, mỗi lượt chỉ nhường CPU rồi kiểm tra lại giờ.</li>
+<li><code>kbd</code>: chờ phím ở <code>WAITING_INPUT</code>. <code>kbIrq</code> (Lab 0x06) ghi ký tự vào ring <code>tty_q</code> rồi đổi task về READY. Gõ <code>quit</code> + Enter thì thread return.</li>
+</ul></li>
+<li><strong>Task 0</strong> ngủ từng 20 ms cho tới khi mọi thread xong và reaper đã dọn 4 thread đã return, rồi <code>cli</code> và in bảng tick CPU của từng task.</li>
+</ol>
+
+<figure class="diagram">
+<svg id="svg-lab07-pagedir" role="img" aria-label="Each task has its own PML4. Entries 256 to 511 are copied from task 0, so all tasks share the kernel, HHDM and MMIO tables. Entry 255 is private: each kernel thread maps its own stack at the same virtual address, backed by different physical frames" style="max-width:1083px" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab07-pagedir-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab07-pagedir .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab07-pagedir .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="20" y="20" width="680" height="50" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="360" y="41" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">Upper half: one set of PDPT / PD / PT tables, shared by every task</text>
+<text x="360" y="58" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">kernel image, HHDM, LAPIC + I/O APIC MMIO, all TSS stacks, all Task structs</text>
+<rect x="20" y="110" width="200" height="60" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="120" y="135" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PML4 of task 0</text>
+<text x="120" y="153" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">CR3 0x56000 (kmain)</text>
+<rect x="260" y="110" width="200" height="60" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="360" y="135" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PML4 of task A</text>
+<text x="360" y="153" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">CR3 0x6d000, copy of 0x56000</text>
+<rect x="500" y="110" width="200" height="60" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="600" y="135" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">PML4 of task B</text>
+<text x="600" y="153" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">CR3 0x76000, copy of 0x56000</text>
+<line x1="120" y1="110" x2="120" y2="74" class="flow" stroke-width="1.5" marker-end="url(#svg-lab07-pagedir-arrow)"/>
+<line x1="360" y1="110" x2="360" y2="74" class="flow" stroke-width="1.5" marker-end="url(#svg-lab07-pagedir-arrow)"/>
+<line x1="600" y1="110" x2="600" y2="74" class="flow" stroke-width="1.5" marker-end="url(#svg-lab07-pagedir-arrow)"/>
+<text x="128" y="96" fill="#c2c0b6" font-size="9" class="mono">entries 256-511</text>
+<text x="368" y="96" fill="#c2c0b6" font-size="9" class="mono">entries 256-511</text>
+<text x="608" y="96" fill="#c2c0b6" font-size="9" class="mono">entries 256-511</text>
+<line x1="120" y1="170" x2="120" y2="216" class="flow" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="360" y1="170" x2="360" y2="216" class="flow" stroke-width="1.5" marker-end="url(#svg-lab07-pagedir-arrow)"/>
+<line x1="600" y1="170" x2="600" y2="216" class="flow" stroke-width="1.5" marker-end="url(#svg-lab07-pagedir-arrow)"/>
+<text x="128" y="197" fill="#c2c0b6" font-size="9" class="mono">entry 255 = 0</text>
+<text x="368" y="197" fill="#c2c0b6" font-size="9" class="mono">entry 255</text>
+<text x="608" y="197" fill="#c2c0b6" font-size="9" class="mono">entry 255</text>
+<rect x="20" y="220" width="200" height="60" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="120" y="245" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">no stack slot</text>
+<text x="120" y="263" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">runs on the Limine boot stack</text>
+<rect x="260" y="220" width="200" height="60" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="360" y="245" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">own PDPT, PD, PT, 4 frames</text>
+<text x="360" y="263" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">VA 0x7fffffffffa8 -&gt; PA 0x75fa8</text>
+<rect x="500" y="220" width="200" height="60" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="600" y="245" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">own PDPT, PD, PT, 4 frames</text>
+<text x="600" y="263" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">VA 0x7fffffffffa8 -&gt; PA 0x7efa8</text>
+</svg>
+<figcaption>Mỗi task một PML4 (như <code>PageDirectoryAllocate()</code> của cavOS). Nửa cao chép từ task 0 nên mọi task thấy cùng kernel. Ô 255 là của riêng task: stack của nó nằm ở
+cùng một VA ngay dưới <code>0x800000000000</code>, nhưng mỗi task một frame vật lý khác. Số liệu lấy từ lần chạy thật.</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một script mở QEMU, chờ thread <code>kbd</code> báo sẵn sàng, rồi gõ phím thật qua monitor.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/07-tasks
+make image
+python3 scripts/tasks_input.py os.img run.txt                     # demo chính (TCG)
+python3 scripts/tasks_input.py os.img run-kvm.txt -- -enable-kvm  # cùng kernel, dưới KVM
+
+make clean &amp;&amp; make image DEMO=-DNO_PRINT_LOCK                     # bỏ khoá dòng in
+python3 scripts/tasks_input.py os.img run.txt -- -enable-kvm
+make clean &amp;&amp; make image DEMO=-DLOST_WAKEUP                       # mất lần đánh thức
+python3 scripts/tasks_input.py os.img run.txt --lost-wakeup
+make clean &amp;&amp; make image DEMO=-DHELPER_SPIN                       # helper quay như cavOS
+python3 scripts/tasks_input.py os.img run.txt</code></pre></div>
+<p>Script chạy <code>qemu-system-x86_64 -M q35 -m 256M -serial stdio -display none -no-reboot -no-shutdown -monitor unix:/tmp/…sock,server,nowait</code>, đọc stdout của QEMU trong một
+thread. Khi thấy <code>ready for input</code>, nó gửi <code>sendkey h</code>, <code>e</code>, <code>l</code>, <code>l</code>, <code>o</code>, <code>ret</code>, rồi <code>q u i t ret</code>, mỗi phím cách nhau
+khoảng 160 ms. Mọi output dưới đây là thật: QEMU 10.2.1, cross gcc <code>x86_64-cavos-gcc -O2</code>, Limine 8.7.0, SeaBIOS, chạy ngày 2026-10-03. Mỗi dòng của thread có tiền tố
+<code>[t=tick] [id tên]</code>, với 1 tick = 1 ms của LAPIC timer. Dòng <code>##### harness:</code> do script ghi.</p>
+
+<h2 id="tao-task">Kết quả 1: tạo task</h2>
+<p class="lede"><em>Danh sách task ngay sau khi tạo, và khung iretq đầu tiên của một thread.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[tasks] 9 tasks in the list; each new one = 1 PML4 + 4 stack pages + 1 TSS stack page + PDPT/PD/PT; pmm free 65112 -&gt; 65039
+[tasks] task A first frame: RIP=0xffffffff80000570 RSP=0x7ffffffffff8 RFLAGS=0x200 CS=0x28 SS=0x30 RDI=0 [RSP]=0xffffffff80006d60 (taskKernelReturn)
+[tasks] list right after creation (firstTask -&gt; next -&gt; ...):
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  0            0        0  0x56000  (Limine boot stack)
+   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY                  0            0        0  0x64000  0x6c000
+   3  A        READY                  0            0        0  0x6d000  0x75000
+   4  B        READY                  0            0        0  0x76000  0x7e000
+   5  C        READY                  0            0        0  0x7f000  0x87000
+   6  sleeper  READY                  0            0        0  0x88000  0x90000
+   7  poller   READY                  0            0        0  0x91000  0x99000
+   8  kbd      READY                  0            0        0  0x9a000  0x103000
+[tasks] sti: from now on every LAPIC tick calls schedule()</code></pre></div>
+<ul>
+<li><strong>Thread chưa từng chạy cũng có "ngữ cảnh đã lưu".</strong> <code>taskCreate</code> điền sẵn một khung giống hệt khung mà ngắt để lại: <code>RIP</code> = hàm thread,
+<code>CS=0x28</code>/<code>SS=0x30</code> (kernel, Bài 7), <code>RFLAGS=0x200</code> (chỉ bit IF: thread chạy với ngắt bật), <code>RDI</code> = tham số. Lần đầu scheduler chọn nó, <code>iretq</code> "quay về" một chỗ nó chưa
+từng ở.</li>
+<li><strong><code>[RSP]</code> = <code>taskKernelReturn</code>.</strong> <code>stackGenerateKernel</code> đẩy địa chỉ này lên đỉnh stack, nên RSP bắt đầu ở <code>0x7ffffffffff8</code>. Hàm thread
+<code>ret</code> là nhảy vào <code>taskKernelReturn</code> → <code>taskKill</code>.</li>
+<li><strong>8 task mới tốn 73 frame</strong> (65112 → 65039): mỗi task 1 PML4 + 4 trang stack + 1 trang TSS stack + 3 bảng (PDPT, PD, PT) cho ô 255 = 9 frame, cộng 1 trang TSS stack của task 0.
+cavOS cấp <code>USER_STACK_PAGES</code> = 2048 trang (8 MiB) cho mỗi stack.</li>
+<li>Dummy đứng thứ hai trong danh sách nhưng state <code>DUMMY</code>, nên vòng tìm task READY không bao giờ chọn nó; chỉ nhánh "found no task" dùng nó.</li>
+<li>Lab tạo mọi task trong <code>cli</code> để bảng trên là trạng thái ban đầu thật. cavOS tạo task khi ngắt đang bật.</li>
+</ul>
+
+<h2 id="preempt">Kết quả 2: preemption, stack và CR3 riêng</h2>
+<p class="lede"><em>Ba vòng lặp bận không nhường CPU, vẫn chạy xen nhau từng 1 ms.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  215] [3 A      ] started: rdi=0 RSP=0x7fffffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x75fa8 CR3=0x6d000 IF=1
+[t=  217] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x7efa8 CR3=0x76000 IF=1
+[t=  218] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x87fa8 CR3=0x7f000 IF=1
+[t=  219] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x90fa8 CR3=0x88000 IF=1
+[t=  219] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x99fa8 CR3=0x91000 IF=1
+[t=  219] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 &amp;local=0x7fffffffff38 -&gt; PA 0x103f38 CR3=0x9a000 IF=1
+[t=  219] [8 kbd    ] ready for input (type a line; "quit" ends the demo)
+[t=  219] [0 kernel ] task 0 (kmain) blocks until all threads are done
+[t=  261] [3 A      ] round 1/4 done: own cpu ticks=16 switched in 17 times, loop spins=7606648
+[t=  262] [4 B      ] round 1/4 done: own cpu ticks=15 switched in 17 times, loop spins=8230551
+[t=  263] [5 C      ] round 1/2 done: own cpu ticks=15 switched in 17 times, loop spins=8449043
+[t=  306] [3 A      ] round 2/4 done: own cpu ticks=31 switched in 32 times, loop spins=7501819
+[t=  307] [4 B      ] round 2/4 done: own cpu ticks=30 switched in 32 times, loop spins=7952063
+[t=  308] [5 C      ] round 2/2 done: own cpu ticks=30 switched in 32 times, loop spins=8398911</code></pre></div>
+<ul>
+<li><strong>Cùng VA, khác PA.</strong> Biến cục bộ của mọi thread nằm ở <code>0x7fffffffffa8</code>, nhưng mỗi thread trỏ tới một frame khác. Điều đó chỉ đúng vì CR3 đổi theo task: mỗi dòng
+đọc CR3 ngay trong thread và thấy đúng PML4 của mình.</li>
+<li><strong>Lát thời gian = 1 tick.</strong> <code>switched in</code> xấp xỉ <code>own cpu ticks</code>: mỗi lần được chọn, worker chạy đúng một tick rồi bị cắt. Ba worker bận nhận ~15 tick
+mỗi ~45 ms, tức mỗi worker ~1/3 CPU. Không có dòng nào trong code worker nhường CPU: chỉ timer làm được việc này.</li>
+<li>Dòng <code>[t=…]</code> tăng đều dù các worker bận: khi một worker bị cắt giữa vòng lặp, các task khác chạy, rồi worker tiếp tục đúng chỗ cũ với đúng giá trị <code>spins</code>.</li>
+</ul>
+
+<h2 id="ngu">Kết quả 3: hai cách ngủ</h2>
+<p class="lede"><em>Ngủ bằng state <code>BLOCKED</code> thì scheduler bỏ qua task; ngủ kiểu <code>sleep()</code> của cavOS thì task vẫn được chọn mỗi vòng.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  270] [6 sleeper] taskSleepMs(50) #1: BLOCKED at t=219, running again at t=270 (+51 ms), switched in 3 times so far
+[t=  270] [7 poller ] sleep(50) #1: t=219 -&gt; 270, but was switched in 17 times while 'sleeping' (stays READY)
+[t=  321] [6 sleeper] taskSleepMs(50) #2: BLOCKED at t=270, running again at t=321 (+51 ms), switched in 4 times so far
+[t=  321] [7 poller ] sleep(50) #2: t=270 -&gt; 321, but was switched in 19 times while 'sleeping' (stays READY)
+[t=  371] [6 sleeper] taskSleepMs(50) #3: BLOCKED at t=321, running again at t=371 (+50 ms), switched in 5 times so far
+[t=  421] [6 sleeper] taskSleepMs(50) #4: BLOCKED at t=371, running again at t=421 (+50 ms), switched in 6 times so far</code></pre></div>
+<ul>
+<li><code>taskSleepMs</code> làm như <code>syscallNanosleep</code> của cavOS: ghi giờ hẹn vào <code>forcefulWakeupTimeUnsafe</code>, đặt <code>BLOCKED</code>, nhường CPU. Mỗi lần ngủ chỉ tốn
+<strong>một</strong> lần được chọn: lúc <code>schedule()</code> thấy đã tới giờ, đổi nó về READY và chọn luôn.</li>
+<li><code>sleep()</code> của cavOS (<code>cpu/timer.c</code>) chỉ lặp <code>handControl()</code>. Task vẫn READY, nên trong 50 ms nó được chọn 17–19 lần, mỗi lần chỉ để thấy "chưa tới giờ" rồi nhường
+tiếp. Khi CPU nhàn thì không sao; khi có nhiều task như vậy, chúng chiếm lượt của nhau.</li>
+<li>Trễ 50–51 ms: task tỉnh dậy ở tick đầu tiên sau giờ hẹn mà scheduler duyệt tới nó.</li>
+</ul>
+
+<h2 id="ban-phim">Kết quả 4: thread chờ phím, IRQ1 đánh thức</h2>
+<p class="lede"><em>Thread <code>kbd</code> không tốn lượt nào khi chờ; phím tới thì nó chạy sau 1–3 ms.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: sendkey h
+[t=  276] [8 kbd    ] key 'h' IRQ1 at t=273, task running at t=276 (3 ms later), woken by IRQ1
+##### harness: sendkey e
+[t=  436] [8 kbd    ] key 'e' IRQ1 at t=435, task running at t=436 (1 ms later), woken by IRQ1
+##### harness: sendkey ret
+[t= 1084] [8 kbd    ] key '\n' IRQ1 at t=1083, task running at t=1084 (1 ms later), woken by IRQ1
+[t= 1084] [8 kbd    ] read() returns "hello" (5 chars, first key at t=273)
+##### harness: sendkey ret
+[t= 2539] [8 kbd    ] key '\n' IRQ1 at t=2538, task running at t=2539 (1 ms later), woken by IRQ1
+[t= 2539] [8 kbd    ] read() returns "quit" (4 chars, first key at t=1891)</code></pre></div>
+<ul>
+<li>Phím <code>h</code> tới lúc ba worker còn bận: phải chờ 3 ms tới lượt. Sau khi worker xong, CPU gần như rảnh và độ trễ chỉ còn 1 ms (tick kế tiếp).</li>
+<li>Cả demo, <code>kbd</code> được chọn 13 lần (bảng cuối): 11 lần do IRQ1 đánh thức (11 phím) cộng vài lần đầu. Lúc <code>WAITING_INPUT</code>, scheduler bỏ qua nó hoàn toàn.</li>
+<li>cavOS làm tương tự trong <code>readHandler()</code> (<code>syscalls/io.c</code>): <code>kbTaskRead</code> đặt <code>WAITING_INPUT</code>, rồi <code>while (state == WAITING_INPUT) handControl();</code>.
+<code>kbIrq</code> gọi <code>kbFinaliseStream()</code> để đặt lại READY khi đủ dòng.</li>
+</ul>
+
+<h2 id="thoat">Kết quả 5: task thoát và reaper</h2>
+<p class="lede"><em>Task chết không tự dọn được stack nó đang đứng; thread <code>helper</code> dọn hộ.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  308] [5 C      ] returning -&gt; taskKernelReturn() -&gt; taskKill()
+[t=  311] [2 helper ] reaper: task 5 (C) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65039 -&gt; 65048
+[t=  367] [3 A      ] returning -&gt; taskKernelReturn() -&gt; taskKill()
+[t=  370] [2 helper ] reaper: task 3 (A) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65048 -&gt; 65057
+[t= 2540] [2 helper ] reaper: task 8 (kbd) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 65066 -&gt; 65075</code></pre></div>
+<ul>
+<li>Hàm thread <code>ret</code> → <code>taskKernelReturn</code> → <code>taskKill</code>: giao task cho reaper, đặt <code>DEAD</code>, <code>sti</code>, rồi lặp <code>while (1)</code> chờ tick. Như cavOS.
+State <code>DEAD</code> nên scheduler không bao giờ quay lại.</li>
+<li>Thread <code>helper</code> (chạy ở ngữ cảnh khác, CR3 khác) trả 9 frame về PMM và gỡ task khỏi danh sách. Mỗi task trả đúng 9 frame đã cấp.</li>
+</ul>
+
+<h2 id="bang-cuoi">Kết quả 6: tick CPU của từng task</h2>
+<p class="lede"><em>Ai dùng CPU bao lâu, đếm bằng tick timer.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] all threads done after 2324 ms. Per-task CPU ticks (1 tick = 1 ms on the LAPIC timer):
+[kernel] tasks still in the list:
+  id  name     state          cpu ticks  switched in  wakeups  PML4       stack top PA
+   0  kernel   READY                  1          118      116  0x56000  (Limine boot stack)
+   1  dummy    DUMMY               2171          555        0  0x5b000  0x63000
+   2  helper   BLOCKED                0          461      460  0x64000  0x6c000
+   6  sleeper  BLOCKED                0            8        6  0x88000  0x90000
+   7  poller   BLOCKED                0           40        2  0x91000  0x99000
+[kernel] tasks already reaped (returned from their entry function):
+   5  C        reaped                31           32        0  at t=311
+   3  A        reaped                62           62        0  at t=370
+   4  B        reaped                63           63        0  at t=375
+   8  kbd      reaped                 1           13       11  at t=2540
+[kernel] sum of cpu ticks = 2329, timerTicks = 2543 (ticks before initiateTasks() belong to nobody)
+[kernel] pmm free now 65075 (before tasks: 65112); keys dropped: 0
+[kernel] done, cli; hlt</code></pre></div>
+<ul>
+<li><strong>Task idle chiếm phần lớn thời gian</strong> (2171 / 2329 tick): demo chủ yếu chờ người gõ phím. Lúc đó mọi task đều BLOCKED hoặc WAITING_INPUT, scheduler rơi vào nhánh
+"found no task" và chạy dummy, dummy <code>hlt</code> tới ngắt kế tiếp.</li>
+<li><strong>Đếm tick là đếm mẫu.</strong> Tick chỉ cộng cho task đang chạy đúng lúc timer bắn. <code>helper</code>, <code>sleeper</code>, <code>poller</code> chạy hàng trăm lần nhưng mỗi lần xong và nhường CPU trong
+vài micro giây, trước tick kế tiếp, nên được 0 tick. <code>kbd</code> cũng chỉ 1 tick cho 13 lần chạy. Dưới KVM, in ra serial chậm hơn nhiều (mỗi <code>outb</code> thoát ra QEMU), nên cùng các
+task đó được vài tick (<code>helper 7</code>, <code>sleeper 7</code>, <code>kbd 18</code> trong lần chạy KVM).</li>
+<li>pmm: còn thiếu 37 frame so với lúc trước <code>initiateTasks</code> = 4 task còn sống × 9 + 1 trang TSS stack của task 0. Không rò frame nào.</li>
+</ul>
+
+<h2 id="race">Race: thấy tận mắt, và vì sao vài chỗ không thể xảy ra</h2>
+<p class="lede"><em>Một CPU vẫn có race, vì timer có thể đổi task giữa hai lệnh bất kỳ. Lab cố ý gây ra hai cái và đo một cái của cavOS.</em></p>
+
+<h3 id="race-in">1. Dòng in bị cắt (<code>DEMO=-DNO_PRINT_LOCK</code>)</h3>
+<p>Một dòng log là hàng chục lần <code>serial_puts</code>. Nếu tick tới giữa chừng, task khác in tiếp vào giữa dòng. Lab khoá mỗi dòng bằng spinlock kiểu cavOS (<code>kout_begin</code>/<code>kout_end</code>).
+Bỏ khoá, chạy dưới KVM:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  615] [3 A      ] started: rdi=0 RSP=0x7ff[t=  616] [4 B      ] started: rdi=1 RSP=0x7fffffffffa0 [t=  617] [5 C      ] started: rdi=2 RSP=0x7fffffffffa0 [t=  618] [6 sleeper] started: rdi=3 RSP=0x7fffffffffa0 &amp;[t=  619] [7 poller ] started: rdi=4 RSP=0x7fffffffffa0 [t=  620] [8 kbd    ] started: rdi=5 RSP=0x7fffffffff30 [t=  621] [0 kernel ] task 0 (kmain) blocks until allfffffffa0 &amp;local=0x7fffffffffa8 -&gt; PA 0x75fa8 CR3=0x6d000 IF&amp;local=0x7fffffffffa8 -&gt; PA 0x7efa8 CR3=0x76000 IF=1
+[t=  672] [4 B      ] round 1/4 done: own cpu ticks=16 switched in 17 times, loo[t=  673] [5 C      ] round 1/2 done: own cpu[t=  674] [3 A      ] round 1/4 done: own cpu ticks=17 switchep spins=92535830</code></pre></div>
+<p>Cùng bản build đó chạy TCG thì không có dòng nào bị cắt: ở TCG một dòng in xong trong chưa tới một tick, nên race có nhưng hiếm tới mức 100 dòng không trúng lần nào. Dưới KVM mỗi
+<code>outb</code> ra cổng serial là một lần thoát VM, một dòng kéo dài qua vài tick, và race lộ ra ngay. Bản có khoá chạy dưới KVM: 0 dòng bị cắt. Bài học: không thấy lỗi chưa phải là không có lỗi.
+cavOS giải đúng như vậy cho log serial: <code>debugf()</code> (<code>drivers/serial.c</code>) lấy <code>LOCK_DEBUGF</code> quanh cả lời gọi, nhưng chỉ khi ngắt đang bật (trong IRQ thì bỏ khoá để khỏi
+chờ chính task bị ngắt). <code>printf()</code> ra console (<code>putchar_</code> → <code>printfch</code>, <code>graphical/console.c</code>) thì không khoá.</p>
+
+<h3 id="race-wakeup">2. Mất lần đánh thức (<code>DEMO=-DLOST_WAKEUP</code>)</h3>
+<p>Thread chờ phím làm hai bước: thấy ring rỗng, rồi đặt <code>WAITING_INPUT</code>. Nếu IRQ1 tới giữa hai bước, <code>kbIrq</code> thấy task chưa chờ nên không đánh thức; sau đó task đặt
+<code>WAITING_INPUT</code> và ngủ, với một phím nằm sẵn trong ring. Bản build này bỏ <code>cli</code> quanh hai bước và kéo khe hở ra 300 ms (chỉ lần chờ đầu) để phím rơi đúng vào đó:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  217] [8 kbd    ] LOST_WAKEUP: ring empty, 300 ms gap before WAITING_INPUT
+##### harness: key 'h' typed inside the 300 ms gap
+##### harness: sendkey h
+##### harness: key 'i' typed 1 s later
+##### harness: sendkey i
+[t= 1508] [8 kbd    ] key 'h' IRQ1 at t=321, task running at t=1508 (1187 ms later), woken by IRQ1
+[t= 1508] [8 kbd    ] key 'i' IRQ1 at t=1507, task running at t=1508 (1 ms later), woken by IRQ1
+[t= 1508] [8 kbd    ] 2 keys were waiting in the ring at this wakeup</code></pre></div>
+<p>Phím <code>h</code> nằm trong ring 1187 ms, tới khi phím <code>i</code> đánh thức thread. Bản thường làm hai bước trong <code>cli</code>/<code>sti</code>: IRQ1 chỉ có thể tới trước (ring không còn rỗng,
+task không ngủ) hoặc sau (task đã <code>WAITING_INPUT</code>, IRQ1 đánh thức nó). cavOS có cùng khe hở này trong <code>kbTaskRead</code>, xem <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html#loi-kbtaskread">Bài 12, Đọc thêm</a>.</p>
+
+<h3 id="race-switch">3. Tick tới giữa lúc đang đổi task: không thể</h3>
+<ul>
+<li><code>schedule()</code> chỉ chạy bên trong một ngắt: IRQ timer, hoặc page fault của <code>handControl</code>. Cả hai cổng IDT là <em>interrupt gate</em> (type <code>0x8E</code>, Bài 9): CPU tự xoá IF khi
+vào. Từ đầu <code>schedule()</code> tới <code>iretq</code> cuối <code>asm_finalize</code>, IF = 0, nên không tick nào chen vào được.</li>
+<li><code>iretq</code> nạp RFLAGS của task mới (IF = 1) cùng lúc với RIP, CS, RSP, SS: ngắt chỉ được nhận lại khi task mới đã đứng hẳn trên stack của nó.</li>
+<li><code>asm_finalize</code> đổi RSP <strong>trước</strong> rồi mới đổi CR3: khung iretq nằm trên TSS stack ở nửa cao, PML4 nào cũng thấy. Đổi CR3 trước thì stack cũ ở <code>0x7fff…</code> (nửa thấp) không còn
+map, nhưng lúc đó RSP đã rời khỏi nó.</li>
+<li>EOI gửi <strong>trước</strong> khi gọi handler (<code>handle_interrupt</code>, như cavOS), vì <code>schedule()</code> không return: gửi sau thì LAPIC không bao giờ nhận EOI và timer tắt.</li>
+<li>Danh sách task: sửa trong <code>irq_save</code>/<code>irq_restore</code> nên <code>schedule()</code> (cũng chạy với IF = 0) không bao giờ thấy danh sách sửa dở. PMM của lab không có khoá, nên task 0
+cấp frame và reaper trả frame cũng phải bọc như vậy.</li>
+</ul>
+
+<h3 id="race-ring">4. Ring bàn phím dùng chung không khoá: an toàn</h3>
+<p><code>tty_q</code> có đúng một người ghi (<code>kbIrq</code>) và một người đọc (thread <code>kbd</code>). Người ghi chỉ đổi <code>w</code>, người đọc chỉ đổi <code>r</code>, và mỗi bên ghi dữ liệu xong mới dời chỉ số
+(rào <code>"memory"</code>). Trên một CPU, IRQ chạy trọn vẹn giữa hai lệnh của thread, nên thread luôn thấy hoặc chỉ số cũ hoặc chỉ số mới cùng dữ liệu đầy đủ. Thêm người đọc thứ hai thì không còn đúng.</p>
+
+<h3 id="race-idle">5. Task idle của cavOS gần như không bao giờ chạy (<code>DEMO=-DHELPER_SPIN</code>)</h3>
+<p>Thread helper của cavOS (<code>kernelHelpEntry</code>) lặp <code>handControl()</code> mãi, nên nó luôn READY: scheduler luôn có ít nhất một task READY và không bao giờ cần dummy. Lab mặc định cho
+helper ngủ 5 ms mỗi vòng. Bật <code>HELPER_SPIN</code> để làm y cavOS:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>   1  dummy    DUMMY                  0            0        0  0x5b000  0x63000
+   2  helper   READY               2141          184        0  0x64000  0x6c000</code></pre></div>
+<p>Dummy 0 tick; helper nhận 2141 tick, tức cả thời gian CPU nhàn được tiêu vào vòng "page fault, schedule, quay về helper". CPU không bao giờ <code>hlt</code>.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng cấu trúc dữ liệu và cùng đường đổi task; chỉ rút gọn những phần chưa cần (signal, file, FPU, userspace).</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x07</th></tr></thead>
+<tbody>
+<tr><td>Cấp Task</td><td><code>malloc(sizeof(Task))</code>, struct rất lớn (signal, file, FPU, termios…)</td><td>pool tĩnh 16 ô, chỉ giữ trường cần cho kernel thread</td></tr>
+<tr><td>Stack</td><td>2048 trang, map <code>PF_USER | PF_RW</code>; thêm syscall stack 2048 trang</td><td>4 trang, map chỉ RW; không có syscall stack</td></tr>
+<tr><td>Ghi địa chỉ trả về lên stack mới</td><td><code>ChangePageDirectory</code> sang PML4 của task, ghi, đổi lại</td><td>ghi qua HHDM vào frame cuối</td></tr>
+<tr><td><code>handControl</code></td><td>lệnh đọc do C sinh ra, handler <code>rip++</code></td><td>lệnh đọc viết bằng asm (<code>8A 00</code>), handler <code>rip += 2</code></td></tr>
+<tr><td>Task dummy</td><td><code>pause</code></td><td><code>hlt</code></td></tr>
+<tr><td>Helper</td><td>lặp <code>handControl()</code> (luôn READY)</td><td>ngủ 5 ms mỗi vòng; <code>HELPER_SPIN</code> làm y cavOS</td></tr>
+<tr><td>Sửa danh sách task</td><td>spinlock <code>TASK_LL_MODIFY</code> + <code>cli</code>/<code>sti</code></td><td><code>irq_save</code>/<code>irq_restore</code> (giữ nguyên IF cũ)</td></tr>
+<tr><td>Chờ phím</td><td><code>kbBuff</code> do <code>kbTaskRead</code> giao, IRQ ghi thẳng vào; READY khi đủ dòng</td><td>ring <code>tty_q</code> của Lab 0x06; READY ở mỗi ký tự</td></tr>
+<tr><td><code>schedule()</code></td><td colspan="2">giống nhau: vòng tìm READY + đánh thức theo giờ, dummy khi không có ai, <code>tssPtr-&gt;rsp0</code>, chép khung, <code>asm_finalize</code>. Lab bỏ signal, itimer, FS/GS MSR, <code>fxsave</code>.</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa code và chạy lại script để kiểm.</em></p>
+<details class="quiz"><summary>Đổi thứ tự trong <code>handle_interrupt</code>: gọi handler IRQ trước, gửi EOI sau. Demo chạy được bao lâu?</summary>
+<p>Tới tick đầu tiên sau <code>initiateTasks()</code>. <code>timerTick</code> gọi <code>schedule()</code>, hàm này <code>iretq</code> sang task khác và không bao giờ quay lại dòng EOI. LAPIC coi ngắt timer
+vẫn đang phục vụ nên không gửi tick mới cùng mức ưu tiên: không còn preemption, không còn đánh thức theo giờ.</p></details>
+<details class="quiz"><summary>Trong <code>asm_finalize</code>, đổi chỗ hai lệnh: <code>mov %rsi,%cr3</code> trước, <code>mov %rdi,%rsp</code> sau. Có sao không?</summary>
+<p>Trong lab thì vẫn chạy: giữa hai lệnh đó không có lệnh nào dùng stack, và khung iretq ở nửa cao. Nhưng nếu có một lệnh <code>push</code>/<code>call</code> chen giữa, nó ghi vào stack ở
+<code>0x7fff…</code> của task cũ, mà VA đó giờ là stack của task mới: hỏng dữ liệu task mới. Đổi RSP trước là cách an toàn.</p></details>
+<details class="quiz"><summary>Bỏ dòng <code>tssPtr-&gt;rsp0 = next-&gt;whileTssRsp</code> trong <code>schedule()</code>. Lab còn chạy không? cavOS thì sao?</summary>
+<p>Lab vẫn chạy: mọi task ở ring 0, ngắt từ ring 0 không đổi stack, nên CPU không đọc <code>RSP0</code>. cavOS thì hỏng ngay khi có task userspace: ngắt từ ring 3 sẽ đẩy khung lên stack
+của task trước đó, đè lên dữ liệu của nó.</p></details>
+<details class="quiz"><summary>Vì sao <code>poller</code> được chọn 40 lần mà vẫn 0 tick CPU?</summary>
+<p>Mỗi lần được chọn, nó chỉ so <code>timerTicks</code> với giờ hẹn rồi nhường CPU ngay, xong trước khi tick kế tiếp bắn. Tick chỉ cộng cho task đang chạy đúng lúc timer bắn, nên thời
+gian ngắn hơn một tick không được đếm.</p></details>
+<details class="quiz"><summary>Bỏ <code>cli</code>/<code>sti</code> trong <code>kbWaitInput</code> nhưng không thêm khe 300 ms. Demo có hỏng không?</summary>
+<p>Gần như không bao giờ thấy: khe hở chỉ vài lệnh, phím phải tới đúng trong vài nano giây đó. Nhưng race vẫn có, và khi trúng thì phím nằm trong ring cho tới phím kế tiếp. Bản
+<code>LOST_WAKEUP</code> chỉ kéo dài khe đó để thấy chắc chắn.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a> · nền <a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>
+(tick 1 ms, <code>timerTick</code>), <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a> (khung <code>AsmPassedInterrupt</code>, <code>isr_common</code>),
+<a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a> (<code>RSP0</code>), <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> (PML4, CR3).</li>
+<li>Lab trước: <a href="lab_0x06_ps2.html">Lab 0x06 - PS/2 Keyboard &amp; Mouse</a> (<code>kbIrq</code>, ring <code>tty_q</code>, harness QEMU monitor).</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x07 - Multitasking &amp; Scheduler</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

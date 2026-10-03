@@ -56,16 +56,16 @@ window.SITE = {
       {
        "t": "Bài 11 - PS2 Keyboard & Mouse",
        "h": "ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html"
+      },
+      {
+       "t": "Bài 12 - Multitasking & Scheduler",
+       "h": "ly_thuyet/bai/bai_12_multitasking_scheduler.html"
       }
      ]
     },
     {
      "t": "Sắp tới (mới có dàn ý)",
      "c": [
-      {
-       "t": "Bài 12 - Multitasking & Scheduler",
-       "h": "ly_thuyet/bai/bai_12_multitasking_scheduler.html"
-      },
       {
        "t": "Bài 13 - Networking",
        "h": "ly_thuyet/bai/bai_13_networking.html"
@@ -207,6 +207,10 @@ window.SITE = {
     {
      "t": "Lab 0x06 - PS/2 Keyboard & Mouse",
      "h": "thuc_hanh/lab_0x06_ps2.html"
+    },
+    {
+     "t": "Lab 0x07 - Multitasking & Scheduler",
+     "h": "thuc_hanh/lab_0x07_tasks.html"
     }
    ],
    "h": "thuc_hanh/thuc_hanh.html"
