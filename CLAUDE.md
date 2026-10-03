@@ -128,6 +128,7 @@ Trang bài nằm ở `docs/ly_thuyet/bai/` (tên file dạng `bai_06_virtual_mem
 - [x] Bài 8 - ACPI — uACPI 3 bước, RSDP qua HHDM, MADT; lỗi: vòng MADT đọc lố 44 byte; lab 0x05
 - [x] Bài 9 - IDT & Interrupts — idt.c set_idt_gate/set_idt, isr.asm stub + isr_common, handle_interrupt; remap+tắt PIC, spurious APIC; không IST; lab 0x04
 - [x] Bài 10 - APIC & Timer — initiateAPIC/ioApicRedirect/initiateApicTimer, calibrate 10 tick PIT; lỗi: irqPerCoreAllocate gán thay so sánh, timerTicks không volatile; lab 0x05
+- [x] Bài 11 - PS2 Keyboard & Mouse — initiateKb/kbIrq/handleKbEvent, kbEvdevGenerate, initiateMouse/mouseIrq, /dev/input + /dev/stdin; lỗi: Caps/Shift/mũi tên, init race 0x20 bị kbIrq ăn; lab 0x06
 
 > Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 

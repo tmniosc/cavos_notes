@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x06 - PS/2 Keyboard &amp; Mouse · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x06_ps2.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x06 - PS/2 Keyboard &amp; Mouse</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, ps2, 8042, keyboard, mouse</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html">Bài 11 - PS/2 Keyboard &amp; Mouse</a></strong>.
+Kernel nhận phím và chuột thật qua controller 8042: IRQ1 và IRQ12 đi qua I/O APIC, scancode thành ký tự (Shift, Caps Lock), gói chuột 3 byte thành dx/dy/nút,
+và mọi thứ đi vào ring buffer kiểu <code>/dev/input/eventN</code> của cavOS. Phím được gõ thật bằng <code>sendkey</code> của QEMU monitor từ một script Python.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/06-ps2/</code> (chép từ <code>05-acpi-apic/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image</code> rồi
+<code>python3 scripts/ps2_input.py os.img run.txt</code>. Source lưu ở <code>lab/src/oskernel-lab/06-ps2/</code>, log đầy đủ ở <code>lab/outputs/lab-0x06-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x05, thêm bốn cặp file: ps2, input, kb, mouse, và một script điều khiển QEMU.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>io.h serial boot pmm paging gdt idt isr acpi apic   như Lab 0x05
+timer.{h,c}   Lab 0x05 + sleep(time) như cavOS (initiateMouse cần nó)
+ps2.{h,c}     MỚI: tên cổng/bit của 8042; ps2_probe() chỉ để quan sát (cavOS không có)
+input.{h,c}   MỚI, theo cavOS dev_event.c: devInputEventSetup, inputGenerateEvent, ring buffer
+              cho /dev/input/eventN; thêm ring "trace" (từng byte 0x60) và ring tty
+kb.{h,c}      MỚI, theo cavOS drivers/kb.c: initiateKb, kbIrq, bảng ký tự, kbEvdevGenerate
+mouse.{h,c}   MỚI, theo cavOS drivers/mouse.c: initiateMouse, mouseWait/Write/Read, mouseIrq
+kernel.c      kmain: ... timer, input_init, ps2_probe, initiateKb, initiateMouse, vòng đọc
+scripts/ps2_input.py  chạy QEMU với -monitor unix:..., gửi sendkey/mouse_move/mouse_button</code></pre></div>
+<p><code>SRCS := kernel.c boot.c serial.c pmm.c paging.c gdt.c idt.c isr.c acpi.c apic.c timer.c ps2.c input.c kb.c mouse.c</code>. Chuỗi lab từ 03 tới 05 không có console
+framebuffer (Lab 0x02 đứng riêng), nên ký tự chỉ in ra serial. Lab chưa có VFS, nên <code>fsMount("/dev/", CONNECTOR_DEV, …)</code> của cavOS thu gọn thành <code>input_init()</code>:
+phần lõi là ring buffer mà IRQ ghi vào và người đọc lấy ra.</p>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Đi đúng thứ tự cavOS <code>_start()</code>: timer trước, rồi <code>/dev/</code>, bàn phím, chuột.</em></p>
+<ol>
+<li><strong>Nền</strong> (Lab 0x05): PMM, paging, GDT/TSS, ACPI (lấy MADT), IDT + APIC + <code>sti</code>, LAPIC timer 1 ms. Comment của cavOS: "mouse needs a timer", vì
+<code>initiateMouse</code> gọi <code>sleep(100)</code>.</li>
+<li><strong>Quan sát</strong> (<code>ps2_probe</code>, chỉ lab có): đọc thanh ghi trạng thái, byte cấu hình firmware để lại, và hỏi bàn phím đang dùng scancode set nào, một lần khi controller
+dịch, một lần khi tắt dịch.</li>
+<li><strong><code>initiateKb()</code></strong> như cavOS: <code>ioApicRedirect(1)</code> → vector <code>0x22</code>, đăng ký <code>kbIrq</code>, lệnh <code>0xAE</code>, đọc bỏ <code>0x60</code>.</li>
+<li><strong><code>initiateMouse()</code></strong> như cavOS: <code>0xA8</code>, đọc byte cấu hình bằng <code>0x20</code>, bật bit 1, ghi lại bằng <code>0x60</code>, gửi chuột <code>0xF6</code> và <code>0xF4</code>,
+<code>ioApicRedirect(12)</code> → vector <code>0x23</code>.</li>
+<li><strong>Vòng lặp chính</strong> đóng vai chương trình userspace: "mở" <code>/dev/input/event0</code> (bàn phím) và <code>event1</code> (chuột), <code>hlt</code> chờ ngắt, rồi in từng byte IRQ đọc được,
+từng sự kiện evdev, và từng dòng <code>read()</code> trả về (gom tới Enter, Backspace xoá). F2 bật/tắt bit dịch của controller. Esc thì dừng.</li>
+</ol>
+
+<figure class="diagram">
+<svg id="svg-lab06-flow" role="img" aria-label="Lab 0x06 flow: Python harness sends sendkey and mouse_move to the QEMU monitor socket, the emulated i8042 raises IRQ1 or IRQ12, the I/O APIC delivers vector 0x22 or 0x23, kbIrq and mouseIrq read ports 0x64 and 0x60 and fill ring buffers, the main loop drains them and prints to COM1" style="max-width:1083px" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab06-flow-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab06-flow .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab06-flow .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="20" y="30" width="150" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="95" y="56" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">ps2_input.py</text>
+<text x="95" y="74" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">sendkey, mouse_move</text>
+<rect x="200" y="30" width="150" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="275" y="56" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">QEMU monitor</text>
+<text x="275" y="74" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">unix socket</text>
+<rect x="380" y="30" width="150" height="66" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="455" y="56" text-anchor="middle" fill="#F0DBAE" font-size="11" font-weight="600">i8042 (emulated)</text>
+<text x="455" y="74" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">ports 0x60 / 0x64</text>
+<rect x="560" y="30" width="140" height="66" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="630" y="56" text-anchor="middle" fill="#B5D4F4" font-size="11" font-weight="600">I/O APIC</text>
+<text x="630" y="74" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">pin 1, pin 12</text>
+<line x1="170" y1="63" x2="196" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="350" y1="63" x2="376" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="530" y1="63" x2="556" y2="63" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="630" y1="96" x2="630" y2="146" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<text x="638" y="125" fill="#c2c0b6" font-size="9" class="mono">vec 0x22 / 0x23</text>
+<rect x="560" y="150" width="140" height="66" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="630" y="176" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">kbIrq / mouseIrq</text>
+<text x="630" y="194" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">inb 0x64, inb 0x60</text>
+<rect x="380" y="150" width="150" height="66" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="455" y="176" text-anchor="middle" fill="#C6E7CC" font-size="11" font-weight="600">ring buffers</text>
+<text x="455" y="194" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">trace, event0/1, tty</text>
+<rect x="200" y="150" width="150" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="275" y="176" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">main loop</text>
+<text x="275" y="194" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">sti; hlt; drain; print</text>
+<rect x="20" y="150" width="150" height="66" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="95" y="176" text-anchor="middle" fill="#D3D1C7" font-size="11" font-weight="600">COM1 serial</text>
+<text x="95" y="194" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">QEMU stdout -&gt; run.txt</text>
+<line x1="560" y1="183" x2="534" y2="183" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="380" y1="183" x2="354" y2="183" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="200" y1="183" x2="174" y2="183" class="flow" stroke-width="1.5" marker-end="url(#svg-lab06-flow-arrow)"/>
+<line x1="95" y1="216" x2="95" y2="250" class="flow" stroke-width="1.5" stroke-dasharray="4 3"/>
+<line x1="95" y1="250" x2="95" y2="262" class="flow" stroke-width="1.5"/>
+<rect x="20" y="262" width="680" height="28" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="360" y="280" text-anchor="middle" fill="#D3D1C7" font-size="10" class="mono">harness reads QEMU stdout in a thread and writes it, plus "##### harness:" notes, to run.txt</text>
+</svg>
+<figcaption>Đường đi của một lần gõ phím trong lab. Khối xanh lá là code của lab (theo cavOS), khối vàng là phần cứng giả lập của QEMU.</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một script mở QEMU, chờ kernel sẵn sàng, rồi gõ phím và di chuột thật qua monitor.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/06-ps2
+make image
+python3 scripts/ps2_input.py os.img run.txt                                   # q35, TCG, SeaBIOS
+python3 scripts/ps2_input.py os.img run-kvm.txt  -- -enable-kvm
+python3 scripts/ps2_input.py os.img run-ovmf.txt -- -bios /usr/share/ovmf/OVMF.fd</code></pre></div>
+<p>Script chạy <code>qemu-system-x86_64 -M q35 -m 256M -serial stdio -display none -monitor unix:/tmp/…sock,server,nowait …</code>, đọc stdout của QEMU trong một thread, và khi thấy
+<code>[kernel] ready for input</code> thì nối vào socket monitor và gửi từng lệnh:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Lệnh monitor</th><th>Làm gì</th></tr></thead>
+<tbody>
+<tr><td><code>sendkey shift-h</code></td><td>nhấn Shift, nhấn H, giữ 100 ms, nhả theo thứ tự ngược. QEMU sinh đúng các scancode như bàn phím thật</td></tr>
+<tr><td><code>sendkey caps_lock</code>, <code>shift_r-2</code>, <code>up</code>, <code>kp_8</code>, <code>f2</code>, <code>esc</code></td><td>tên phím theo QEMU</td></tr>
+<tr><td><code>mouse_move -3 4</code></td><td>di chuột tương đối: sang trái 3, xuống 4 (theo chiều màn hình)</td></tr>
+<tr><td><code>mouse_button 1</code> / <code>2</code> / <code>0</code></td><td>giữ nút trái / phải / nhả hết</td></tr>
+</tbody>
+</table></div>
+<p><code>info mice</code> trong monitor báo <code>Mouse #2: QEMU PS/2 Mouse</code>: chuột mà <code>mouse_move</code> điều khiển chính là chuột PS/2 nối vào cổng 2 của 8042.
+Mọi output dưới đây là thật: QEMU 10.2.1, cross gcc <code>x86_64-cavos-gcc -O2</code>, Limine 8.7.0, chạy ngày 2026-10-03. Dòng <code>##### harness:</code> do script ghi để biết lúc đó gửi gì.</p>
+
+<h2 id="controller">Kết quả 1: controller do firmware để lại</h2>
+<p class="lede"><em>cavOS không cấu hình bàn phím; nó dựa vào những gì firmware đã bật. Lab đọc ra để kiểm.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[8042] status at boot      = 0x1c (OBF=0 IBF=0 SYS=1 CMD=1 AUX=0)
+[8042] stale bytes flushed = 0
+[8042] config left by firmware = 0x61 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=1 translate=1)
+[8042] kb 0xF0 0x00 (get scancode set), translate=1: ACK 0xfa, ACK 0xfa, reply 0x41 (= set 2 after translation)
+[8042] kb 0xF0 0x00 (get scancode set), translate=0: ACK 0xfa, ACK 0xfa, reply 0x2</code></pre></div>
+<ul>
+<li><strong>Byte cấu hình <code>0x61</code></strong> (SeaBIOS) = bit 0 (cổng 1 có byte thì bắn IRQ1) + bit 5 (clock cổng 2 đang tắt, tức chuột chưa bật) + bit 6 (dịch scancode). Đúng hai điều
+<code>initiateKb</code> cần: IRQ1 đã bật và controller đang dịch. cavOS không tự bật chúng.</li>
+<li><strong>Bàn phím thật sự dùng set 2.</strong> Hỏi bằng lệnh <code>0xF0 0x00</code>: khi tắt dịch, bàn phím trả <code>0x02</code>. Khi bật dịch, chính câu trả lời cũng bị dịch: số 2 thành
+<code>0x41</code>. Set 1 mà cavOS giả định chỉ có ở đầu ra của controller.</li>
+<li>OVMF (UEFI) để lại <code>0x67</code>: thêm bit 1 (IRQ12) và bit 2 (system flag), vẫn dịch, vẫn set 2.</li>
+</ul>
+
+<h2 id="init">Kết quả 2: khởi tạo như cavOS, và một byte bị lấy mất</h2>
+<p class="lede"><em>Byte cấu hình mà <code>initiateMouse</code> đọc bị handler bàn phím giành trước và hiểu thành một phím F7.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[ioapic] ISA IRQ 1 -&gt; (no override) GSI 1 = I/O APIC pin 1 -&gt; vector 0x22 -&gt; LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -&gt; 0xfa, 0xD4 0xF4 (enable reporting) -&gt; 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -&gt; (no override) GSI 12 = I/O APIC pin 12 -&gt; vector 0x23 -&gt; LAPIC 0 active-high edge
+[ioapic]   pin  1: 0x0000000000000022  vector=0x22 ACTIVE edge high dest=0
+[ioapic]   pin 12: 0x0000000000000023  vector=0x23 ACTIVE edge high dest=0
+[dev] opened /dev/input/event0 (PS/2 Keyboard) and /dev/input/event1 (PS/2 Mouse)
+[early] [irq1]  0x64=0x1d 0x60=0x41  make  F7</code></pre></div>
+<ul>
+<li><strong>Vector giống hệt cavOS</strong>: PIT <code>0x20</code>, LAPIC timer <code>0x21</code>, bàn phím <code>0x22</code>, chuột <code>0x23</code>. QEMU không có override cho IRQ 1 và 12, nên GSI = số IRQ,
+edge, active-high.</li>
+<li><strong>Dòng <code>[early]</code></strong>: trong lúc <code>initiateMouse</code> chạy, IRQ1 đã được nối (bởi <code>initiateKb</code>) và ngắt đang bật. Lệnh <code>0x20</code> làm controller đặt byte cấu hình
+<code>0x41</code> vào cổng <code>0x60</code> và bắn IRQ1. <code>kbIrq</code> đọc nó trước, coi là scancode <code>0x41</code> = F7 nhấn. Rồi <code>mouseWait(0)</code> hết giờ, <code>inb(0x60)</code> vẫn
+ra <code>0x41</code> vì QEMU trả lại byte cuối khi bộ đệm rỗng. Chuột vẫn chạy, nhưng là nhờ may.</li>
+<li><strong>Hậu quả thấy được</strong>: <code>kbEvdevGenerate</code> đã đánh dấu F7 "đang giữ" trong bitmap. Lần gõ F7 thật đầu tiên ở cuối log không sinh sự kiện nhấn, chỉ có nhả:
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: sendkey f7
+[irq1]  0x64=0x1d 0x60=0x41  make  F7
+[irq1]  0x64=0x1d 0x60=0xc1  break F7
+        /dev/input/event0: EV_KEY code 65=0, SYN</code></pre></div>
+Với <code>-enable-kvm</code> kết quả giống hệt. Với OVMF byte bị lấy là <code>0x47</code> (keypad 7), vì byte cấu hình của OVMF khác.</li>
+<li>Byte cấu hình đọc được là <code>0x41</code>, không phải <code>0x61</code>: lệnh <code>0xA8</code> vừa xoá bit 5 (bật clock cổng 2).</li>
+</ul>
+
+<h2 id="ban-phim">Kết quả 3: bàn phím, Shift, Caps Lock</h2>
+<p class="lede"><em>Mỗi phím là một byte "nhấn" và một byte "nhả"; ký tự do driver tự tính từ trạng thái Shift và Caps.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: sendkey shift-h
+[irq1]  0x64=0x1d 0x60=0x2a  make  L-Shift
+        /dev/input/event0: EV_KEY code 42=1, SYN
+[irq1]  0x64=0x1d 0x60=0x23  make  key -&gt; 'H'
+        /dev/input/event0: EV_KEY code 35=1, SYN
+[irq1]  0x64=0x1d 0x60=0xa3  break key
+        /dev/input/event0: EV_KEY code 35=0, SYN
+[irq1]  0x64=0x1d 0x60=0xaa  break L-Shift
+        /dev/input/event0: EV_KEY code 42=0, SYN
+...
+[tty]   read() returns "Hi cavOS\n" (9 bytes)</code></pre></div>
+<ul>
+<li><strong>Thanh ghi trạng thái <code>0x1d</code></strong> lúc có phím: bit 0 (OBF, có byte), bit 2, 3, 4, và bit 5 = 0 (byte từ bàn phím, không phải chuột).</li>
+<li><strong>Make và break</strong>: H nhấn là <code>0x23</code>, nhả là <code>0xa3</code> = <code>0x23 | 0x80</code>. Đó là scancode set 1 sau khi controller dịch.</li>
+<li><strong>Mã evdev = scancode</strong>: <code>code 35</code> là <code>KEY_H</code> của Linux, đúng bằng <code>0x23</code>. Với phím 1 tới 88, bảng <code>evdevTable</code> của cavOS gần như là phép đồng nhất.</li>
+<li>Vòng lặp đóng vai task đang <code>read()</code> ở chế độ ICANON: gom ký tự tới Enter rồi trả cả dòng, có <code>\n</code> ở cuối.</li>
+</ul>
+<p>Lab tính mỗi ký tự theo hai luật: luật của lab, và luật chép nguyên từ <code>handleKbEvent</code> của cavOS. Khi khác nhau, log in thêm <code>[cavOS rule gives …]</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: sendkey 1
+[irq1]  0x64=0x1d 0x60=0x2  make  key -&gt; '1'   [cavOS rule gives '!']
+##### harness: sendkey shift-c
+[irq1]  0x64=0x1d 0x60=0x2e  make  key -&gt; 'c'   [cavOS rule gives 'C']
+[tty]   read() returns "AB1c
+" (5 bytes)
+##### harness: sendkey shift_r-2
+[irq1]  0x64=0x1d 0x60=0x3  make  key -&gt; '@'   [cavOS rule gives '2']
+##### harness: sendkey shift_r-x
+[irq1]  0x64=0x1d 0x60=0x2d  make  key -&gt; 'X'   [cavOS rule gives 'x']
+[tty]   read() returns "ac
+" (3 bytes)
+##### harness: sendkey down
+[irq1]  0x64=0x1d 0x60=0xe0  prefix E0 (extended key follows)
+[irq1]  0x64=0x1d 0x60=0x50  make  Down   [cavOS rule gives ESC]
+        /dev/input/event0: EV_KEY code 108=1, SYN</code></pre></div>
+<p>Trích theo thứ tự trong log. Hai phím đầu gõ khi Caps Lock đang bật (dòng <code>"AB1c"</code> là <code>a b 1 Shift+c</code>); dòng <code>"ac"</code> là <code>a b Backspace c Enter</code>.</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Gõ</th><th>Lab</th><th>cavOS</th><th>Vì sao cavOS khác</th></tr></thead>
+<tbody>
+<tr><td>Caps + <code>1</code></td><td><code>1</code></td><td><code>!</code></td><td>Caps Lock chọn cả bảng <code>shiftedCharacterTable</code>, không chỉ chữ cái</td></tr>
+<tr><td>Caps + Shift + <code>c</code></td><td><code>c</code></td><td><code>C</code></td><td><code>shifted || capsLocked</code>: hai cái không triệt tiêu nhau</td></tr>
+<tr><td>Shift phải + <code>2</code></td><td><code>@</code></td><td><code>2</code></td><td>chỉ xử lý scancode 42 (Shift trái), bỏ qua 54</td></tr>
+<tr><td>mũi tên xuống</td><td>(không có ký tự)</td><td>ESC</td><td>bỏ qua tiền tố <code>0xE0</code>; <code>characterTable[0x50]</code> là <code>0x1B</code></td></tr>
+</tbody>
+</table></div>
+<p>Phía evdev thì đúng: mũi tên lên (<code>E0 48</code>) ra <code>KEY_UP</code> (103), mũi tên xuống ra <code>KEY_DOWN</code> (108). Vì <code>kbEvdevGenerate</code> bỏ qua <code>0xE0</code>, phím keypad 8
+(<code>0x48</code> không tiền tố) cũng ra <code>code 103</code>: cavOS cố ý ánh xạ keypad thành mũi tên.</p>
+
+<h2 id="translate">Kết quả 4: tắt dịch, nhìn set 2 thô</h2>
+<p class="lede"><em>Không có bit dịch, chữ <code>a</code> đến dưới dạng <code>0x1C</code>, mà trong set 1 đó là Enter.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: sendkey f2
+[irq1]  0x64=0x1d 0x60=0x3c  make  F2
+[8042] F2 -&gt; translate=0, config byte now 0x3  (keyboard bytes now arrive as raw set 2)
+[irq1]  0x64=0x1d 0x60=0xf0  raw set 2 (break prefix)
+[irq1]  0x64=0x1d 0x60=0x6  raw set 2
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1c  raw set 2
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "5\n" (2 bytes)
+[irq1]  0x64=0x1d 0x60=0xf0  raw set 2 (break prefix)
+[irq1]  0x64=0x1d 0x60=0x1c  raw set 2
+        /dev/input/event0: EV_KEY code 28=2, SYN
+[tty]   read() returns "\n" (1 bytes)
+##### harness: sendkey f2
+[irq1]  0x64=0x1d 0x60=0x6  raw set 2
+[8042] F2 -&gt; translate=1, config byte now 0x43  (back to set 1 codes)
+[irq1]  0x64=0x1d 0x60=0xbc  break F2
+        /dev/input/event0: EV_KEY code 60=0, SYN</code></pre></div>
+<ul>
+<li>Trong set 2, nhả phím là <strong>hai byte</strong> <code>F0</code> + mã nhấn (F2 nhả = <code>F0 06</code>), không phải mã | <code>0x80</code>.</li>
+<li><code>a</code> nhấn = <code>0x1C</code>. Driver set 1 đọc thành Enter (<code>KEY_ENTER</code>, code 28) và trả một dòng. Byte <code>06</code> trước đó (nhả F2) bị hiểu là phím <code>5</code>,
+nên dòng là <code>"5\n"</code>. Nhả <code>a</code> = <code>F0 1C</code> thành thêm một Enter, và evdev báo <code>value 2</code> (phím lặp).</li>
+<li>Bật lại dịch thì nhả F2 về đúng <code>0xbc</code>. Đây là lý do driver nào giả định set 1 cũng phải chắc bit 6 đang bật; cavOS không kiểm, chỉ tin firmware.</li>
+</ul>
+
+<h2 id="chuot">Kết quả 5: chuột</h2>
+<p class="lede"><em>Mỗi lần di hay bấm là một gói 3 byte qua IRQ12.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>##### harness: mouse_move 10 0
+[irq12] bytes 0x8 0xa 0x0 (0x64 0x3d 0x3d 0x3d) -&gt; dx=+10 dy=+0 L=0 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_RIGHT=0, EV_REL REL_X=+10, EV_REL REL_Y=+0, SYN
+##### harness: mouse_move 0 -5
+[irq12] bytes 0x8 0x0 0x5 (0x64 0x3d 0x3d 0x3d) -&gt; dx=+0 dy=+5 L=0 R=0 M=0
+        /dev/input/event1: EV_REL REL_X=+0, EV_REL REL_Y=-5, SYN
+##### harness: mouse_move -3 4
+[irq12] bytes 0x38 0xfd 0xfc (0x64 0x3d 0x3d 0x3d) -&gt; dx=-3 dy=-4 L=0 R=0 M=0
+        /dev/input/event1: EV_REL REL_X=-3, EV_REL REL_Y=+4, SYN
+##### harness: mouse_move -200 0
+[irq12] bytes 0x18 0x81 0x0 (0x64 0x3d 0x3d 0x3d) -&gt; dx=-127 dy=+0 L=0 R=0 M=0
+[irq12] bytes 0x18 0xb7 0x0 (0x64 0x3d 0x3d 0x3d) -&gt; dx=-73 dy=+0 L=0 R=0 M=0
+##### harness: mouse_button 1
+[irq12] bytes 0x9 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -&gt; dx=+0 dy=+0 L=1 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_LEFT=1, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN
+##### harness: mouse_button 2
+[irq12] bytes 0xa 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -&gt; dx=+0 dy=+0 L=0 R=1 M=0
+        /dev/input/event1: EV_KEY BTN_RIGHT=1, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN</code></pre></div>
+<ul>
+<li><strong>Trạng thái <code>0x3d</code></strong> = <code>0x1d</code> + bit 5: byte đến từ cổng 2 (chuột).</li>
+<li><strong>Byte 0 luôn có bit 3</strong> (<code>0x08</code>). <code>0x38</code> = bit 3 + bit 4 (dấu X) + bit 5 (dấu Y). <code>0xfd</code> với dấu X là <code>0xfd − 0x100 = −3</code>.</li>
+<li><strong>Chiều Y ngược nhau.</strong> Monitor <code>mouse_move 0 -5</code> là đi lên; PS/2 gửi <code>dy=+5</code> (PS/2 lấy lên là dương); evdev ra <code>REL_Y=-5</code> (Linux lấy xuống là dương).
+cavOS đổi dấu đúng chỗ này: <code>REL_Y, -y</code>.</li>
+<li><strong>Di 200 thành hai gói</strong> <code>−127</code> và <code>−73</code>: QEMU tự chia, nên bit tràn (bit 6, 7) không bao giờ bật.</li>
+<li><strong>Gói đầu tiên sinh <code>BTN_RIGHT=0</code> dù chưa ai bấm nút phải</strong>: cavOS khởi tạo <code>clickedRight = true</code>, lab giữ y nguyên để thấy.</li>
+<li><code>mouse resyncs=0</code> ở dòng cuối: không gói nào lệch nhịp trong lần chạy này.</li>
+</ul>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Thứ tự khởi tạo và thuật toán giữ như cavOS; chỗ khác đều có lý do.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab</th></tr></thead>
+<tbody>
+<tr><td><code>/dev/</code></td><td><code>fsMount("/dev/", CONNECTOR_DEV)</code>; mỗi thiết bị là một file <code>/dev/input/eventN</code> trong fakefs</td><td><code>input_init()</code>: chỉ ring buffer, chưa có VFS</td></tr>
+<tr><td>Kiểm tra controller</td><td>không: tin bit IRQ1 và bit dịch của firmware</td><td><code>ps2_probe()</code> in trạng thái, byte cấu hình, scancode set (chỉ để xem)</td></tr>
+<tr><td>Ký tự</td><td>Caps dùng bảng Shift; không Shift phải; bỏ qua <code>0xE0</code></td><td>Caps chỉ đổi chữ cái; có Shift phải; byte sau <code>0xE0</code> không ra ký tự. In luật cavOS bên cạnh</td></tr>
+<tr><td>Ai nhận ký tự</td><td><code>kbBuff</code> của task đang chờ trong <code>read()</code>; không ai chờ thì bỏ</td><td>ring <code>tty_q</code>, vòng lặp chính luôn đọc</td></tr>
+<tr><td>Gói chuột lệch nhịp</td><td><code>assert(mouse1 &amp; (1 &lt;&lt; 3))</code> → panic</td><td>bỏ byte, đếm <code>mouseResyncs</code></td></tr>
+<tr><td>Dấu 9 bit</td><td><code>if (x &amp;&amp; sign) x -= 0x100</code></td><td><code>if (sign) x -= 0x100</code></td></tr>
+<tr><td>Ring đầy</td><td><code>assert(CircularIntWrite(...) == size)</code> → panic</td><td>bỏ sự kiện, đếm <code>dropped</code></td></tr>
+<tr><td>Thứ tự khởi tạo, <code>clickedRight = true</code>, bitmap evdev</td><td colspan="2">giữ y như cavOS để thấy hậu quả trong log (Kết quả 2 và 5)</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa code và chạy lại script để kiểm.</em></p>
+<details class="quiz"><summary>Bỏ dòng <code>inb(PS2_DATA)</code> cuối <code>initiateKb()</code>. Khi nào bàn phím sẽ "chết"?</summary>
+<p>Khi lúc đó còn một byte nằm sẵn ở <code>0x60</code>. 8042 giữ dây IRQ1 ở mức cao chừng nào bộ đệm còn đầy, còn I/O APIC nối IRQ1 kiểu edge: không có cạnh lên mới thì không có ngắt, và
+không ai đọc byte cũ nên không bao giờ có cạnh mới. Lần chạy này bộ đệm rỗng (<code>stale bytes flushed = 0</code>), nên có thể không thấy lỗi.</p></details>
+<details class="quiz"><summary>Đổi thứ tự: gọi <code>initiateMouse()</code> trước <code>initiateKb()</code>. Dòng <code>[early]</code> còn không?</summary>
+<p>Không. Lúc lệnh <code>0x20</code> chạy, IRQ1 chưa được nối qua I/O APIC (chân 1 còn bị che), nên không ai giành byte cấu hình; <code>mouseRead</code> đọc được byte thật.
+Đã chạy thử bản đổi thứ tự: log không còn dòng <code>[early]</code>, và chuột thành <code>event0</code> vì đăng ký trước.</p></details>
+<details class="quiz"><summary>Gửi <code>mouse_move 0 -5</code> nhưng chương trình đọc <code>/dev/input/event1</code> thấy <code>REL_Y=+5</code>. Sai ở đâu?</summary>
+<p>Quên đổi dấu Y. PS/2 coi đi lên là dương, evdev coi đi xuống là dương; cavOS ghi <code>REL_Y, -y</code>.</p></details>
+<details class="quiz"><summary>Trong <code>mouseIrq</code>, làm sao biết byte đang đọc là byte đầu của gói?</summary>
+<p>Chỉ nhờ đếm (<code>mouseCycle</code>) và kiểm bit 3 của byte đầu luôn bằng 1. Bit 5 của thanh ghi trạng thái chỉ cho biết byte đến từ chuột, không cho biết vị trí trong gói. Lệch một byte
+thì mọi gói sau đều sai, nên phải đồng bộ lại bằng bit 3.</p></details>
+<details class="quiz"><summary>Bỏ <code>devInputEventOpen(kbEvent)</code>. Còn thấy dòng <code>/dev/input/event0:</code> nào không? Ký tự còn tới <code>read()</code> không?</summary>
+<p>Không còn dòng event0: <code>inputGenerateEvent</code> bỏ mọi sự kiện khi <code>timesOpened == 0</code>, như cavOS. Ký tự vẫn tới, vì đường ký tự (<code>tty_q</code>, ở cavOS là
+<code>kbBuff</code>) không đi qua evdev.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html">Bài 11 - PS/2 Keyboard &amp; Mouse</a> · nền <a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>
+(<code>ioApicRedirect</code>), <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a> (<code>handle_interrupt</code>, EOI).</li>
+<li>Lab trước: <a href="lab_0x05_acpi_apic.html">Lab 0x05 - ACPI, APIC &amp; Timer</a> (APIC, timer, <code>irqPerCoreAllocate</code> dùng nguyên).</li>
+<li>Ai đánh thức task đang chờ phím: <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>. VFS và <code>/dev/</code>: <a href="../ly_thuyet/bai/bai_15_ahci_filesystems.html">Bài 15</a>.</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x06 - PS/2 Keyboard &amp; Mouse</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

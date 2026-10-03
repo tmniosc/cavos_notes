@@ -52,16 +52,16 @@ window.SITE = {
       {
        "t": "Bài 10 - APIC & Timer",
        "h": "ly_thuyet/bai/bai_10_apic_timer.html"
+      },
+      {
+       "t": "Bài 11 - PS2 Keyboard & Mouse",
+       "h": "ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html"
       }
      ]
     },
     {
      "t": "Sắp tới (mới có dàn ý)",
      "c": [
-      {
-       "t": "Bài 11 - PS2 Keyboard & Mouse",
-       "h": "ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html"
-      },
       {
        "t": "Bài 12 - Multitasking & Scheduler",
        "h": "ly_thuyet/bai/bai_12_multitasking_scheduler.html"
@@ -203,6 +203,10 @@ window.SITE = {
     {
      "t": "Lab 0x05 - ACPI, APIC & Timer",
      "h": "thuc_hanh/lab_0x05_acpi_apic.html"
+    },
+    {
+     "t": "Lab 0x06 - PS/2 Keyboard & Mouse",
+     "h": "thuc_hanh/lab_0x06_ps2.html"
     }
    ],
    "h": "thuc_hanh/thuc_hanh.html"

@@ -20,7 +20,8 @@ oskernel-lab/
 ├─ 02-framebuffer/       vẽ pixel + chữ, font 8x8 nhúng
 ├─ 03-pmm-vmm/           bitmap PMM + tự dựng PML4, mov cr3, vmap/vresolve
 ├─ 04-gdt-idt/           GDT + TSS như cavOS (lgdt, lretq, ltr), IDT 256 cổng + stub ISR, bắt #BP/#DE/#UD/#GP/#PF, IST1 cho #DF
-└─ 05-acpi-apic/         RSDP → RSDT/XSDT → MADT/FADT tự parse, LAPIC (MMIO uncached) + I/O APIC, PIT đo LAPIC timer, periodic 1 ms, sti
+├─ 05-acpi-apic/         RSDP → RSDT/XSDT → MADT/FADT tự parse, LAPIC (MMIO uncached) + I/O APIC, PIT đo LAPIC timer, periodic 1 ms, sti
+└─ 06-ps2/               8042 + bàn phím IRQ1 (set 1 qua translate, keymap Shift/Caps) + chuột IRQ12 (gói 3 byte), ring buffer kiểu /dev/input/eventN; scripts/ps2_input.py gõ phím thật qua QEMU monitor
 ```
 
 ## Chạy

@@ -1,0 +1,326 @@
+# Lab 0x06 - PS/2 Keyboard & Mouse: real serial output (COM1), captured 2026-10-03 11:30 +07
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2); Limine 8.7.0 (BIOS + UEFI install); toolchain : cross (/home/thinker/opt/cross/bin/x86_64-cavos-gcc) -O2
+# Run 1 (full): -M q35 -m 256M -serial stdio -display none -no-reboot -no-shutdown -monitor unix:/tmp/lab06-monitor-PID.sock,server,nowait  (TCG, SeaBIOS)
+# Input is real: scripts/ps2_input.py waits for '[kernel] ready for input', then sends QEMU monitor commands
+# (sendkey, mouse_move, mouse_button). Lines '##### harness: ...' are written by the harness (what it sent),
+# not by the kernel; their position relative to kernel lines is approximate.
+
+=== Lab 0x06 - PS/2 Keyboard & Mouse ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC ready; interrupts on
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6c4fb -> 604932 LAPIC ticks in 10 ms -> apicFreq = 60493 ticks/ms (div 16 -> timer input clock ~967 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 60493 -> one interrupt per ms
+
+[8042] status at boot      = 0x1c (OBF=0 IBF=0 SYS=1 CMD=1 AUX=0)
+[8042] stale bytes flushed = 0
+[8042] config left by firmware = 0x61 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=1 translate=1)
+[8042] kb 0xF0 0x00 (get scancode set), translate=1: ACK 0xfa, ACK 0xfa, reply 0x41 (= set 2 after translation)
+[8042] kb 0xF0 0x00 (get scancode set), translate=0: ACK 0xfa, ACK 0xfa, reply 0x2
+
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[ioapic] pins 1 and 12 after initiateKb/initiateMouse:
+[ioapic]   pin  1: 0x0000000000000022  vector=0x22 ACTIVE edge high dest=0
+[ioapic]   pin 12: 0x0000000000000023  vector=0x23 ACTIVE edge high dest=0
+[dev] opened /dev/input/event0 (PS/2 Keyboard) and /dev/input/event1 (PS/2 Mouse)
+[early] [irq1]  0x64=0x1d 0x60=0x41  make  F7
+[kernel] ready for input (Esc to stop)
+##### harness: lowercase, left Shift, Space, Enter
+##### harness: sendkey shift-h
+[irq1]  0x64=0x1d 0x60=0x2a  make  L-Shift
+        /dev/input/event0: EV_KEY code 42=1, SYN
+[irq1]  0x64=0x1d 0x60=0x23  make  key -> 'H'
+        /dev/input/event0: EV_KEY code 35=1, SYN
+[irq1]  0x64=0x1d 0x60=0xa3  break key
+        /dev/input/event0: EV_KEY code 35=0, SYN
+[irq1]  0x64=0x1d 0x60=0xaa  break L-Shift
+        /dev/input/event0: EV_KEY code 42=0, SYN
+##### harness: sendkey i
+[irq1]  0x64=0x1d 0x60=0x17  make  key -> 'i'
+        /dev/input/event0: EV_KEY code 23=1, SYN
+[irq1]  0x64=0x1d 0x60=0x97  break key
+        /dev/input/event0: EV_KEY code 23=0, SYN
+##### harness: sendkey spc
+[irq1]  0x64=0x1d 0x60=0x39  make  Space -> ' '
+        /dev/input/event0: EV_KEY code 57=1, SYN
+[irq1]  0x64=0x1d 0x60=0xb9  break Space
+        /dev/input/event0: EV_KEY code 57=0, SYN
+##### harness: sendkey c
+[irq1]  0x64=0x1d 0x60=0x2e  make  key -> 'c'
+        /dev/input/event0: EV_KEY code 46=1, SYN
+[irq1]  0x64=0x1d 0x60=0xae  break key
+        /dev/input/event0: EV_KEY code 46=0, SYN
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1e  make  key -> 'a'
+        /dev/input/event0: EV_KEY code 30=1, SYN
+[irq1]  0x64=0x1d 0x60=0x9e  break key
+        /dev/input/event0: EV_KEY code 30=0, SYN
+##### harness: sendkey v
+[irq1]  0x64=0x1d 0x60=0x2f  make  key -> 'v'
+        /dev/input/event0: EV_KEY code 47=1, SYN
+[irq1]  0x64=0x1d 0x60=0xaf  break key
+        /dev/input/event0: EV_KEY code 47=0, SYN
+##### harness: sendkey shift-o
+[irq1]  0x64=0x1d 0x60=0x2a  make  L-Shift
+        /dev/input/event0: EV_KEY code 42=1, SYN
+[irq1]  0x64=0x1d 0x60=0x18  make  key -> 'O'
+        /dev/input/event0: EV_KEY code 24=1, SYN
+[irq1]  0x64=0x1d 0x60=0x98  break key
+        /dev/input/event0: EV_KEY code 24=0, SYN
+[irq1]  0x64=0x1d 0x60=0xaa  break L-Shift
+        /dev/input/event0: EV_KEY code 42=0, SYN
+##### harness: sendkey shift-s
+[irq1]  0x64=0x1d 0x60=0x2a  make  L-Shift
+        /dev/input/event0: EV_KEY code 42=1, SYN
+[irq1]  0x64=0x1d 0x60=0x1f  make  key -> 'S'
+        /dev/input/event0: EV_KEY code 31=1, SYN
+[irq1]  0x64=0x1d 0x60=0x9f  break key
+        /dev/input/event0: EV_KEY code 31=0, SYN
+[irq1]  0x64=0x1d 0x60=0xaa  break L-Shift
+        /dev/input/event0: EV_KEY code 42=0, SYN
+##### harness: sendkey ret
+[irq1]  0x64=0x1d 0x60=0x1c  make  Enter -> '\n'
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "Hi cavOS\n" (9 bytes)
+[irq1]  0x64=0x1d 0x60=0x9c  break Enter
+        /dev/input/event0: EV_KEY code 28=0, SYN
+##### harness: Caps Lock on: letters, a digit, Shift+letter; then Caps Lock off
+##### harness: sendkey caps_lock
+[irq1]  0x64=0x1d 0x60=0x3a  make  CapsLock
+        /dev/input/event0: EV_KEY code 58=1, SYN
+[irq1]  0x64=0x1d 0x60=0xba  break CapsLock
+        /dev/input/event0: EV_KEY code 58=0, SYN
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1e  make  key -> 'A'
+        /dev/input/event0: EV_KEY code 30=1, SYN
+[irq1]  0x64=0x1d 0x60=0x9e  break key
+        /dev/input/event0: EV_KEY code 30=0, SYN
+##### harness: sendkey b
+[irq1]  0x64=0x1d 0x60=0x30  make  key -> 'B'
+        /dev/input/event0: EV_KEY code 48=1, SYN
+[irq1]  0x64=0x1d 0x60=0xb0  break key
+        /dev/input/event0: EV_KEY code 48=0, SYN
+##### harness: sendkey 1
+[irq1]  0x64=0x1d 0x60=0x2  make  key -> '1'   [cavOS rule gives '!']
+        /dev/input/event0: EV_KEY code 2=1, SYN
+[irq1]  0x64=0x1d 0x60=0x82  break key
+        /dev/input/event0: EV_KEY code 2=0, SYN
+##### harness: sendkey shift-c
+[irq1]  0x64=0x1d 0x60=0x2a  make  L-Shift
+        /dev/input/event0: EV_KEY code 42=1, SYN
+[irq1]  0x64=0x1d 0x60=0x2e  make  key -> 'c'   [cavOS rule gives 'C']
+        /dev/input/event0: EV_KEY code 46=1, SYN
+[irq1]  0x64=0x1d 0x60=0xae  break key
+        /dev/input/event0: EV_KEY code 46=0, SYN
+[irq1]  0x64=0x1d 0x60=0xaa  break L-Shift
+        /dev/input/event0: EV_KEY code 42=0, SYN
+##### harness: sendkey ret
+[irq1]  0x64=0x1d 0x60=0x1c  make  Enter -> '\n'
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "AB1c\n" (5 bytes)
+[irq1]  0x64=0x1d 0x60=0x9c  break Enter
+        /dev/input/event0: EV_KEY code 28=0, SYN
+##### harness: sendkey caps_lock
+[irq1]  0x64=0x1d 0x60=0x3a  make  CapsLock
+        /dev/input/event0: EV_KEY code 58=1, SYN
+[irq1]  0x64=0x1d 0x60=0xba  break CapsLock
+        /dev/input/event0: EV_KEY code 58=0, SYN
+##### harness: right Shift
+##### harness: sendkey shift_r-2
+[irq1]  0x64=0x1d 0x60=0x36  make  R-Shift
+        /dev/input/event0: EV_KEY code 54=1, SYN
+[irq1]  0x64=0x1d 0x60=0x3  make  key -> '@'   [cavOS rule gives '2']
+        /dev/input/event0: EV_KEY code 3=1, SYN
+[irq1]  0x64=0x1d 0x60=0x83  break key
+        /dev/input/event0: EV_KEY code 3=0, SYN
+[irq1]  0x64=0x1d 0x60=0xb6  break R-Shift
+        /dev/input/event0: EV_KEY code 54=0, SYN
+##### harness: sendkey shift_r-x
+[irq1]  0x64=0x1d 0x60=0x36  make  R-Shift
+        /dev/input/event0: EV_KEY code 54=1, SYN
+[irq1]  0x64=0x1d 0x60=0x2d  make  key -> 'X'   [cavOS rule gives 'x']
+        /dev/input/event0: EV_KEY code 45=1, SYN
+[irq1]  0x64=0x1d 0x60=0xad  break key
+        /dev/input/event0: EV_KEY code 45=0, SYN
+[irq1]  0x64=0x1d 0x60=0xb6  break R-Shift
+        /dev/input/event0: EV_KEY code 54=0, SYN
+##### harness: sendkey ret
+[irq1]  0x64=0x1d 0x60=0x1c  make  Enter -> '\n'
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "@X\n" (3 bytes)
+[irq1]  0x64=0x1d 0x60=0x9c  break Enter
+        /dev/input/event0: EV_KEY code 28=0, SYN
+##### harness: Backspace
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1e  make  key -> 'a'
+        /dev/input/event0: EV_KEY code 30=1, SYN
+[irq1]  0x64=0x1d 0x60=0x9e  break key
+        /dev/input/event0: EV_KEY code 30=0, SYN
+##### harness: sendkey b
+[irq1]  0x64=0x1d 0x60=0x30  make  key -> 'b'
+        /dev/input/event0: EV_KEY code 48=1, SYN
+[irq1]  0x64=0x1d 0x60=0xb0  break key
+        /dev/input/event0: EV_KEY code 48=0, SYN
+##### harness: sendkey backspace
+[irq1]  0x64=0x1d 0x60=0xe  make  Backspace -> '\b'
+        /dev/input/event0: EV_KEY code 14=1, SYN
+[irq1]  0x64=0x1d 0x60=0x8e  break Backspace
+        /dev/input/event0: EV_KEY code 14=0, SYN
+##### harness: sendkey c
+[irq1]  0x64=0x1d 0x60=0x2e  make  key -> 'c'
+        /dev/input/event0: EV_KEY code 46=1, SYN
+[irq1]  0x64=0x1d 0x60=0xae  break key
+        /dev/input/event0: EV_KEY code 46=0, SYN
+##### harness: sendkey ret
+[irq1]  0x64=0x1d 0x60=0x1c  make  Enter -> '\n'
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "ac\n" (3 bytes)
+[irq1]  0x64=0x1d 0x60=0x9c  break Enter
+        /dev/input/event0: EV_KEY code 28=0, SYN
+##### harness: extended keys (E0 prefix) vs keypad 8
+##### harness: sendkey up
+[irq1]  0x64=0x1d 0x60=0xe0  prefix E0 (extended key follows)
+[irq1]  0x64=0x1d 0x60=0x48  make  Up
+        /dev/input/event0: EV_KEY code 103=1, SYN
+[irq1]  0x64=0x1d 0x60=0xe0  prefix E0 (extended key follows)
+[irq1]  0x64=0x1d 0x60=0xc8  break Up
+        /dev/input/event0: EV_KEY code 103=0, SYN
+##### harness: sendkey down
+[irq1]  0x64=0x1d 0x60=0xe0  prefix E0 (extended key follows)
+[irq1]  0x64=0x1d 0x60=0x50  make  Down   [cavOS rule gives ESC]
+        /dev/input/event0: EV_KEY code 108=1, SYN
+[irq1]  0x64=0x1d 0x60=0xe0  prefix E0 (extended key follows)
+[irq1]  0x64=0x1d 0x60=0xd0  break Down
+        /dev/input/event0: EV_KEY code 108=0, SYN
+##### harness: sendkey kp_8
+[irq1]  0x64=0x1d 0x60=0x48  make  KP8
+        /dev/input/event0: EV_KEY code 103=1, SYN
+[irq1]  0x64=0x1d 0x60=0xc8  break KP8
+        /dev/input/event0: EV_KEY code 103=0, SYN
+##### harness: F2 = translation off, 'a', F2 = translation on, 'a'
+##### harness: sendkey f2
+[irq1]  0x64=0x1d 0x60=0x3c  make  F2
+[8042] F2 -> translate=0, config byte now 0x3  (keyboard bytes now arrive as raw set 2)
+        /dev/input/event0: EV_KEY code 60=1, SYN
+[irq1]  0x64=0x1d 0x60=0xf0  raw set 2 (break prefix)
+[irq1]  0x64=0x1d 0x60=0x6  raw set 2
+        /dev/input/event0: EV_KEY code 6=1, SYN
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1c  raw set 2
+        /dev/input/event0: EV_KEY code 28=1, SYN
+[tty]   read() returns "5\n" (2 bytes)
+[irq1]  0x64=0x1d 0x60=0xf0  raw set 2 (break prefix)
+[irq1]  0x64=0x1d 0x60=0x1c  raw set 2
+        /dev/input/event0: EV_KEY code 28=2, SYN
+[tty]   read() returns "\n" (1 bytes)
+##### harness: sendkey f2
+[irq1]  0x64=0x1d 0x60=0x6  raw set 2
+[8042] F2 -> translate=1, config byte now 0x43  (back to set 1 codes)
+[irq1]  0x64=0x1d 0x60=0xbc  break F2
+        /dev/input/event0: EV_KEY code 60=0, SYN
+##### harness: sendkey a
+[irq1]  0x64=0x1d 0x60=0x1e  make  key -> 'a'
+        /dev/input/event0: EV_KEY code 30=1, SYN
+[irq1]  0x64=0x1d 0x60=0x9e  break key
+        /dev/input/event0: EV_KEY code 30=0, SYN
+##### harness: mouse: right 10, up 5, left 3 + down 4, left 200
+##### harness: mouse_move 10 0
+[irq12] bytes 0x8 0xa 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=+10 dy=+0 L=0 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_RIGHT=0, EV_REL REL_X=+10, EV_REL REL_Y=+0, SYN
+##### harness: mouse_move 0 -5
+[irq12] bytes 0x8 0x0 0x5 (0x64 0x3d 0x3d 0x3d) -> dx=+0 dy=+5 L=0 R=0 M=0
+        /dev/input/event1: EV_REL REL_X=+0, EV_REL REL_Y=-5, SYN
+##### harness: mouse_move -3 4
+[irq12] bytes 0x38 0xfd 0xfc (0x64 0x3d 0x3d 0x3d) -> dx=-3 dy=-4 L=0 R=0 M=0
+        /dev/input/event1: EV_REL REL_X=-3, EV_REL REL_Y=+4, SYN
+##### harness: mouse_move -200 0
+[irq12] bytes 0x18 0x81 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=-127 dy=+0 L=0 R=0 M=0
+[irq12] bytes 0x18 0xb7 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=-73 dy=+0 L=0 R=0 M=0
+        /dev/input/event1: EV_REL REL_X=-127, EV_REL REL_Y=+0, SYN
+        /dev/input/event1: EV_REL REL_X=-73, EV_REL REL_Y=+0, SYN
+##### harness: mouse buttons: left down/up, right down/up
+##### harness: mouse_button 1
+[irq12] bytes 0x9 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=+0 dy=+0 L=1 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_LEFT=1, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN
+##### harness: mouse_button 0
+[irq12] bytes 0x8 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=+0 dy=+0 L=0 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_LEFT=0, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN
+##### harness: mouse_button 2
+[irq12] bytes 0xa 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=+0 dy=+0 L=0 R=1 M=0
+        /dev/input/event1: EV_KEY BTN_RIGHT=1, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN
+##### harness: mouse_button 0
+[irq12] bytes 0x8 0x0 0x0 (0x64 0x3d 0x3d 0x3d) -> dx=+0 dy=+0 L=0 R=0 M=0
+        /dev/input/event1: EV_KEY BTN_RIGHT=0, EV_REL REL_X=+0, EV_REL REL_Y=+0, SYN
+##### harness: F7: the 0x41 read during initiateMouse left F7 marked as held in the evdev bitmap
+##### harness: sendkey f7
+[irq1]  0x64=0x1d 0x60=0x41  make  F7
+[irq1]  0x64=0x1d 0x60=0xc1  break F7
+        /dev/input/event0: EV_KEY code 65=0, SYN
+##### harness: Esc ends the demo
+##### harness: sendkey esc
+[irq1]  0x64=0x1d 0x60=0x1  make  Esc -> ESC
+        /dev/input/event0: EV_KEY code 1=1, SYN
+[kernel] Esc pressed. lines read=6 dropped: trace=0 event0=0 event1=0 mouse resyncs=0
+[kernel] done, cli; hlt
+
+# ======================================================================================
+# Run 2: same harness + -enable-kvm. Only the lines that matter (grep), full run has 266 lines.
+# ======================================================================================
+[8042] status at boot      = 0x1c (OBF=0 IBF=0 SYS=1 CMD=1 AUX=0)
+[8042] stale bytes flushed = 0
+[8042] config left by firmware = 0x61 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=1 translate=1)
+[8042] kb 0xF0 0x00 (get scancode set), translate=1: ACK 0xfa, ACK 0xfa, reply 0x41 (= set 2 after translation)
+[8042] kb 0xF0 0x00 (get scancode set), translate=0: ACK 0xfa, ACK 0xfa, reply 0x2
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[early] [irq1]  0x64=0x1d 0x60=0x41  make  F7
+[kernel] ready for input (Esc to stop)
+[tty]   read() returns "Hi cavOS\n" (9 bytes)
+[tty]   read() returns "AB1c\n" (5 bytes)
+[tty]   read() returns "@X\n" (3 bytes)
+[tty]   read() returns "ac\n" (3 bytes)
+[8042] F2 -> translate=0, config byte now 0x3  (keyboard bytes now arrive as raw set 2)
+[tty]   read() returns "5\n" (2 bytes)
+[tty]   read() returns "\n" (1 bytes)
+[8042] F2 -> translate=1, config byte now 0x43  (back to set 1 codes)
+        /dev/input/event1: EV_KEY BTN_RIGHT=0, EV_REL REL_X=+10, EV_REL REL_Y=+0, SYN
+##### harness: F7: the 0x41 read during initiateMouse left F7 marked as held in the evdev bitmap
+[irq1]  0x64=0x1d 0x60=0x41  make  F7
+[irq1]  0x64=0x1d 0x60=0xc1  break F7
+        /dev/input/event0: EV_KEY code 65=0, SYN
+[kernel] Esc pressed. lines read=6 dropped: trace=0 event0=0 event1=0 mouse resyncs=0
+[kernel] done, cli; hlt
+
+# ======================================================================================
+# Run 3: same harness + -bios /usr/share/ovmf/OVMF.fd (UEFI). Only the lines that matter (grep), full run has 268 lines.
+# ======================================================================================
+[8042] status at boot      = 0x1c (OBF=0 IBF=0 SYS=1 CMD=1 AUX=0)
+[8042] stale bytes flushed = 0
+[8042] config left by firmware = 0x67 (IRQ1=1 IRQ12=1 SYS=1 port1-clock-off=0 port2-clock-off=1 translate=1)
+[8042] kb 0xF0 0x00 (get scancode set), translate=1: ACK 0xfa, ACK 0xfa, reply 0x41 (= set 2 after translation)
+[8042] kb 0xF0 0x00 (get scancode set), translate=0: ACK 0xfa, ACK 0xfa, reply 0x2
+[mouse] config read after 0xA8 = 0x47 (IRQ1=1 IRQ12=1 SYS=1 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x47 (IRQ1=1 IRQ12=1 SYS=1 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[early] [irq1]  0x64=0x1d 0x60=0x47  make  key
+[kernel] ready for input (Esc to stop)
+[tty]   read() returns "Hi cavOS\n" (9 bytes)
+[tty]   read() returns "AB1c\n" (5 bytes)
+[tty]   read() returns "@X\n" (3 bytes)
+[tty]   read() returns "ac\n" (3 bytes)
+[8042] F2 -> translate=0, config byte now 0x7  (keyboard bytes now arrive as raw set 2)
+[tty]   read() returns "5\n" (2 bytes)
+[tty]   read() returns "\n" (1 bytes)
+[8042] F2 -> translate=1, config byte now 0x47  (back to set 1 codes)
+        /dev/input/event1: EV_KEY BTN_RIGHT=0, EV_REL REL_X=+10, EV_REL REL_Y=+0, SYN
+[kernel] Esc pressed. lines read=6 dropped: trace=0 event0=0 event1=0 mouse resyncs=0
+[kernel] done, cli; hlt
