@@ -169,9 +169,12 @@
         d.appendChild(s);
         d.appendChild(tree(n.c, depth + 1));
         li.appendChild(d);
-      } else {
+      } else if (n.h) {
         li.appendChild(link(n));
         flat.push(n);
+      } else {
+        // No page yet (a to-do item): plain text, not a link, not in Prev/Next
+        li.appendChild(el('span', 'todo', n.t));
       }
       ul.appendChild(li);
     });
@@ -198,14 +201,38 @@
     var ol = el('ol');
     heads.forEach(function (hd) {
       var li = el('li');
-      var a = el('a', hd.tagName === 'H3' ? 'lv3' : null, hd.textContent);
+      var a = el('a', hd.tagName === 'H3' ? 'lv3' : null);
+      // Keep words with a hyphen ("-O", "--target") on one line: browsers may break
+      // right after a hyphen, which leaves a lone "O" on the next line.
+      hd.textContent.split(/(\S*-\S*)/).forEach(function (part, i) {
+        if (!part) return;
+        a.appendChild(i % 2 ? el('span', 'nobr', part) : document.createTextNode(part));
+      });
       a.href = '#' + hd.id;
       links[hd.id] = a;
       li.appendChild(a);
       ol.appendChild(li);
     });
     toc.appendChild(ol);
-    side.appendChild(toc);
+
+    // Wide screens: an outline column on the right of the text. Narrower: back in
+    // the left sidebar, under the site map (three columns wouldn't fit).
+    var layout = side.parentNode;
+    var outline = el('aside', 'side outline');
+    var wide = window.matchMedia('(min-width: 1400px)');
+    var place = function () {
+      if (wide.matches) {
+        outline.appendChild(toc);
+        if (!outline.parentNode) layout.appendChild(outline);
+        layout.classList.add('has-outline');
+      } else {
+        side.appendChild(toc);
+        if (outline.parentNode) layout.removeChild(outline);
+        layout.classList.remove('has-outline');
+      }
+    };
+    place();
+    if (wide.addEventListener) wide.addEventListener('change', place); else wide.addListener(place);
   }
 
   // scroll-spy: highlight the section being read

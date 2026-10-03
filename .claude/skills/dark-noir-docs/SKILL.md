@@ -30,7 +30,7 @@ what it explains. Files in `assets/`:
 | File | What it is |
 | --- | --- |
 | `noir.css` | the whole theme (tokens, layout, components) |
-| `noir.js` | syntax colours, Copy buttons, sidebar (site map + page contents), scroll-spy, prev/next |
+| `noir.js` | syntax colours, Copy buttons, sidebar (site map), page contents as a right-hand outline on wide screens, scroll-spy, prev/next |
 | `page.html` | skeleton of one page with an example of every component |
 | `fonts/` | IBM Plex Sans + JetBrains Mono woff2 (24 files, ~330 KB) + `LICENSE-*` (OFL) |
 
@@ -67,6 +67,9 @@ from the root (it must equal its `h` in `site.js`, which is how the sidebar
 marks "you are here" and builds prev/next). Everything is relative, so the
 site works from `file://` with no server. **When adding a page, add it to
 `site.js` too.** A folder node may have its own page (`h`) plus children (`c`).
+A leaf **without `h`** is a to-do item (a page not written yet): it shows as dim
+italic text in the sidebar, is not a link, and is skipped by Prev/Next. Keep a
+"to-do" group in `site.js` for planned pages instead of linking to missing files.
 When the theme files in the skill change, copy them over the site's `assets/`.
 
 ## Page anatomy
@@ -83,6 +86,13 @@ When the theme files in the skill change, copy them over the site's `assets/`.
   <main> …content… <nav class="pager"></nav><footer>…</footer></main>
 </div>
 ```
+
+"On this page" (built from `h2[id]`, `h3[id]`) goes into a **right-hand outline
+column** when the window is at least 1400px wide: `noir.js` adds `aside.side.outline`
+after `main` and the class `has-outline` on `.layout` (widths: `--side` 320px,
+`--outline` 300px). Narrower, it sits under the site map in the left sidebar, and it
+moves back and forth as the window is resized. Words with a hyphen (`-O`,
+`--target`) are kept on one line in the outline so a lone fragment never wraps.
 
 Content components (all shown in `page.html`):
 

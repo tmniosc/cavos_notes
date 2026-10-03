@@ -69,7 +69,8 @@
   --mono: "JetBrains Mono", "Cascadia Code", "Cascadia Mono", Consolas, monospace;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --display: var(--sans);
-  --side: 280px;
+  --side: 320px;
+  --outline: 300px;
   color-scheme: dark;
 }
 *, *::before, *::after { box-sizing: border-box; border-radius: 0 !important; }
@@ -101,6 +102,12 @@ a.broken { color: var(--muted); border-bottom: 1px dashed #555; cursor: help; }
 .layout { max-width: 1240px; margin: 0 auto; display: grid; grid-template-columns: var(--side) minmax(0, 1fr); }
 .side { position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto;
         padding: 24px 18px 40px 32px; border-right: 1px solid var(--line); font-size: 13.5px; }
+/* "On this page" as a right-hand outline column on wide screens (noir.js moves it) */
+.layout.has-outline { max-width: 1620px; grid-template-columns: var(--side) minmax(0, 1fr) var(--outline); }
+.side.outline { border-right: 0; border-left: 1px solid var(--line); padding: 24px 24px 40px 18px; font-size: 13px; }
+/* Wrap long headings evenly (no lone last word) and never split at a hyphen: "-O", "--target" stay whole */
+.side .toc a { text-wrap: pretty; hyphens: manual; }
+.side .toc a code, .side .toc a .nobr { white-space: nowrap; }
 .side .label { margin: 22px 0 6px; font: 600 11.5px var(--display); letter-spacing: .16em; text-transform: uppercase; color: var(--head); }
 .side .label:first-child { margin-top: 0; }
 .side .label.dim { color: var(--grey); }
@@ -108,6 +115,9 @@ a.broken { color: var(--muted); border-bottom: 1px dashed #555; cursor: help; }
 .side a { display: block; padding: 3px 0 3px 10px; color: var(--muted); border: 0; border-left: 2px solid transparent; }
 .side a:hover { color: var(--head); }
 .side a.on, .side a.here { color: var(--head); border-left-color: var(--head); }
+.side .todo { display: block; padding: 3px 0 3px 10px; color: var(--muted); opacity: .6; font-style: italic; cursor: default;
+  border-left: 2px dotted var(--line); }
+.todo-list li { color: var(--muted); }
 .side .toc a.lv3 { padding-left: 22px; font-size: 13px; }
 .side details { margin: 2px 0; }
 .side summary { cursor: pointer; list-style: none; padding: 3px 0; color: var(--grey);
