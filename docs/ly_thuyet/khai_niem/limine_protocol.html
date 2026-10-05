@@ -94,7 +94,7 @@ revision thấp hơn không hứa.</p>
 <p>Những gì Limine <em>không</em> hứa thì kernel phải tự lo: IDT (trạng thái không xác định), GDT và TSS của riêng mình, bảng trang của riêng mình nếu muốn đổi quyền.</p>
 
 <h2 id="khong-lam">Bootloader không làm gì (dễ hiểu nhầm)</h2>
-<p class="lede"><em>Bootloader là người đưa thư: nó đọc lại thông tin firmware đã có, không tự cấu hình phần cứng.</em></p>
+<p class="lede"><em>Bootloader là người chuyển lời: thông tin về máy do firmware gom sẵn, bootloader đọc lại rồi trao cho kernel. Nó chỉnh CPU (long mode, paging) nhưng không cấu hình thiết bị.</em></p>
 <div class="table-wrap"><table>
 <thead><tr><th>Việc</th><th>Ai làm</th><th>Bootloader?</th></tr></thead>
 <tbody>

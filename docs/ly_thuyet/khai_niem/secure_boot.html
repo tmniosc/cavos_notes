@@ -23,7 +23,7 @@ trong <code>dbx</code></strong>. Bootloader của một hobby OS thường khôn
 </div>
 
 <h2 id="bốn-kho-khóa-pk-kek-db-dbx">Bốn kho khóa: PK, KEK, db, dbx</h2>
-<p class="lede"><em>Giống một tòa nhà: chủ nhà (PK) chọn ai được làm quản lý (KEK); quản lý giữ danh sách khách được vào (db) và sổ đen (dbx).</em></p>
+<p class="lede"><em>Giống một tòa nhà: chủ nhà (PK) chọn ai được làm quản lý (KEK); quản lý giữ danh sách được vào (db: từng khách cụ thể, hoặc người bảo lãnh mà ai có giấy của họ cũng được vào) và sổ đen (dbx). Bảo vệ cổng là firmware, kiểm từng file trước khi cho chạy.</em></p>
 <p>Cả bốn là <a href="uefi_runtime_services.html#biến-uefi">biến UEFI</a> có thuộc tính authenticated: muốn ghi phải kèm chữ ký của khóa cấp trên.</p>
 <div class="table-wrap"><table>
 <thead><tr><th>Biến</th><th>Chứa gì</th><th>Ai được sửa</th></tr></thead>

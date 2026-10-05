@@ -24,10 +24,10 @@ protected mode &amp; long mode. Note này giảng GDT <strong>theo spec x86</str
 </div>
 <h3 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h3>
 <div class="callout quote">
-<p><em>Tưởng tượng RAM là một toà nhà lớn. Ngày xưa CPU chia toà nhà thành nhiều "phòng" (segment) và mỗi
+<p><em>Tưởng tượng vùng địa chỉ mà chương trình nhìn thấy là một toà nhà lớn (toà nhà này là địa chỉ, không phải RAM, xem mục 0). Ngày xưa CPU chia toà nhà thành nhiều "phòng" (segment) và mỗi
 phòng có một <strong>tấm thẻ mô tả</strong>: phòng này từ tầng nào tới tầng nào, ai được vào (sếp hay nhân viên),
 được làm gì (đọc/ghi/chạy). <strong>GDT chính là tập tấm thẻ đó</strong> — một danh sách, mỗi dòng = 1 tấm thẻ
-(gọi là descriptor). CPU giữ trong tay một "số ghế" (selector) để biết đang dùng tấm thẻ nào.</em></p>
+(gọi là descriptor). CPU giữ trong tay một "số thẻ" (selector) để biết đang dùng tấm thẻ nào.</em></p>
 <p><em>Thời 32-bit, mấy tấm thẻ này nói rõ "phòng ở đâu, to bao nhiêu" — phân vùng bộ nhớ thật sự. Sang
 64-bit (long mode), người ta thấy cách chia phòng này lỗi thời (đã có <a href="paging.html">Paging</a> lo việc đó tốt hơn),
 nên CPU <strong>gần như bỏ qua phần "phòng ở đâu, to bao nhiêu"</strong> — mọi phòng coi như phủ cả toà nhà (phẳng).
@@ -485,7 +485,7 @@ descriptor 8 byte <strong>+ 1 ô TSS riêng 16 byte</strong> ở cuối.</li>
 được một ô IST (0 = không dùng).</li>
 <li>Nạp TSS: <code>ltr &lt;selector&gt;</code> (load task register), trỏ vào TSS descriptor trong GDT.</li>
 </ul>
-<h2 id="8-segment-selector-số-ghế-trỏ-vào-bảng">8. Segment selector — "số ghế" trỏ vào bảng</h2>
+<h2 id="8-segment-selector-số-ghế-trỏ-vào-bảng">8. Segment selector — "số thẻ" trỏ vào bảng</h2>
 <p class="lede"><em>Thanh ghi đoạn (CS, DS, SS...) không chứa descriptor, chúng chứa một <strong>selector 16-bit</strong> = "lấy dòng
 thứ mấy trong bảng, ở ring nào". CPU dùng selector để tra ra descriptor.</em></p>
 <figure class="diagram">

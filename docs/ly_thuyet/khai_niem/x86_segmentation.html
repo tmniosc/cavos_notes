@@ -30,7 +30,7 @@ một mảnh chỉ "khúc nào" (gọi là <strong>segment</strong>), một mả
 = khúc bộ nhớ CPU đang trỏ tới.</strong> CPU giữ vài "ngón tay" trỏ khúc: CS trỏ khúc code, DS trỏ khúc data, SS
 trỏ khúc stack.</em></p>
 <p><em>Rồi qua từng đời CPU, ý nghĩa của "khúc" này đổi: thời đầu (real mode) nó chỉ là số nhân thô để với xa
-hơn; thời giữa (protected mode) nó thành tấm vé trỏ vào bảng <a href="gdt.html">GDT</a> có kèm bảo vệ (ai được vào, vùng tới
+hơn; thời giữa (protected mode) nó thành số thẻ trỏ vào bảng <a href="gdt.html">GDT</a> có kèm bảo vệ (ai được vào, vùng tới
 đâu); thời nay (long mode 64-bit) nó <strong>gần như tắt</strong> — mọi khúc phủ cả bộ nhớ, chỉ còn giữ "kernel hay
 user". Cái lo việc phân vùng bộ nhớ thật bây giờ là <a href="paging.html">Paging</a>, không phải segment nữa.</em></p>
 <p><em>Tin tốt cho người viết kernel 64-bit: ở long mode segment gần như vô dụng, nên chỉ cần nhớ <strong>một câu</strong> về nó
@@ -97,7 +97,7 @@ quyền của nó do <strong><a href="paging.html">page table</a></strong> enfor
 <tr>
 <td><strong>Protected mode</strong> (32-bit)</td>
 <td>80286/386</td>
-<td>một <strong>selector</strong> (số ghế trỏ <a href="gdt.html">GDT</a>)</td>
+<td>một <strong>selector</strong> (số thẻ trỏ vào <a href="gdt.html">GDT</a>)</td>
 <td>CPU tra GDT → <code>base + offset</code>, kiểm <code>limit</code> + ring</td>
 <td>có (base/limit + DPL)</td>
 </tr>

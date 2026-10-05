@@ -95,7 +95,7 @@ và tự đặt <code>DS</code>, <code>ES</code>, <code>SS</code>, <code>SP</cod
 <p>Bootloader gom đủ thông tin (memory map, framebuffer) <strong>trước</strong> khi rời real mode, vì sau đó không gọi BIOS được nữa.</p>
 
 <h2 id="a20">A20</h2>
-<p class="lede"><em>Một sợi dây địa chỉ bị khoá từ thời 8086 để giữ một lỗi cũ; không mở nó thì mọi MiB lẻ là bản sao của MiB chẵn.</em></p>
+<p class="lede"><em>Một sợi dây địa chỉ bị chặn từ thời máy AT (286) để bắt chước kiểu quay vòng của 8086 mà phần mềm cũ dựa vào; không mở nó thì mọi MiB lẻ là bản sao của MiB chẵn.</em></p>
 <p>8086 chỉ có 20 dây địa chỉ, nên <code>0xFFFF:0x0010</code> quay vòng về <code>0x00000</code>. Vài chương trình cũ dựa vào chuyện đó, nên máy PC về sau giữ dây thứ 21 (A20) ở 0 cho tới khi phần
 mềm mở nó. Khi A20 đóng, bit 20 của mọi địa chỉ bị ép về 0, kể cả ở protected mode: ghi vào <code>0x100000</code> là ghi đè <code>0x000000</code>.</p>
 <ul>
