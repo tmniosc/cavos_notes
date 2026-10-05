@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x08 - PCI &amp; NIC · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x08_pci_nic.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x08 - PCI &amp; NIC</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, pci, bar, e1000, dma, dhcp, arp, icmp</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_13_networking.html">Bài 13 - Networking</a> + <a href="../ly_thuyet/bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></strong>.
+Kernel quét bus PCI qua cổng <code>0xCF8</code>/<code>0xCFC</code> như <code>initiatePCI()</code>, đo cỡ từng BAR, tìm card Intel E1000 của QEMU, dựng hai vòng descriptor RX/TX cho
+card tự đọc/ghi RAM (DMA), rồi nói chuyện với "router" ảo của QEMU: xin địa chỉ IP bằng DHCP, hỏi MAC bằng ARP, và ping hai lần. Frame nhận đi đúng đường của cavOS: IRQ →
+<code>netQueueAdd</code> → thread helper → <code>helperNet</code> → <code>handlePacket</code>.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/08-pci-nic/</code> (chép từ <code>07-tasks/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image &amp;&amp; make run</code>,
+rồi <code>python3 scripts/pcap_summary.py lab08.pcap</code>. Source lưu ở <code>lab/src/oskernel-lab/08-pci-nic/</code>, log đầy đủ (5 lần chạy) ở <code>lab/outputs/lab-0x08-run.txt</code>,
+log cavOS thật cùng card ở <code>lab/outputs/cavos-net-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x07, thêm bốn cặp file mang tên file của cavOS, và sửa nhẹ năm file cũ.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>serial boot pmm gdt idt acpi timer ps2 input kb mouse task schedule spinlock kout   như Lab 0x07
+io.h          + inl/outl (cổng 32 bit cho 0xCF8/0xCFC)
+paging.{h,c}  + map một vùng MMIO uncached (PCD|PWT) vào VA riêng (BAR0 của card)
+apic.{h,c}    + ioApicPciRedirect: entry I/O APIC level-triggered cho GSI của PCI, + ioApicSetMask
+isr.c         + DEMO=-DEOI_LATE: EOI sau handler cho vector PCI
+kernel_helper.c + helperNet() trong vòng của thread helper, như cavOS
+pci.{h,c}     MỚI, theo drivers/pci.c: ConfigReadWord/ConfigWriteDword, FilterDevice, GetDevice,
+              GetGeneralDevice, initiatePCI (bus 0..255 x slot 0..31 x function 0..7), + đo cỡ BAR
+nic.{h,c}     MỚI, theo drivers/nics/nic_controller.c: initiateNetworking, initiateNIC, createNewNIC,
+              sendPacket, sendPacketRaw, handlePacket, netQueueAdd
+e1000.{h,c}   MỚI, theo drivers/nics/e1000.c: initiateE1000, EEPROM -&gt; MAC, RX/TX ring, ngắt, sendE1000
+net.{h,c}     MỚI (lab, thay lwIP): dựng/đọc frame ARP, IPv4, UDP/DHCP, ICMP bằng tay
+scripts/pcap_summary.py  đọc file pcap QEMU ghi (filter-dump) và in từng frame</code></pre></div>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Ba phần, theo đúng thứ tự trong <code>_start()</code> của cavOS: <code>initiateNetworking</code>, <code>initiatePCI</code>, rồi lớp mạng làm việc.</em></p>
+<ol>
+<li><strong>Quét PCI.</strong> Với mỗi bộ (bus, slot, function), đọc vendor ID. <code>0xFFFF</code> nghĩa là không có gì. Có thiết bị thì đọc class/subclass, header type, BAR, và gọi driver theo
+class: <code>0x02</code> (mạng) → <code>initiateNIC</code>. AHCI và card màn hình chỉ in ra "cavOS sẽ gọi ...".</li>
+<li><strong>Bật card E1000.</strong> Bật bus master + memory space trong thanh ghi command, đọc BAR0 (MMIO 128 KiB), đọc MAC từ EEPROM, dựng vòng RX 256 descriptor (mỗi cái trỏ tới một buffer 2 KiB)
+và vòng TX 256 descriptor, nối IRQ qua I/O APIC, bật RCTL.EN và TCTL.EN.</li>
+<li><strong>Nói chuyện trên mạng.</strong> Một kernel thread "net" làm việc lwIP làm trong cavOS: DHCP (DISCOVER → OFFER → REQUEST → ACK), ARP hỏi MAC của router <code>10.0.2.2</code>, rồi hai
+lần ICMP echo. QEMU ghi mọi frame trên dây vào <code>lab08.pcap</code>, nên có thể so "kernel nghĩ gì" với "dây thấy gì".</li>
+</ol>
+
+<figure class="diagram">
+<svg id="svg-lab08path" role="img" aria-label="Receive path: the e1000 card DMAs a frame into an RX buffer and raises INTx; the I/O APIC delivers vector 0x2a; E1000InterruptHandler reads ICR and copies the frame into netQueue; the helper thread runs helperNet, handlePacket and net_input. Send path: the net thread builds a frame, sendE1000 fills a TX descriptor, bumps TDT and waits for DD with handControl" width="100%" viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab08path-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab08path .lbl{fill:#c2c0b6;} #svg-lab08path .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab08path .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="40" y="26" class="lbl" font-size="11" font-weight="600">receive</text>
+<rect x="40" y="40" width="150" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="115" y="61" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600">e1000 card</text>
+<text x="115" y="76" text-anchor="middle" fill="#D8A54A" font-size="9">DMA frame -&gt; RX buffer</text>
+<text x="115" y="89" text-anchor="middle" fill="#D8A54A" font-size="9">set DD, raise INTx</text>
+<rect x="220" y="40" width="130" height="56" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="285" y="61" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">I/O APIC</text>
+<text x="285" y="76" text-anchor="middle" fill="#AFA9EC" font-size="9">GSI 22, level</text>
+<text x="285" y="89" text-anchor="middle" fill="#AFA9EC" font-size="9" class="mono">vector 0x2a</text>
+<rect x="380" y="40" width="150" height="56" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="455" y="61" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600">IRQ handler</text>
+<text x="455" y="76" text-anchor="middle" fill="#85B7EB" font-size="9">read ICR (clears it)</text>
+<text x="455" y="89" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">netQueueAdd</text>
+<rect x="560" y="40" width="130" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="625" y="61" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">helper thread</text>
+<text x="625" y="76" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">helperNet</text>
+<text x="625" y="89" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">handlePacket</text>
+<line x1="190" y1="68" x2="218" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-lab08path-arrow)"/>
+<line x1="350" y1="68" x2="378" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-lab08path-arrow)"/>
+<line x1="530" y1="68" x2="558" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-lab08path-arrow)"/>
+<text x="360" y="124" text-anchor="middle" class="lbl" font-size="9.5">in an interrupt: copy only; protocol work runs later in a thread</text>
+<text x="40" y="176" class="lbl" font-size="11" font-weight="600">send</text>
+<rect x="40" y="190" width="190" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="135" y="211" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">net thread</text>
+<text x="135" y="226" text-anchor="middle" fill="#8FC79A" font-size="9">build Ethernet + IP + UDP</text>
+<text x="135" y="239" text-anchor="middle" fill="#8FC79A" font-size="9">(cavOS: lwIP)</text>
+<rect x="265" y="190" width="190" height="56" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="360" y="211" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600" class="mono">sendE1000</text>
+<text x="360" y="226" text-anchor="middle" fill="#85B7EB" font-size="9">fill descriptor at TDT</text>
+<text x="360" y="239" text-anchor="middle" fill="#85B7EB" font-size="9">TDT++ hands it to the card</text>
+<rect x="490" y="190" width="200" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="590" y="211" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600">e1000 card</text>
+<text x="590" y="226" text-anchor="middle" fill="#D8A54A" font-size="9">DMA buffer -&gt; wire</text>
+<text x="590" y="239" text-anchor="middle" fill="#D8A54A" font-size="9">write DD into descriptor</text>
+<line x1="230" y1="218" x2="263" y2="218" class="flow" stroke-width="1.4" marker-end="url(#svg-lab08path-arrow)"/>
+<line x1="455" y1="218" x2="488" y2="218" class="flow" stroke-width="1.4" marker-end="url(#svg-lab08path-arrow)"/>
+<path d="M590 246 L590 280 L360 280 L360 248" fill="none" class="flow" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#svg-lab08path-arrow)"/>
+<text x="475" y="298" text-anchor="middle" class="lbl" font-size="9">sendE1000 loops on DD with handControl()</text>
+</svg>
+<figcaption>Hai đường của một frame trong lab (cũng là đường của cavOS, trừ chỗ lwIP).</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>QEMU nối card vào mạng "user" có sẵn router, DHCP và DNS ảo, rồi ghi mọi frame ra file pcap.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/08-pci-nic
+make image
+make run                                    # serial ra stdout, ghi lab08.pcap
+python3 scripts/pcap_summary.py lab08.pcap  # từng frame trên dây
+
+make clean &amp;&amp; make image DEMO=-DEOI_LATE       # EOI sau handler cho IRQ PCI
+make clean &amp;&amp; make image DEMO=-DWAIT_RCTL      # gửi DISCOVER muộn 1,1 s sau lần ghi RCTL
+make clean &amp;&amp; make image DEMO=-DPCI_ACTIVE_LOW # entry I/O APIC active-low</code></pre></div>
+<p>Cờ QEMU (trong <code>GNUmakefile</code>): <code>-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -netdev user,id=mynet0 -net nic,model=e1000,netdev=mynet0
+-object filter-dump,id=f0,netdev=mynet0,file=lab08.pcap</code>. Card và netdev giống hệt <code>make qemu</code> của cavOS. Mọi output dưới đây là thật: QEMU 10.2.1, cross gcc
+<code>x86_64-cavos-gcc -O2</code>, Limine 8.7.0, SeaBIOS, chạy ngày 2026-10-03. Dòng <code>[t=N] [id tên]</code> là tick (1 ms) và task in ra; dòng có số thứ tự đầu dòng là của
+<code>pcap_summary.py</code>, không phải kernel.</p>
+
+<h2 id="quet-pci">Kết quả 1: quét PCI và đo BAR</h2>
+<p class="lede"><em>65536 địa chỉ được hỏi, chỉ 6 cái trả lời: đó là toàn bộ phần cứng PCI của máy q35.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -&gt; class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -&gt; class 0x02: initiateNIC()
+...
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -&gt; class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 47 ms (scan + initiateE1000)</code></pre></div>
+<ul>
+<li><strong>Đo cỡ BAR</strong>: ghi <code>0xFFFFFFFF</code> vào BAR rồi đọc lại. Bit nào thiết bị không cho ghi thì vẫn là 0, và các bit 0 đó cho biết cỡ. BAR0 của card mạng đọc lại
+<code>0xfffe0000</code>: bỏ 4 bit cờ, đảo bit rồi cộng 1 được <code>0x20000</code> = 128 KiB. Trong lúc BAR mang giá trị rác, lab tắt decode memory/I/O trong thanh ghi command, rồi trả
+giá trị cũ.</li>
+<li>Bit 0 của BAR phân biệt: 1 là cổng I/O (<code>0xc001</code> → cổng <code>0xc000</code>), 0 là MMIO. Card E1000 có cả hai; cavOS dùng BAR0 (MMIO).</li>
+<li><code>hdr 80</code>: bit 7 của header type = thiết bị nhiều function. Cả ba function ở slot <code>1f</code> đều có bit này.</li>
+<li>Quét hết 256 bus mất 47 ms trong TCG, 629 ms dưới KVM (lần chạy 2 trong log): mỗi lần đọc cổng I/O dưới KVM là một lần thoát ra hypervisor, đắt hơn nhiều so với TCG tự giả lập.</li>
+</ul>
+
+<h2 id="bat-card">Kết quả 2: bật card E1000</h2>
+<p class="lede"><em>Từng bước của <code>initiateE1000()</code>, với giá trị thanh ghi thật đọc được.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -&gt; 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -&gt; mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -&gt; EERD words 0,1,2 = 0x5452 0x1200 0x5634 -&gt; MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -&gt; 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 &lt;&lt; 16) &amp; (1 &lt;&lt; 25)) = 0x0 -&gt; also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -&gt; vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -&gt; vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=250; STATUS=0x80080783 -&gt; link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -&gt; lwIP thread + dhcp_start()
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)</code></pre></div>
+<ul>
+<li><strong>Bus master</strong> (bit 2 của command) cho phép card tự đọc/ghi RAM. Thiếu bit này card không DMA được: không lấy được frame để gửi, không ghi được frame nhận.</li>
+<li><strong>MAC</strong> nằm trong EEPROM của card, ba word 16 bit. Word <code>0x5452</code> cho hai byte <code>52 54</code> (byte thấp trước).</li>
+<li><strong>Vòng RX</strong>: card sở hữu các descriptor từ <code>RDH</code> tới <code>RDT-1</code>. <code>RDT=255</code> đưa card 255 cái, chừa một cái để "đầy" khác "rỗng".</li>
+<li><strong>Dòng <code>RCTL_BUFFER_SIZE_8192 = 0x0</code></strong>: macro của cavOS dùng <code>&amp;</code> thay vì <code>|</code>, nên ra 0, tức buffer 2048 byte. cavOS cấp 8 KiB mỗi buffer nhưng card
+chỉ dùng 2 KiB đầu. Không hỏng gì, chỉ phí bộ nhớ (xem <a href="../ly_thuyet/bai/bai_14_pci_nic.html#doc-them">Bài 14, Đọc thêm</a>).</li>
+<li><strong>GSI 22</strong>: thanh ghi <code>0x3C</code> nói IRQ 11, nhưng đó là số của 8259 PIC do firmware chọn. Với I/O APIC, cavOS hỏi bảng <code>_PRT</code> trong DSDT qua uACPI (phải chạy AML).
+Lab không có AML nên dò: mở GSI 16..23, bảo card tự gây ngắt (ghi <code>ICS</code>), xem chân nào kêu.</li>
+</ul>
+
+<h2 id="mang">Kết quả 3: DHCP, ARP, ping</h2>
+<p class="lede"><em>Kernel gửi 5 frame, nhận 5 frame. Pcap của QEMU cho cùng một câu chuyện nhìn từ dây.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  262] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -&gt; OFFER -&gt; REQUEST -&gt; ACK
+[t=  262] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 UDP 68 &gt; 67 DHCP DISCOVER
+[t=  263] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -&gt; 1, TDH 0 -&gt; 1, DD after 0 ms / 0 handControl()
+[t= 1310] [2 helper ] rx (590 B, IRQ at t=1307): 52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 UDP 67 &gt; 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1311] [3 net    ] OFFER: sent at t=262, IRQ at t=1307, handled by helper at t=1310
+...
+[t= 1312] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1312] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1312] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1316] [2 helper ] rx (64 B, IRQ at t=1312): 52:55:0a:00:02:02 &gt; 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+[t= 1316] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1316] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 &gt; 52:55:0a:00:02:02 IPv4 10.0.2.15 &gt; 10.0.2.2 ICMP echo request seq=1
+[t= 1321] [2 helper ] rx (74 B, IRQ at t=1316): 52:55:0a:00:02:02 &gt; 52:54:00:12:34:56 IPv4 10.0.2.2 &gt; 10.0.2.15 ICMP echo reply seq=1
+...
+[t= 1326] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+
+[kernel] E1000 interrupt handler ran 14 times (7 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-main.pcap
+  1  +0.000000s  len  342  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000069s  len  590  52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 ...
+  3  +0.988643s  len  342  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.988650s  len  590  52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 DHCP ACK ...
+  5  +0.989810s  len   42  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.989812s  len   64  52:55:0a:00:02:02 &gt; 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.993964s  len   74  ... ICMP echo request id=0x0808 seq=1
+  8  +0.993967s  len   74  ... ICMP echo reply id=0x0808 seq=1
+  9  +0.998180s  len   74  ... ICMP echo request id=0x0808 seq=2
+ 10  +0.998184s  len   74  ... ICMP echo reply id=0x0808 seq=2
+# 10 frames</code></pre></div>
+<ul>
+<li><strong>Đường nhận</strong>: ngắt tới ở <code>t=1312</code>, helper xử lý ở <code>t=1316</code>. Handler chỉ chép frame vào <code>netQueue</code>; việc đọc giao thức chạy sau, trong thread.</li>
+<li><strong>Gửi xong ngay</strong>: <code>DD after 0 ms / 0 handControl()</code>. QEMU giả lập card xử lý descriptor ngay khi <code>TDT</code> được ghi, nên vòng chờ DD không phải nhường CPU lần nào.</li>
+<li><strong>ARP reply dài 64 byte</strong>, ARP request của mình 42 byte: router của QEMU đệm frame lên cỡ tối thiểu của Ethernet (60 byte + 4 byte CRC). Card đã bỏ CRC (cờ
+<code>SECRC</code>) trước khi ghi vào RAM nhưng giữ phần đệm.</li>
+<li><strong>Vòng sau cùng</strong>: <code>RDH=5 RDT=4</code>. Card đã dùng 5 descriptor; driver trả lại từng cái bằng cách ghi <code>RDT</code>.</li>
+</ul>
+
+<h3 id="tre-1s">OFFER tới trễ 1 giây: do QEMU, không do kernel</h3>
+<p>Pcap ghi OFFER chỉ 0,07 ms sau DISCOVER, nhưng ngắt tới kernel ở <code>t=1307</code>, hơn 1000 ms sau khi gửi (<code>t=262</code>). Frame đã có trên dây mà card chưa chịu nhận.</p>
+<p>Lý do nằm trong model card của QEMU (<code>hw/net/e1000.c</code>): mỗi lần ghi <code>RCTL</code>, hàm <code>set_rx_control</code> đặt <code>flush_queue_timer</code> 1000 ms, và
+<code>e1000_can_receive</code> trả "không" khi timer còn chạy. Frame tới trong khoảng đó nằm trong hàng đợi của QEMU. Lab ghi RCTL lần cuối ở <code>t=250</code>, nên card chỉ nhận từ khoảng
+<code>t=1250</code>. Bản <code>DEMO=-DWAIT_RCTL</code> chờ tới <code>t=1350</code> mới gửi DISCOVER, và lúc đó OFFER đến ngay:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  262] [3 net    ] WAIT_RCTL: RCTL last written at t=250, sleeping until t=1350
+[t= 1352] [3 net    ] tx DHCP DISCOVER (342 B): ...
+##### pcap: python3 scripts/pcap_summary.py lab08-waitrctl.pcap
+  1  +0.000000s  len  342  ... DHCP DISCOVER xid=0x4c414238
+  2  +0.000098s  len  590  ... DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 ...
+  3  +0.003873s  len  342  ... DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15</code></pre></div>
+<p>REQUEST giờ đi sau DISCOVER 3,9 ms, thay vì 0,99 s. cavOS thật cũng chịu y như vậy: trong <code>lab/outputs/cavos-net-run.txt</code>, REQUEST của lwIP đi sau DISCOVER 0,991 s.</p>
+
+<h3 id="eoi">Handler chạy 14 lần cho 5 frame nhận + 5 frame gửi</h3>
+<p>Ngắt PCI là <em>level-triggered</em>: card giữ đường INTx ở mức "có ngắt" cho tới khi driver đọc <code>ICR</code>. cavOS (và lab) gửi EOI cho LAPIC <em>trước</em> khi gọi handler. Lúc EOI, card
+vẫn đang kéo đường ngắt, nên I/O APIC thấy mức vẫn cao và gửi ngắt lần nữa. Lần thứ hai handler đọc <code>ICR</code> = 0: 7 lần như vậy. Bản <code>DEMO=-DEOI_LATE</code> gửi EOI sau handler:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] E1000 interrupt handler ran 7 times (0 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0</code></pre></div>
+<p>Vô hại (chỉ tốn một lần vào handler), nhưng là lý do Linux xử lý ngắt level theo kiểu "che, xử lý, EOI, mở".</p>
+
+<h3 id="active-low">Active-low: QEMU không bắt lỗi</h3>
+<p>Theo PCI, đường INTx thật là active-low. cavOS đọc từ <code>_CRS</code> của QEMU ra active-high (<code>gsi{11} [0:1]</code> trong log cavOS) và lab làm theo. Bản
+<code>DEMO=-DPCI_ACTIVE_LOW</code> đổi entry thành active-low (<code>0x000000000000a02a ... level low</code>), vậy mà mọi thứ vẫn chạy y nguyên (14 lần handler, 10 frame). I/O APIC
+của QEMU bỏ qua bit polarity, nên trên QEMU không kiểm được chỗ này. Trên máy thật, đặt sai polarity thì ngắt hoặc không bao giờ tới, hoặc tới liên tục.</p>
+
+<h2 id="cavos-that">Đối chiếu: cavOS thật với cùng card</h2>
+<p class="lede"><em>Chạy chính cavOS với cờ mạng của <code>make qemu</code>, ghi pcap: lwIP làm đúng bước 1 của lab, rồi tự kiểm tra địa chỉ bằng ARP.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[networking] Ready to scan for NICs..
+[pci::svga-II] VMWare SVGA-II graphics card detected!
+[pci::e1000] Intel E1000 NIC detected! dev{100e}
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{feb80000}
+[ioapic::pci] Redirection [00:03.0] -&gt; [00:03.0]: gsi{11} [0:1]
+[pci::ahci] Detected controller! name{Intel ICH9} quirks{0}
+...
+  1  +0.000000s  len  350  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 DHCP DISCOVER xid=0x00002781
+  2  +0.000057s  len  590  52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 DHCP OFFER xid=0x00002781 yiaddr=10.0.2.15 ...
+  3  +0.991415s  len  350  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 DHCP REQUEST xid=0x00002781 server=10.0.2.2 requested=10.0.2.15
+  4  +0.991434s  len  590  52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 DHCP ACK ...
+  5  +1.410930s  len   42  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 0.0.0.0
+  ...
+  8  +6.243962s  len   42  52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 10.0.2.15</code></pre></div>
+<ul>
+<li>Máy <code>pc</code> (i440fx, mặc định của QEMU) chứ không phải q35: card ở slot 3, GSI 11 lấy từ <code>_PRT</code>.</li>
+<li>Frame 5–7 là <em>ARP probe</em> (RFC 5227): "có ai đang dùng 10.0.2.15 không?", gửi với IP nguồn 0.0.0.0. Không ai trả lời thì lwIP nhận địa chỉ và thông báo (frame 8–9).</li>
+</ul>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng thứ tự khởi tạo, cùng tên hàm; vài chỗ sửa vì lỗi của cavOS, và lwIP được thay bằng code tay.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x08</th></tr></thead>
+<tbody>
+<tr><td>Danh sách PCI</td><td>LinkedList <code>dsPCI</code></td><td>mảng tĩnh 32 ô; in bảng và đo cỡ BAR</td></tr>
+<tr><td>Map BAR0</td><td><code>hhdmOffset + phys</code> (cache mặc định)</td><td>VA riêng, uncached (PCD|PWT)</td></tr>
+<tr><td>Reset card</td><td>không</td><td><code>CTRL.RST</code> trước khi cấu hình</td></tr>
+<tr><td>Vòng RX</td><td><code>RDT = 256</code> (ngoài ring), không dời RDT, mỗi ngắt quét lại 0..255</td><td><code>RDT = 255</code>, đi tiếp từ <code>rxHead</code>, trả từng descriptor bằng cách ghi RDT</td></tr>
+<tr><td>Buffer TX</td><td>cấp trang mới mỗi lần gửi, không trả</td><td>cấp sẵn một buffer cho mỗi descriptor</td></tr>
+<tr><td>GSI của card</td><td><code>_PRT</code> qua uACPI (AML)</td><td>dò: mở GSI 16..23, ghi <code>ICS</code></td></tr>
+<tr><td>Lớp mạng</td><td>lwIP (DHCP, ARP, TCP, UDP...) trong thread <code>tcpip</code></td><td>DHCP/ARP/ICMP dựng tay trong thread <code>net</code></td></tr>
+<tr><td>Kiểm tra MTU</td><td><code>size &gt; mtu</code> với cả frame: bỏ frame 1501..1514 byte</td><td>so với <code>mtu + 14</code></td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa code và chạy lại để kiểm.</em></p>
+<details class="quiz"><summary>Bỏ bit bus master (bit 2) khỏi thanh ghi command. Lab hỏng ở bước nào?</summary>
+<p>Ngay frame đầu: <code>sendE1000</code> ghi <code>TDT</code>, nhưng card không được phép đọc RAM để lấy descriptor và dữ liệu, nên không bao giờ ghi DD. Vòng chờ DD quay mãi (nhường CPU bằng
+<code>handControl()</code>, nên các thread khác vẫn chạy), và pcap không có frame nào.</p></details>
+<details class="quiz"><summary>Map BAR0 có cache (write-back) thay vì uncached. Có thể hỏng ra sao?</summary>
+<p>Đọc <code>ICR</code> có thể trả giá trị cũ trong cache thay vì đọc thật từ card, mà đọc <code>ICR</code> còn có tác dụng xoá ngắt. Ghi <code>TDT</code> có thể nằm trong cache chưa xuống
+card. Trong QEMU có khi vẫn chạy, vì QEMU không giả lập cache cho MMIO; trên máy thật thì không đoán được.</p></details>
+<details class="quiz"><summary>Vì sao handler không xử lý DHCP/ARP ngay trong ngắt mà chép vào <code>netQueue</code>?</summary>
+<p>Trong ngắt, IF đang tắt và không được ngủ hay chờ khoá. Giao thức thì cần cả hai: gửi trả lời (chờ DD), cấp bộ nhớ, giữ khoá của lwIP. Nên ngắt chỉ chép nhanh rồi về; thread helper
+làm phần nặng sau đó.</p></details>
+<details class="quiz"><summary>Bỏ <code>RDT = 255</code>, để <code>RDT = 0</code> như lúc reset. Card nhận được frame nào không?</summary>
+<p>Không. Khi <code>RDH == RDT</code>, card không sở hữu descriptor nào, nên frame đến bị bỏ (đếm vào bộ đếm "missed"). Phải đưa descriptor cho card bằng cách dời <code>RDT</code>.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_13_networking.html">Bài 13 - Networking</a>, <a href="../ly_thuyet/bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> · nền
+<a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a> (I/O APIC, EOI), <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>
+(thread helper, <code>handControl</code>), <a href="../ly_thuyet/bai/bai_08_acpi.html">Bài 8 - ACPI</a> (DSDT, AML).</li>
+<li>Lab trước: <a href="lab_0x07_tasks.html">Lab 0x07 - Multitasking &amp; Scheduler</a>.</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x08 - PCI &amp; NIC</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

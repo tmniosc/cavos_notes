@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x09 - AHCI &amp; Filesystems · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x09_ahci_fs.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x09 - AHCI &amp; Filesystems</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, ahci, sata, dma, prdt, mbr, fat32, ext2, vfs</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a></strong>.
+Kernel tìm controller SATA AHCI trong vòng quét PCI, bật nó theo đúng thứ tự <code>initiateAHCI()</code> của cavOS, rồi đọc chính ổ đĩa nó vừa boot lên: bảng phân vùng MBR, một phân
+vùng FAT32 (Limine + kernel, cavOS mount ở <code>/boot/</code>) và một phân vùng ext2 (cavOS mount ở <code>/</code>). Đọc file từ cả hai và so checksum với giá trị tính trên máy host.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/09-ahci-fs/</code> (chép từ <code>08-pci-nic/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image &amp;&amp; make run</code>.
+Source lưu ở <code>lab/src/oskernel-lab/09-ahci-fs/</code>, log đầy đủ (2 lần chạy) ở <code>lab/outputs/lab-0x09-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x08, thêm driver AHCI và một VFS chỉ đọc, đổi cách dựng ổ đĩa.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>serial boot pmm paging gdt idt isr acpi apic timer ps2 kb mouse task ... nic e1000   như Lab 0x08
+pci.c         class 0x01/0x06 -&gt; initiateAHCI() (Lab 0x08 chỉ in ra)
+ahci.{h,c}    MỚI, theo drivers/ahci.c: initiateAHCI (bus master, ABAR, reset HBA, BOHC, GHC.AE),
+              dò cổng (SSTS, SIG), ahciPortRebase (command list, FIS, command table),
+              ahciRead (READ DMA EXT + PRDT), + IDENTIFY
+vfs.{h,c}     MỚI, theo drivers/disk.c + filesystems/vfs/vfs_mnt.c + fat32/ + ext2/ (chỉ đọc):
+              openDisk, getDiskBytes, fsMount (isFat / isExt2), fsDetermineMountPoint,
+              FAT32 (BPB, chuỗi cluster, tên dài LFN), ext2 (superblock, BGDT, inode, block gián tiếp)
+kernel.c      kmain: ... initiatePCI, fsMount("/", 0, 1), fsMount("/boot/", 0, 0), ls, đọc file
+limine.conf   kernel_path: boot():/kernel.bin (kernel ở gốc phân vùng FAT, như cavOS)
+scripts/mkimage_fs.sh  ổ 96 MiB: MBR + FAT32 1..40 MiB + ext2 40 MiB..hết (mke2fs -d, không cần sudo)
+scripts/run_all.sh     chạy 2 bản build, ghi log</code></pre></div>
+
+<h2 id="lam-gi">Lab làm gì</h2>
+<p class="lede"><em>Từ "có một controller ở 00:1f.2" tới "đây là nội dung /etc/motd", qua bốn tầng.</em></p>
+<figure class="diagram">
+<svg id="svg-lab09layers" role="img" aria-label="Four layers: a path such as /etc/motd goes to the VFS which picks the mount point with the longest matching prefix; the filesystem (ext2 or FAT32) turns the path into a list of block or cluster numbers; the disk layer turns them into sector numbers (LBA) on the partition; the AHCI driver builds a READ DMA EXT command and the controller copies sectors into RAM" width="100%" viewBox="0 0 720 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab09layers-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab09layers .lbl{fill:#c2c0b6;} #svg-lab09layers .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab09layers .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="40" y="20" width="200" height="40" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="140" y="44" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">VFS: which mount point?</text>
+<text x="270" y="44" class="lbl" font-size="9.5">"/etc/motd" -&gt; mount "/" (ext2), inner path "/etc/motd"</text>
+<rect x="40" y="76" width="200" height="40" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="140" y="100" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600">filesystem: path -&gt; blocks</text>
+<text x="270" y="100" class="lbl" font-size="9.5">inode 2 -&gt; "etc" = inode 19 -&gt; "motd" = inode 20 -&gt; block 1440</text>
+<rect x="40" y="132" width="200" height="40" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="140" y="156" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">disk: block -&gt; LBA</text>
+<text x="270" y="156" class="lbl" font-size="9.5">partition start 81920 + 1440 x 2 = LBA 84800</text>
+<rect x="40" y="188" width="200" height="40" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="140" y="212" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600">AHCI: READ DMA EXT</text>
+<text x="270" y="212" class="lbl" font-size="9.5">command slot, PRDT -&gt; the controller copies 2 sectors into RAM</text>
+<line x1="140" y1="60" x2="140" y2="74" class="flow" stroke-width="1.4" marker-end="url(#svg-lab09layers-arrow)"/>
+<line x1="140" y1="116" x2="140" y2="130" class="flow" stroke-width="1.4" marker-end="url(#svg-lab09layers-arrow)"/>
+<line x1="140" y1="172" x2="140" y2="186" class="flow" stroke-width="1.4" marker-end="url(#svg-lab09layers-arrow)"/>
+</svg>
+<figcaption>Đọc <code>/etc/motd</code>: bốn tầng, mỗi tầng đổi địa chỉ sang dạng của tầng dưới (số liệu lấy từ log).</figcaption>
+</figure>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Script dựng ổ đĩa giống <code>disk.img</code> của cavOS, không cần quyền root.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/09-ahci-fs
+make image          # scripts/mkimage_fs.sh: in cả checksum FNV-1a mong đợi
+make run            # QEMU -M q35, ổ if=ide = controller AHCI ICH9
+
+make clean &amp;&amp; make image DEMO=-DPRDT_CAVOS &amp;&amp; make run   # PRDT như cavOS
+bash scripts/run_all.sh lab-0x09-run.txt                # cả hai, ghi log</code></pre></div>
+<p>Cờ QEMU: <code>-M q35 -m 256M -serial stdio -no-reboot -no-shutdown -nic none -drive file=os.img,format=raw,if=ide</code>. Trên máy q35, ổ <code>if=ide</code> nằm trên controller AHCI
+có sẵn (<code>00:1f.2</code>), nên không cần thêm <code>-device ahci</code>. Mọi output dưới đây là thật: QEMU 10.2.1, cross gcc <code>x86_64-cavos-gcc -O2</code>, Limine 8.7.0, SeaBIOS, TCG,
+chạy ngày 2026-10-03.</p>
+
+<h2 id="anh-dia">Kết quả 1: ổ đĩa phía host</h2>
+<p class="lede"><em>Script in ra checksum mong đợi trước khi boot, để so với số kernel tự tính.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[1/6] create 96 MiB raw image -&gt; os.img
+[2/6] MBR: partition 1 FAT32 (boot flag) 1..40 MiB, partition 2 Linux (0x83) 40 MiB..end
+[3/6] limine bios-install
+[4/6] FAT32 on partition 1, same layout as cavOS: /kernel.bin, /limine/, /EFI/BOOT/
+[5/6] ext2 on partition 2 (block size 1024, files from rootfs/)
+[6/6] expected FNV-1a (computed on the host)
+  kernel.bin       389480 bytes  FNV-1a 0x66d00670
+  big.bin          307200 bytes  FNV-1a 0x4fa57155
+  note.txt             22 bytes  FNV-1a 0x1afe5128</code></pre></div>
+<p><code>big.bin</code> 300 KiB được chọn có chủ ý: với block 1 KiB, nó cần 12 block trực tiếp, cả 256 block của block gián tiếp 1 cấp, và thêm 32 block qua block gián tiếp 2 cấp.</p>
+
+<h2 id="ahci">Kết quả 2: bật controller AHCI</h2>
+<p class="lede"><em>Sáu cổng, hai cổng có thiết bị; chỉ một cái là ổ cứng.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR5 MMIO32  0xfebf1000  size 4 KiB   (read 0xfebf1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -&gt; class 0x01 sub 0x06: initiateAHCI()
+[pci::ahci] Detected controller! name{Intel ICH9}
+[pci::ahci] PCI command 0x107 -&gt; 0x107 (bus master, memory space)
+[pci::ahci] ABAR (BAR5) PA 0xfebf1000 -&gt; VA 0xfffffe8000100000; CAP 0xc0141f05 -&gt; 6 ports, 32 command slots, 64-bit DMA yes; version 1.00; PI 0x3f
+[pci::ahci] HBA reset (GHC.HR) done in 0 ms; BOHC 0x0, CAP2 0x0 (CAP2.BOH = 0: no BIOS/OS handoff on this controller)
+[pci::ahci] GHC 0x80000000 (AE=1)
+[pci::ahci] port 0: SSTS 0x113 SIG 0xffffffff -&gt; SATA disk (cavOS's classification)
+[pci::ahci]   port 0 rebased: command list PA 0x6d000, received FIS PA 0x6e000, command tables PA 0x6f000 + 0x70000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0x101 (after 0 ms) -&gt; SATA disk
+[pci::ahci]   IDENTIFY: model "QEMU HARDDISK", LBA48 yes, 196608 sectors x 512 B = 96 MiB
+[pci::ahci] port 1: SSTS 0x0 SIG 0xffffffff -&gt; no device (DET != 3)
+[pci::ahci] port 2: SSTS 0x113 SIG 0xffffffff -&gt; SATA disk (cavOS's classification)
+[pci::ahci]   port 2 rebased: command list PA 0x71000, received FIS PA 0x72000, command tables PA 0x73000 + 0x74000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0xeb140101 (after 0 ms) -&gt; SATAPI (CD/DVD)
+[pci::ahci]   not a SATA disk: engine stopped, port dropped
+[pci::ahci] port 3: SSTS 0x0 SIG 0xffffffff -&gt; no device (DET != 3)
+...</code></pre></div>
+<ul>
+<li><code>PI 0x3f</code>: cổng 0–5 có mặt. <code>SSTS 0x113</code>: DET = 3 (có thiết bị, đã nối), IPM = 1 (đang hoạt động), tốc độ Gen1.</li>
+<li><code>CAP2 0x0</code>: controller ICH9 của QEMU không có cơ chế BIOS/OS handoff, nên bước đó bỏ qua.</li>
+<li><strong>Cổng 2 là ổ CD mặc định của QEMU.</strong> Ngay sau khi reset HBA, thanh ghi <code>SIG</code> của mọi cổng là <code>0xffffffff</code>: chữ ký chỉ có khi ổ gửi FIS đầu tiên, mà HBA chỉ nhận
+FIS khi <code>FRE = 1</code>. cavOS phân loại cổng <em>trước</em> khi bật FRE, nên rơi vào nhánh mặc định "SATA disk". Lab bật engine trước rồi đọc lại: <code>0x101</code> = ổ ATA,
+<code>0xeb140101</code> = ATAPI.</li>
+<li><code>IDENTIFY</code> trả 512 byte mô tả ổ: tên (chuỗi ATA, mỗi cặp byte đảo chỗ) và số sector LBA48 (196608 × 512 = 96 MiB, đúng cỡ <code>os.img</code>).</li>
+</ul>
+
+<h2 id="mount">Kết quả 3: MBR và hai lần <code>fsMount</code></h2>
+<p class="lede"><em>Cùng hai lời gọi như <code>_start()</code> của cavOS, cùng thứ tự.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[disk] LBA 0 (MBR): signature 0x55 0xaa -&gt; valid
+[disk]   partition 0: type 0xc (bootable)  first LBA 2048  sectors 79872 (39 MiB)
+[disk]   partition 1: type 0x83             first LBA 81920  sectors 114688 (56 MiB)
+
+[vfs] fsMount("/", CONNECTOR_AHCI, 0, 1)
+[ext2] superblock at LBA 81922: magic 0xef53, volume "labroot", block size 1024, 57344 blocks, 14336 inodes, 7 block groups (8192 blocks, 2048 inodes each), inode size 256, incompat features 0x2 (= FILETYPE only: cavOS accepts it)
+[ext2]   BGDT at block 2: inode table of group 0 at block 228, group 1 at block 8420
+[vfs]   mounted as ext2
+[vfs] fsMount("/boot/", CONNECTOR_AHCI, 0, 0)
+[fat32] boot sector at LBA 2048: label "LABBOOT    ", 2 sectors/cluster, 32 reserved, 2 FATs x 754 sectors, root cluster 2
+[fat32]   -&gt; FAT at LBA 2080, cluster 2 at LBA 3588
+[vfs]   mounted as FAT32
+
+[vfs] fsDetermineMountPoint("/") -&gt; "/"
+[vfs] fsDetermineMountPoint("/boot/kernel.bin") -&gt; "/boot/"
+[vfs] fsDetermineMountPoint("/bootstrap.txt") -&gt; "/"
+[vfs] fsDetermineMountPoint("/etc/motd") -&gt; "/"</code></pre></div>
+<ul>
+<li>Superblock của ext2 nằm ở byte 1024 của phân vùng = LBA <code>81920 + 2</code>. Số <code>0xef53</code> là chữ ký của ext2.</li>
+<li>FAT32: vùng dữ liệu bắt đầu sau 32 sector dự trữ và 2 bảng FAT: <code>2048 + 32 + 2 × 754 = 3588</code>. Cluster đầu tiên mang số 2, không phải 0.</li>
+<li><code>/bootstrap.txt</code> thuộc <code>/</code>, không thuộc <code>/boot/</code>: so prefix phải kèm điều kiện ký tự kế tiếp là <code>/</code> hoặc hết chuỗi.</li>
+</ul>
+
+<h2 id="ls">Kết quả 4: liệt kê thư mục</h2>
+<p class="lede"><em>Hai cách lưu thư mục khác hẳn nhau, nhìn từ trên xuống thì như nhau.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[vfs] ls /  (mount "/", path inside it "/")
+    .                     inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    lost+found            inode   11  type 2 (dir)   mode 0x41c0  size 12288
+    big.bin               inode   12  type 1 (file)  mode 0x81a4  size 307200
+    bin                   inode   13  type 2 (dir)   mode 0x41ed  size 1024
+    docs                  inode   15  type 2 (dir)   mode 0x41ed  size 1024
+    etc                   inode   19  type 2 (dir)   mode 0x41ed  size 1024
+    motd-link             inode   22  type 7 (link)  mode 0xa1ff  size 9
+[vfs] ls /boot/  (mount "/boot/", path inside it "/")
+    LIMINE                &lt;DIR&gt;       first cluster 3
+    EFI                   &lt;DIR&gt;       first cluster 4
+    KERNEL.BIN            file    389480 B  first cluster 6
+[vfs] ls /boot/limine  (mount "/boot/", path inside it "/limine")
+    limine.conf           file        88 B  first cluster 387
+    limine-bios.sys       file    216644 B  first cluster 388</code></pre></div>
+<ul>
+<li><strong>ext2</strong>: thư mục gốc luôn là inode 2. Mỗi mục chỉ có số inode, kiểu và tên; cỡ file và quyền nằm trong inode (<code>mode 0x81a4</code> = file thường, <code>rw-r--r--</code>).
+<code>motd-link</code> là symlink 9 byte (<code>"/etc/motd"</code>).</li>
+<li><strong>FAT32</strong>: mục thư mục chứa luôn cỡ file và cluster đầu. Tên 8.3 lưu chữ hoa (<code>KERNEL.BIN</code>). <code>limine.conf</code> có đuôi 4 chữ nên phải có thêm các mục "tên dài" (LFN,
+thuộc tính <code>0x0F</code>) đứng trước mục chính; lab ghép chúng lại.</li>
+</ul>
+
+<h2 id="doc-file">Kết quả 5: đọc file, so checksum</h2>
+<p class="lede"><em>Ba checksum khớp với giá trị host tính ở Kết quả 1.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[ext2]   /etc/motd: inode 20, 99 B = 1 blocks; block[0..11] = 1440 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+---------- /etc/motd ----------
+Hello from the ext2 partition (cavOS mounts it at "/").
+This line is the second line of /etc/motd.
+----------
+[fat32]   /limine/limine.conf: 88 B in a chain of 1 clusters starting at 387
+...
+[fat32]   /kernel.bin: 389480 B in a chain of 381 clusters starting at 6
+[kernel] /boot/kernel.bin: 389480 bytes, FNV-1a 0x66d00670, 763 AHCI commands, 1145 sectors, 82 ms
+[ext2]   /big.bin: inode 12, 307200 B = 300 blocks; block[0..11] = 754,755,756,757,758,759,760,761,762,763,764,765 block[12] (single indirect) = 766, block[13] (double) = 1023; indirect blocks read: 3
+[kernel] /big.bin: 307200 bytes, FNV-1a 0x4fa57155, 306 AHCI commands, 610 sectors, 36 ms
+[ext2]   /docs/deep/nested/note.txt: inode 18, 22 B = 1 blocks; block[0..11] = 1438 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[kernel] /docs/deep/nested/note.txt: 22 bytes, FNV-1a 0x1afe5128, 10 AHCI commands, 15 sectors, 2 ms
+[kernel] /missing.txt: not found</code></pre></div>
+<ul>
+<li><strong>Block gián tiếp</strong>: <code>block[12] = 766</code> là một block chứa 256 số block (1024 / 4). <code>block[13] = 1023</code> trỏ tới một block chứa số của các block chứa số. Đọc cả file cần
+đúng 3 block "danh sách": block 766, block 1023, và một block cấp 2.</li>
+<li><strong>FAT32 tốn hai lệnh mỗi cluster</strong>: 381 cluster cần 763 lệnh AHCI, vì mỗi lần tìm cluster kế tiếp lab đọc lại một sector của bảng FAT. cavOS có cache cho các sector FAT
+(<code>fat32FATfetch</code>), nên phần lớn lần tra không cần đọc đĩa.</li>
+<li>Đường dẫn 4 cấp <code>/docs/deep/nested/note.txt</code> cần 10 lệnh: mỗi cấp đọc một inode và một block thư mục.</li>
+</ul>
+
+<h2 id="prdt">Kết quả 6: PRDT và buffer không liền về vật lý</h2>
+<p class="lede"><em>Card ghi vào RAM bằng địa chỉ vật lý; hai trang liền nhau về VA chưa chắc liền nhau về PA.</em></p>
+<p>Lab dựng một buffer 8 KiB: hai trang VA liền nhau, map vào hai frame không liền nhau (chen một frame ở giữa), rồi đọc 16 sector đầu ổ vào đó.</p>
+<div class="code"><div class="code-bar">text</div><pre><code>########## Run 1: make run
+[prdt] buffer VA 0xfffffe8000800000: page 0 -&gt; PA 0x75000, page 1 -&gt; PA 0x77000 (frame 0x76000 in between)
+[prdt] mode: one PRDT entry per page, each with its own PA
+[prdt] sectors 0-7 in page 0: match; sectors 8-15 in page 1: match; frame in between written by the disk: no
+
+########## Run 2: DEMO=-DPRDT_CAVOS (one PRDT entry for the whole buffer, like cavOS)
+[prdt] buffer VA 0xfffffe8000800000: page 0 -&gt; PA 0x75000, page 1 -&gt; PA 0x77000 (frame 0x76000 in between)
+[prdt] mode: PRDT_CAVOS, one PRDT entry = PA of page 0, 8192 bytes
+[prdt] sectors 0-7 in page 0: match; sectors 8-15 in page 1: WRONG; frame in between written by the disk: YES
+[kernel] /big.bin: 307200 bytes, FNV-1a 0x4fa57155, 306 AHCI commands, 610 sectors, 96 ms</code></pre></div>
+<p>Bản <code>PRDT_CAVOS</code> làm như <code>ahciSetUpCmd</code> của cavOS: lấy PA của trang đầu và cho một entry PRDT dài 8192 byte. Controller ghi 4 KiB sau vào <code>0x76000</code>, tức frame đứng sau
+<code>0x75000</code> về vật lý, đè lên bộ nhớ của ai đó, còn trang thứ hai của buffer không nhận được gì. Các file vẫn đọc đúng trong lần chạy này, vì buffer tĩnh của lab nằm trong ảnh kernel
+mà Limine nạp liền một khối vật lý.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng thứ tự khởi tạo và cùng bố cục ổ đĩa; driver chỉ đọc, và vài chỗ làm khác có chủ ý.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x09</th></tr></thead>
+<tbody>
+<tr><td>Nhận controller</td><td>bảng <code>ahci_ids</code> nhiều controller</td><td>chỉ ICH9 <code>8086:2922</code></td></tr>
+<tr><td>Map ABAR</td><td><code>hhdmOffset + phys</code></td><td>VA riêng, uncached</td></tr>
+<tr><td>Phân loại cổng</td><td>đọc <code>SIG</code> trước khi bật FRE</td><td>bật FRE, chờ <code>SIG</code> thật, bỏ cổng ATAPI</td></tr>
+<tr><td>PRDT</td><td>một entry, PA của trang đầu</td><td>mỗi trang một entry, PA riêng; <code>DEMO=-DPRDT_CAVOS</code> làm y cavOS</td></tr>
+<tr><td>Ngắt</td><td>đăng ký IRQ qua <code>_PRT</code>, nhưng vẫn chờ bằng cách hỏi <code>CI</code></td><td>không đăng ký IRQ, chờ bằng cách hỏi <code>CI</code></td></tr>
+<tr><td>Ghi đĩa</td><td><code>ahciWrite</code>, ext2 ghi được</td><td>chỉ đọc</td></tr>
+<tr><td>Bộ nhớ đệm</td><td>cache sector FAT, cache block ext2</td><td>không cache (mỗi lần tra là một lần đọc đĩa)</td></tr>
+<tr><td>File mở</td><td><code>OpenFile</code>, handler theo filesystem, fd của task</td><td>chỉ "đọc cả file vào buffer"</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa code và chạy lại.</em></p>
+<details class="quiz"><summary>Bỏ dòng đặt <code>GHC.AE</code>. Driver còn chạy không?</summary>
+<p>Trên controller này vẫn chạy. <code>CAP 0xc0141f05</code> có bit 18 (SAM, "chỉ hỗ trợ AHCI") bằng 1, và theo đặc tả AHCI khi đó <code>GHC.AE</code> luôn đọc ra 1, ghi không đổi được. Trên
+controller còn hỗ trợ chế độ IDE cũ (SAM = 0), thiếu bước đặt AE thì các thanh ghi cổng AHCI không có hiệu lực.</p></details>
+<details class="quiz"><summary>Với block 4 KiB thay vì 1 KiB, <code>big.bin</code> (300 KiB) cần block gián tiếp không?</summary>
+<p>Không. 300 KiB = 75 block 4 KiB. 12 block trực tiếp + 1024 block qua gián tiếp 1 cấp, nên chỉ cần block gián tiếp 1 cấp; gián tiếp 2 cấp chỉ cần khi file vượt 12 + 1024 block (≈ 4 MiB).</p></details>
+<details class="quiz"><summary>Vì sao <code>KERNEL.BIN</code> hiện chữ hoa còn <code>limine.conf</code> giữ chữ thường?</summary>
+<p><code>kernel.bin</code> vừa khuôn 8.3, nên chỉ có một mục ngắn, và tên ngắn luôn lưu chữ hoa (lab không đọc cờ chữ thường của Windows NT ở byte 12). <code>limine.conf</code> có đuôi 4 chữ, nên mtools
+ghi thêm mục LFN mang tên gốc.</p></details>
+<details class="quiz"><summary>Trong bản <code>PRDT_CAVOS</code>, chuyện gì xảy ra với dữ liệu đang nằm ở frame <code>0x76000</code>?</summary>
+<p>Bị controller ghi đè bằng 4 KiB đĩa, không qua CPU và không qua page table, nên không có page fault nào báo. Nếu frame đó là page table hay stack của task khác thì hỏng âm thầm, lỗi lộ ra
+rất xa chỗ gây ra.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a> · nền <a href="../ly_thuyet/bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> (BAR, bus master,
+DMA), <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> (VA → PA).</li>
+<li>Lab trước: <a href="lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a>.</li>
+<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x09 - AHCI &amp; Filesystems</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

@@ -1,0 +1,663 @@
+# Lab 0x08 - PCI & NIC: real serial output (COM1) + pcap summaries, captured 2026-10-03 12:32 +0700
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2); Limine 8.7.0 (BIOS); toolchain: cross (/home/thinker/opt/cross/bin/x86_64-cavos-gcc) -O2
+# Base QEMU flags: -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -netdev user,id=mynet0 -net nic,model=e1000,netdev=mynet0 -object filter-dump,id=f0,netdev=mynet0,file=<run>.pcap -display none -drive file=os.img,format=raw,if=ide  (SeaBIOS)
+# The NIC is QEMU's e1000 (82540EM, 8086:100e) on QEMU user networking (slirp: DHCP server + router 10.0.2.2, DNS 10.0.2.3), the same card and netdev as cavOS 'make qemu'.
+# Each run: make clean; make DEMO=...; make image; timeout 12 make run ...; then python3 scripts/pcap_summary.py <run>.pcap (lines '#' + numbered = pcap reader, not kernel).
+# Line prefix [t=N] [id name] = timerTicks (1 tick = 1 ms) and the task that printed the line.
+
+########## Run 1 (main demo, TCG): make run
+=== Lab 0x08 - PCI & NIC ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff7005b -> 589732 LAPIC ticks in 10 ms -> apicFreq = 58973 ticks/ms (div 16 -> timer input clock ~943 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 58973 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -> class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -> 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -> mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -> EERD words 0,1,2 = 0x5452 0x1200 0x5634 -> MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -> 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 << 16) & (1 << 25)) = 0x0 -> also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -> vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -> vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=250; STATUS=0x80080783 -> link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -> lwIP thread + dhcp_start()
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 47 ms (scan + initiateE1000)
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)
+
+[t=  261] [3 net    ] rings before: RDH=0 RDT=255 rxHead(driver)=0  TDH=0 TDT=0
+[t=  262] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -> OFFER -> REQUEST -> ACK
+[t=  262] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP DISCOVER
+[t=  263] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 1, TDH 0 -> 1, DD after 0 ms / 0 handControl()
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00 
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff 
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41 
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 52 54 00 12 34 56 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01 
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 
+[t= 1310] [2 helper ] rx (590 B, IRQ at t=1307): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1311] [3 net    ] OFFER: sent at t=262, IRQ at t=1307, handled by helper at t=1310
+[t= 1311] [3 net    ] tx DHCP REQUEST (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP REQUEST
+[t= 1311] [3 net    ]    TX desc #1: addr=0x150800 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 2, TDH 1 -> 2, DD after 0 ms / 0 handControl()
+[t= 1311] [2 helper ] rx (590 B, IRQ at t=1311): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP ACK yiaddr=10.0.2.15
+   DHCP ACK: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1312] [3 net    ] ACK: sent at t=1311, IRQ at t=1311, handled by helper at t=1311
+[t= 1312] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1312] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1312] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1312] [3 net    ]    TX desc #2: addr=0x151000 len=42 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 3, TDH 2 -> 3, DD after 0 ms / 0 handControl()
+[t= 1316] [2 helper ] rx (64 B, IRQ at t=1312): 52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01 
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02 
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[t= 1316] [3 net    ] ARP reply: sent at t=1312, IRQ at t=1312, handled by helper at t=1316
+[t= 1316] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1316] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=1
+[t= 1316] [3 net    ]    TX desc #3: addr=0x151800 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 4, TDH 3 -> 4, DD after 0 ms / 0 handControl()
+[t= 1321] [2 helper ] rx (74 B, IRQ at t=1316): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=1
+[t= 1321] [3 net    ] echo reply: sent at t=1316, IRQ at t=1316, handled by helper at t=1321
+[t= 1321] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=2
+[t= 1321] [3 net    ]    TX desc #4: addr=0x152000 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 5, TDH 4 -> 5, DD after 0 ms / 0 handControl()
+[t= 1326] [2 helper ] rx (74 B, IRQ at t=1321): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=2
+[t= 1326] [3 net    ] echo reply: sent at t=1321, IRQ at t=1321, handled by helper at t=1326
+[t= 1326] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[t= 1331] [2 helper ] reaper: task 3 (net) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 64745 -> 64754
+
+[kernel] E1000 interrupt handler ran 14 times (7 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-main.pcap
+# lab08-main.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000069s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.988643s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.988650s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +0.989810s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.989812s  len   64  52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.993964s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=1
+  8  +0.993967s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=1
+  9  +0.998180s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=2
+ 10  +0.998184s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=2
+# 10 frames
+
+########## Run 2 (same kernel under KVM): QEMU_FLAGS += -enable-kvm
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+=== Lab 0x08 - PCI & NIC ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff68d57 -> 619176 LAPIC ticks in 10 ms -> apicFreq = 61917 ticks/ms (div 16 -> timer input clock ~990 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 61917 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -> class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -> 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -> mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -> EERD words 0,1,2 = 0x5452 0x1200 0x5634 -> MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -> 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 << 16) & (1 << 25)) = 0x0 -> also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -> vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -> vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=695; STATUS=0x80080783 -> link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -> lwIP thread + dhcp_start()
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 629 ms (scan + initiateE1000)
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)
+
+[t= 1265] [3 net    ] rings before: RDH=0 RDT=255 rxHead(driver)=0  TDH=0 TDT=0
+[t= 1266] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -> OFFER -> REQUEST -> ACK
+[t= 1267] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP DISCOVER
+[t= 1268] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 1, TDH 0 -> 1, DD after 0 ms / 0 handControl()
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00 
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff 
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41 
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 52 54 00 12 34 56 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01 
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 
+[t= 1705] [2 helper ] rx (590 B, IRQ at t=1704): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1709] [3 net    ] OFFER: sent at t=1267, IRQ at t=1704, handled by helper at t=1708
+[t= 1710] [3 net    ] tx DHCP REQUEST (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP REQUEST
+[t= 1712] [3 net    ]    TX desc #1: addr=0x150800 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 2, TDH 1 -> 2, DD after 0 ms / 0 handControl()
+[t= 1713] [2 helper ] rx (590 B, IRQ at t=1712): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP ACK yiaddr=10.0.2.15
+   DHCP ACK: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1717] [3 net    ] ACK: sent at t=1710, IRQ at t=1712, handled by helper at t=1716
+[t= 1718] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1718] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1719] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1720] [3 net    ]    TX desc #2: addr=0x151000 len=42 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 3, TDH 2 -> 3, DD after 0 ms / 0 handControl()
+[t= 1722] [2 helper ] rx (64 B, IRQ at t=1720): 52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01 
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02 
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[t= 1728] [3 net    ] ARP reply: sent at t=1719, IRQ at t=1720, handled by helper at t=1727
+[t= 1729] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1729] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=1
+[t= 1731] [3 net    ]    TX desc #3: addr=0x151800 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 4, TDH 3 -> 4, DD after 0 ms / 0 handControl()
+[t= 1732] [2 helper ] rx (74 B, IRQ at t=1731): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=1
+[t= 1735] [3 net    ] echo reply: sent at t=1729, IRQ at t=1731, handled by helper at t=1734
+[t= 1735] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=2
+[t= 1737] [3 net    ]    TX desc #4: addr=0x152000 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 5, TDH 4 -> 5, DD after 0 ms / 0 handControl()
+[t= 1739] [2 helper ] rx (74 B, IRQ at t=1737): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=2
+[t= 1741] [3 net    ] echo reply: sent at t=1735, IRQ at t=1737, handled by helper at t=1740
+[t= 1742] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[t= 1745] [2 helper ] reaper: task 3 (net) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 64745 -> 64754
+
+[kernel] E1000 interrupt handler ran 14 times (7 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-kvm.pcap
+# lab08-kvm.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000048s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.439182s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.439196s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +0.447840s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.447843s  len   64  52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.458066s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=1
+  8  +0.458071s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=1
+  9  +0.464231s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=2
+ 10  +0.464233s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=2
+# 10 frames
+
+########## Run 3: DEMO=-DEOI_LATE (EOI after the handler for PCI vectors >= 0x24)
+=== Lab 0x08 - PCI & NIC ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6f787 -> 591992 LAPIC ticks in 10 ms -> apicFreq = 59199 ticks/ms (div 16 -> timer input clock ~947 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59199 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -> class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -> 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -> mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -> EERD words 0,1,2 = 0x5452 0x1200 0x5634 -> MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -> 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 << 16) & (1 << 25)) = 0x0 -> also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -> vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -> vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=250; STATUS=0x80080783 -> link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -> lwIP thread + dhcp_start()
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 47 ms (scan + initiateE1000)
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)
+
+[t=  263] [3 net    ] rings before: RDH=0 RDT=255 rxHead(driver)=0  TDH=0 TDT=0
+[t=  263] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -> OFFER -> REQUEST -> ACK
+[t=  263] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP DISCOVER
+[t=  265] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 1, TDH 0 -> 1, DD after 1 ms / 0 handControl()
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00 
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff 
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41 
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 52 54 00 12 34 56 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01 
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 
+[t= 1306] [2 helper ] rx (590 B, IRQ at t=1304): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1308] [3 net    ] OFFER: sent at t=263, IRQ at t=1304, handled by helper at t=1307
+[t= 1308] [3 net    ] tx DHCP REQUEST (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP REQUEST
+[t= 1308] [3 net    ]    TX desc #1: addr=0x150800 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 2, TDH 1 -> 2, DD after 0 ms / 0 handControl()
+[t= 1312] [2 helper ] rx (590 B, IRQ at t=1308): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP ACK yiaddr=10.0.2.15
+   DHCP ACK: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1312] [3 net    ] ACK: sent at t=1308, IRQ at t=1308, handled by helper at t=1312
+[t= 1312] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1312] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1312] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1312] [3 net    ]    TX desc #2: addr=0x151000 len=42 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 3, TDH 2 -> 3, DD after 0 ms / 0 handControl()
+[t= 1317] [2 helper ] rx (64 B, IRQ at t=1312): 52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01 
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02 
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[t= 1317] [3 net    ] ARP reply: sent at t=1312, IRQ at t=1312, handled by helper at t=1317
+[t= 1317] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1318] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=1
+[t= 1318] [3 net    ]    TX desc #3: addr=0x151800 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 4, TDH 3 -> 4, DD after 0 ms / 0 handControl()
+[t= 1322] [2 helper ] rx (74 B, IRQ at t=1318): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=1
+[t= 1322] [3 net    ] echo reply: sent at t=1318, IRQ at t=1318, handled by helper at t=1322
+[t= 1322] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=2
+[t= 1322] [3 net    ]    TX desc #4: addr=0x152000 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 5, TDH 4 -> 5, DD after 0 ms / 0 handControl()
+[t= 1327] [2 helper ] rx (74 B, IRQ at t=1322): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=2
+[t= 1327] [3 net    ] echo reply: sent at t=1322, IRQ at t=1322, handled by helper at t=1327
+[t= 1327] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[t= 1332] [2 helper ] reaper: task 3 (net) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 64745 -> 64754
+
+[kernel] E1000 interrupt handler ran 7 times (0 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-eoilate.pcap
+# lab08-eoilate.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000069s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.988319s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.988328s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +0.992601s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.992604s  len   64  52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.997623s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=1
+  8  +0.997637s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=1
+  9  +1.001537s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=2
+ 10  +1.001540s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=2
+# 10 frames
+
+########## Run 4: DEMO=-DWAIT_RCTL (send DISCOVER only 1100 ms after the last RCTL write)
+=== Lab 0x08 - PCI & NIC ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6e90c -> 595699 LAPIC ticks in 10 ms -> apicFreq = 59569 ticks/ms (div 16 -> timer input clock ~953 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59569 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -> class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -> 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -> mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -> EERD words 0,1,2 = 0x5452 0x1200 0x5634 -> MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -> 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 << 16) & (1 << 25)) = 0x0 -> also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -> vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -> vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=250; STATUS=0x80080783 -> link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -> lwIP thread + dhcp_start()
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 46 ms (scan + initiateE1000)
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)
+
+[t=  262] [3 net    ] rings before: RDH=0 RDT=255 rxHead(driver)=0  TDH=0 TDT=0
+[t=  262] [3 net    ] WAIT_RCTL: RCTL last written at t=250, sleeping until t=1350
+[t= 1352] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -> OFFER -> REQUEST -> ACK
+[t= 1352] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP DISCOVER
+[t= 1353] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 1, TDH 0 -> 1, DD after 0 ms / 0 handControl()
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00 
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff 
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41 
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 52 54 00 12 34 56 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01 
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 
+[t= 1356] [2 helper ] rx (590 B, IRQ at t=1353): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1356] [3 net    ] OFFER: sent at t=1352, IRQ at t=1353, handled by helper at t=1356
+[t= 1357] [3 net    ] tx DHCP REQUEST (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP REQUEST
+[t= 1357] [3 net    ]    TX desc #1: addr=0x150800 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 2, TDH 1 -> 2, DD after 0 ms / 0 handControl()
+[t= 1361] [2 helper ] rx (590 B, IRQ at t=1357): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP ACK yiaddr=10.0.2.15
+   DHCP ACK: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1361] [3 net    ] ACK: sent at t=1357, IRQ at t=1357, handled by helper at t=1361
+[t= 1361] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1361] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1361] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1361] [3 net    ]    TX desc #2: addr=0x151000 len=42 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 3, TDH 2 -> 3, DD after 0 ms / 0 handControl()
+[t= 1366] [2 helper ] rx (64 B, IRQ at t=1361): 52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01 
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02 
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[t= 1366] [3 net    ] ARP reply: sent at t=1361, IRQ at t=1361, handled by helper at t=1366
+[t= 1366] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1366] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=1
+[t= 1366] [3 net    ]    TX desc #3: addr=0x151800 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 4, TDH 3 -> 4, DD after 0 ms / 0 handControl()
+[t= 1371] [2 helper ] rx (74 B, IRQ at t=1366): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=1
+[t= 1371] [3 net    ] echo reply: sent at t=1366, IRQ at t=1366, handled by helper at t=1371
+[t= 1371] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=2
+[t= 1371] [3 net    ]    TX desc #4: addr=0x152000 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 5, TDH 4 -> 5, DD after 0 ms / 0 handControl()
+[t= 1376] [2 helper ] rx (74 B, IRQ at t=1371): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=2
+[t= 1376] [3 net    ] echo reply: sent at t=1371, IRQ at t=1371, handled by helper at t=1376
+[t= 1376] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[t= 1381] [2 helper ] reaper: task 3 (net) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 64745 -> 64754
+
+[kernel] E1000 interrupt handler ran 12 times (6 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-waitrctl.pcap
+# lab08-waitrctl.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000098s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.003873s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.003879s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +0.008209s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.008212s  len   64  52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.013002s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=1
+  8  +0.013005s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=1
+  9  +0.017414s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=2
+ 10  +0.017419s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=2
+# 10 frames
+
+########## Run 5: DEMO=-DPCI_ACTIVE_LOW (I/O APIC entry active-low instead of active-high)
+=== Lab 0x08 - PCI & NIC ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6f1e0 -> 593439 LAPIC ticks in 10 ms -> apicFreq = 59343 ticks/ms (div 16 -> timer input clock ~949 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59343 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebb0000  size 4 KiB   (read 0xfebb0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -> class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -> 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{0xfeb80000} size 128 KiB -> mapped uncached (PCD|PWT) at VA 0xfffffe8000100000
+[pci::e1000] device reset: CTRL 0x140240 |= RST (bit 26), bit cleared after 0 polls, CTRL now 0x140240 (cavOS does not reset the card)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -> EERD words 0,1,2 = 0x5452 0x1200 0x5634 -> MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] RCTL=0x400803c (SBP UPE MPE LPE BAM SECRC, BSIZE=00 -> 2048 B); cavOS ORs in RCTL_BUFFER_SIZE_8192 = ((0b10 << 16) & (1 << 25)) = 0x0 -> also 2048 B
+[pci::e1000] TX ring: 256 descriptors at PA 0x14f000, one 2048 B buffer per descriptor, TDH=TDT=0
+[pci::e1000] config 0x3C Interrupt Line = 11, Interrupt Pin = A (Line = 8259 PIC IRQ chosen by firmware; useless once the I/O APIC is on)
+[pci::e1000] probe: GSI 16..23 -> vectors 0x24..0x2b, wrote ICS=LSC, pins that fired within 20 ms: GSI 22
+[pci::e1000] GSI 22 -> vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000a02a  vector=0x2a ACTIVE level low dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=248; STATUS=0x80080783 -> link up, 1000 Mb/s, full duplex
+[nics] driver took the card; cavOS would now call tcpip_init(lwipInitInThread, selectedNIC) -> lwIP thread + dhcp_start()
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc080  size 32 B   (read 0xc081, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebb1000  size 4 KiB   (read 0xfebb1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: cavOS calls initiateAHCI() (Bai 15); lab skips it
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 45 ms (scan + initiateE1000)
+[pci] pmm frames used by PCI + NIC setup: 258 (2 rings + 128 RX + 128 TX buffer frames)
+
+[t=  260] [3 net    ] rings before: RDH=0 RDT=255 rxHead(driver)=0  TDH=0 TDT=0
+[t=  261] [3 net    ] step 1: DHCP (what lwIP dhcp_start() does in cavOS): DISCOVER -> OFFER -> REQUEST -> ACK
+[t=  261] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP DISCOVER
+[t=  262] [3 net    ]    TX desc #0: addr=0x150000 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 1, TDH 0 -> 1, DD after 0 ms / 0 handControl()
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00 
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff 
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41 
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 52 54 00 12 34 56 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01 
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+      00 00 00 00 00 00 
+[t= 1301] [2 helper ] rx (590 B, IRQ at t=1300): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1303] [3 net    ] OFFER: sent at t=261, IRQ at t=1300, handled by helper at t=1302
+[t= 1303] [3 net    ] tx DHCP REQUEST (342 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 UDP 68 > 67 DHCP REQUEST
+[t= 1303] [3 net    ]    TX desc #1: addr=0x150800 len=342 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 2, TDH 1 -> 2, DD after 0 ms / 0 handControl()
+[t= 1307] [2 helper ] rx (590 B, IRQ at t=1303): 52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 UDP 67 > 68 DHCP ACK yiaddr=10.0.2.15
+   DHCP ACK: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1307] [3 net    ] ACK: sent at t=1303, IRQ at t=1303, handled by helper at t=1307
+[t= 1307] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1307] [3 net    ] step 2: ARP - who has the router's IP?
+[t= 1307] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1307] [3 net    ]    TX desc #2: addr=0x151000 len=42 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 3, TDH 2 -> 3, DD after 0 ms / 0 handControl()
+[t= 1312] [2 helper ] rx (64 B, IRQ at t=1307): 52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01 
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02 
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00 
+      00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 
+[t= 1312] [3 net    ] ARP reply: sent at t=1307, IRQ at t=1307, handled by helper at t=1312
+[t= 1312] [3 net    ] step 3: ICMP echo to the router, 2 times
+[t= 1312] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=1
+[t= 1313] [3 net    ]    TX desc #3: addr=0x151800 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 4, TDH 3 -> 4, DD after 0 ms / 0 handControl()
+[t= 1317] [2 helper ] rx (74 B, IRQ at t=1313): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=1
+[t= 1317] [3 net    ] echo reply: sent at t=1312, IRQ at t=1313, handled by helper at t=1317
+[t= 1317] [3 net    ] tx ICMP echo request (74 B): 52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request seq=2
+[t= 1317] [3 net    ]    TX desc #4: addr=0x152000 len=74 cmd=0xb (EOP|IFCS|RS) status=0x1 (DD)  TDT -> 5, TDH 4 -> 5, DD after 0 ms / 0 handControl()
+[t= 1322] [2 helper ] rx (74 B, IRQ at t=1317): 52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply seq=2
+[t= 1322] [3 net    ] echo reply: sent at t=1317, IRQ at t=1317, handled by helper at t=1322
+[t= 1322] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[t= 1327] [2 helper ] reaper: task 3 (net) freed: 5 frames (4 stack + 1 TSS stack) + 4 page tables (PDPT, PD, PT, PML4); pmm free 64745 -> 64754
+
+[kernel] E1000 interrupt handler ran 14 times (7 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0
+[kernel] frames: tx 5, rx by IRQ 5, handled by helperNet 5 (ignored by the lab: 0), netQueue drops 0
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt
+
+##### pcap: python3 scripts/pcap_summary.py lab08-activelow.pcap
+# lab08-activelow.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x4c414238
+  2  +0.000040s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.988587s  len  342  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x4c414238 server=10.0.2.2 requested=10.0.2.15
+  4  +0.988597s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x4c414238 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +0.992846s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+  6  +0.992850s  len   64  52:55:0a:00:02:02 > 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+  7  +0.997744s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=1
+  8  +0.997749s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=1
+  9  +1.001911s  len   74  52:54:00:12:34:56 > 52:55:0a:00:02:02 IPv4 10.0.2.15 > 10.0.2.2 ICMP echo request id=0x0808 seq=2
+ 10  +1.001915s  len   74  52:55:0a:00:02:02 > 52:54:00:12:34:56 IPv4 10.0.2.2 > 10.0.2.15 ICMP echo reply id=0x0808 seq=2
+# 10 frames

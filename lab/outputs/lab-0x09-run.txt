@@ -1,0 +1,258 @@
+# Lab 0x09 - AHCI & Filesystems: real serial output (COM1), captured 2026-10-03 18:20 +0700
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2); Limine 8.7.0 (BIOS); toolchain: cross (/home/tmniosc/opt/cross/bin/x86_64-cavos-gcc) -O2
+# QEMU: qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -nic none -display none -drive file=os.img,format=raw,if=ide  (on q35, if=ide = the ICH9 AHCI controller 00:1f.2)
+# Disk: scripts/mkimage_fs.sh -> MBR, partition 1 FAT32 (Limine + kernel.bin, like cavOS /boot/), partition 2 ext2 1 KiB blocks (like cavOS /)
+
+########## Run 1 (TCG): make run
+##### make image (host side):
+[1/6] create 96 MiB raw image -> os.img
+[2/6] MBR: partition 1 FAT32 (boot flag) 1..40 MiB, partition 2 Linux (0x83) 40 MiB..end
+[3/6] limine bios-install
+[4/6] FAT32 on partition 1, same layout as cavOS: /kernel.bin, /limine/, /EFI/BOOT/
+[5/6] ext2 on partition 2 (block size 1024, files from rootfs/)
+[6/6] expected FNV-1a (computed on the host)
+  kernel.bin       389480 bytes  FNV-1a 0x66d00670
+  big.bin          307200 bytes  FNV-1a 0x4fa57155
+  note.txt             22 bytes  FNV-1a 0x1afe5128
+done: os.img
+=== Lab 0x09 - AHCI & Filesystems ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff733bd -> 576578 LAPIC ticks in 10 ms -> apicFreq = 57657 ticks/ms (div 16 -> timer input clock ~922 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 57657 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebf0000  size 4 KiB   (read 0xfebf0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc040  size 32 B   (read 0xc041, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebf1000  size 4 KiB   (read 0xfebf1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: initiateAHCI()
+[pci::ahci] Detected controller! name{Intel ICH9}
+[pci::ahci] PCI command 0x107 -> 0x107 (bus master, memory space)
+[pci::ahci] ABAR (BAR5) PA 0xfebf1000 -> VA 0xfffffe8000100000; CAP 0xc0141f05 -> 6 ports, 32 command slots, 64-bit DMA yes; version 1.00; PI 0x3f
+[pci::ahci] HBA reset (GHC.HR) done in 0 ms; BOHC 0x0, CAP2 0x0 (CAP2.BOH = 0: no BIOS/OS handoff on this controller)
+[pci::ahci] GHC 0x80000000 (AE=1)
+[pci::ahci] port 0: SSTS 0x113 SIG 0xffffffff -> SATA disk (cavOS's classification)
+[pci::ahci]   port 0 rebased: command list PA 0x6d000, received FIS PA 0x6e000, command tables PA 0x6f000 + 0x70000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0x101 (after 0 ms) -> SATA disk
+[pci::ahci]   IDENTIFY: model "QEMU HARDDISK", LBA48 yes, 196608 sectors x 512 B = 96 MiB
+[pci::ahci] port 1: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 2: SSTS 0x113 SIG 0xffffffff -> SATA disk (cavOS's classification)
+[pci::ahci]   port 2 rebased: command list PA 0x71000, received FIS PA 0x72000, command tables PA 0x73000 + 0x74000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0xeb140101 (after 0 ms) -> SATAPI (CD/DVD)
+[pci::ahci]   not a SATA disk: engine stopped, port dropped
+[pci::ahci] port 3: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 4: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 5: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 5 functions answered, 5 with header type 0; 65781 config reads, 38 ms (scan + drivers)
+
+[disk] LBA 0 (MBR): signature 0x55 0xaa -> valid
+[disk]   partition 0: type 0xc (bootable)  first LBA 2048  sectors 79872 (39 MiB)
+[disk]   partition 1: type 0x83             first LBA 81920  sectors 114688 (56 MiB)
+
+[vfs] fsMount("/", CONNECTOR_AHCI, 0, 1)
+[ext2] superblock at LBA 81922: magic 0xef53, volume "labroot", block size 1024, 57344 blocks, 14336 inodes, 7 block groups (8192 blocks, 2048 inodes each), inode size 256, incompat features 0x2 (= FILETYPE only: cavOS accepts it)
+[ext2]   BGDT at block 2: inode table of group 0 at block 228, group 1 at block 8420
+[vfs]   mounted as ext2
+[vfs] fsMount("/boot/", CONNECTOR_AHCI, 0, 0)
+[fat32] boot sector at LBA 2048: label "LABBOOT    ", 2 sectors/cluster, 32 reserved, 2 FATs x 754 sectors, root cluster 2
+[fat32]   -> FAT at LBA 2080, cluster 2 at LBA 3588
+[vfs]   mounted as FAT32
+
+[vfs] fsDetermineMountPoint("/") -> "/"
+[vfs] fsDetermineMountPoint("/boot/kernel.bin") -> "/boot/"
+[vfs] fsDetermineMountPoint("/bootstrap.txt") -> "/"
+[vfs] fsDetermineMountPoint("/etc/motd") -> "/"
+
+[vfs] ls /  (mount "/", path inside it "/")
+    .                     inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    lost+found            inode   11  type 2 (dir)   mode 0x41c0  size 12288
+    big.bin               inode   12  type 1 (file)  mode 0x81a4  size 307200
+    bin                   inode   13  type 2 (dir)   mode 0x41ed  size 1024
+    docs                  inode   15  type 2 (dir)   mode 0x41ed  size 1024
+    etc                   inode   19  type 2 (dir)   mode 0x41ed  size 1024
+    motd-link             inode   22  type 7 (link)  mode 0xa1ff  size 9
+[vfs] ls /boot/  (mount "/boot/", path inside it "/")
+    LIMINE                <DIR>       first cluster 3
+    EFI                   <DIR>       first cluster 4
+    KERNEL.BIN            file    389480 B  first cluster 6
+[vfs] ls /boot/limine  (mount "/boot/", path inside it "/limine")
+    limine.conf           file        88 B  first cluster 387
+    limine-bios.sys       file    216644 B  first cluster 388
+[vfs] ls /etc  (mount "/", path inside it "/etc")
+    .                     inode   19  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    motd                  inode   20  type 1 (file)  mode 0x81a4  size 99
+    passwd                inode   21  type 1 (file)  mode 0x81a4  size 28
+
+[ext2]   /etc/motd: inode 20, 99 B = 1 blocks; block[0..11] = 1440 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+---------- /etc/motd ----------
+Hello from the ext2 partition (cavOS mounts it at "/").
+This line is the second line of /etc/motd.
+----------
+[fat32]   /limine/limine.conf: 88 B in a chain of 1 clusters starting at 387
+---------- /boot/limine/limine.conf ----------
+timeout: 0
+
+/oskernel-lab 0x09
+    protocol: limine
+    kernel_path: boot():/kernel.bin
+----------
+
+[fat32]   /kernel.bin: 389480 B in a chain of 381 clusters starting at 6
+[kernel] /boot/kernel.bin: 389480 bytes, FNV-1a 0x66d00670, 763 AHCI commands, 1145 sectors, 82 ms
+[ext2]   /big.bin: inode 12, 307200 B = 300 blocks; block[0..11] = 754,755,756,757,758,759,760,761,762,763,764,765 block[12] (single indirect) = 766, block[13] (double) = 1023; indirect blocks read: 3
+[kernel] /big.bin: 307200 bytes, FNV-1a 0x4fa57155, 306 AHCI commands, 610 sectors, 36 ms
+[ext2]   /docs/deep/nested/note.txt: inode 18, 22 B = 1 blocks; block[0..11] = 1438 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[kernel] /docs/deep/nested/note.txt: 22 bytes, FNV-1a 0x1afe5128, 10 AHCI commands, 15 sectors, 2 ms
+[kernel] /missing.txt: not found
+
+[prdt] buffer VA 0xfffffe8000800000: page 0 -> PA 0x75000, page 1 -> PA 0x77000 (frame 0x76000 in between)
+[prdt] mode: one PRDT entry per page, each with its own PA
+[prdt] sectors 0-7 in page 0: match; sectors 8-15 in page 1: match; frame in between written by the disk: no
+
+[kernel] total: 1123 AHCI commands, 1858 sectors read; cli; hlt
+
+########## Run 2: DEMO=-DPRDT_CAVOS (one PRDT entry for the whole buffer, like cavOS)
+=== Lab 0x09 - AHCI & Filesystems ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff6f4b4 -> 592715 LAPIC ticks in 10 ms -> apicFreq = 59271 ticks/ms (div 16 -> timer input clock ~948 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 59271 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+[networking] Ready to scan for NICs..
+[pci] scanning like cavOS initiatePCI(): bus 0..255 x slot 0..31 x function 0..7 through 0xCF8/0xCFC
+[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci]          BAR0 MMIO32  0xfd000000  size 16 MiB   (read 0xfd000008, after writing 0xffffffff read 0xff000008, prefetchable)
+[pci]          BAR2 MMIO32  0xfebf0000  size 4 KiB   (read 0xfebf0000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x03: cavOS calls initiateVMWareSvga2(), which only takes 15ad:0405; lab skips it
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci]          BAR4 I/O     0xc040  size 32 B   (read 0xc041, after writing 0xffffffff read 0xffffffe1)
+[pci]          BAR5 MMIO32  0xfebf1000  size 4 KiB   (read 0xfebf1000, after writing 0xffffffff read 0xfffff000)
+[pci]          -> class 0x01 sub 0x06: initiateAHCI()
+[pci::ahci] Detected controller! name{Intel ICH9}
+[pci::ahci] PCI command 0x107 -> 0x107 (bus master, memory space)
+[pci::ahci] ABAR (BAR5) PA 0xfebf1000 -> VA 0xfffffe8000100000; CAP 0xc0141f05 -> 6 ports, 32 command slots, 64-bit DMA yes; version 1.00; PI 0x3f
+[pci::ahci] HBA reset (GHC.HR) done in 0 ms; BOHC 0x0, CAP2 0x0 (CAP2.BOH = 0: no BIOS/OS handoff on this controller)
+[pci::ahci] GHC 0x80000000 (AE=1)
+[pci::ahci] port 0: SSTS 0x113 SIG 0xffffffff -> SATA disk (cavOS's classification)
+[pci::ahci]   port 0 rebased: command list PA 0x6d000, received FIS PA 0x6e000, command tables PA 0x6f000 + 0x70000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0x101 (after 0 ms) -> SATA disk
+[pci::ahci]   IDENTIFY: model "QEMU HARDDISK", LBA48 yes, 196608 sectors x 512 B = 96 MiB
+[pci::ahci] port 1: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 2: SSTS 0x113 SIG 0xffffffff -> SATA disk (cavOS's classification)
+[pci::ahci]   port 2 rebased: command list PA 0x71000, received FIS PA 0x72000, command tables PA 0x73000 + 0x74000, CMD 0xc017 (ST=1 FRE=1)
+[pci::ahci]   after FRE=1: SIG 0xeb140101 (after 0 ms) -> SATAPI (CD/DVD)
+[pci::ahci]   not a SATA disk: engine stopped, port dropped
+[pci::ahci] port 3: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 4: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci::ahci] port 5: SSTS 0x0 SIG 0xffffffff -> no device (DET != 3)
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci]          BAR4 I/O     0x700  size 64 B   (read 0x701, after writing 0xffffffff read 0xffffffc1)
+[pci] done: 65536 (bus,slot,function) addresses probed, 5 functions answered, 5 with header type 0; 65781 config reads, 56 ms (scan + drivers)
+
+[disk] LBA 0 (MBR): signature 0x55 0xaa -> valid
+[disk]   partition 0: type 0xc (bootable)  first LBA 2048  sectors 79872 (39 MiB)
+[disk]   partition 1: type 0x83             first LBA 81920  sectors 114688 (56 MiB)
+
+[vfs] fsMount("/", CONNECTOR_AHCI, 0, 1)
+[ext2] superblock at LBA 81922: magic 0xef53, volume "labroot", block size 1024, 57344 blocks, 14336 inodes, 7 block groups (8192 blocks, 2048 inodes each), inode size 256, incompat features 0x2 (= FILETYPE only: cavOS accepts it)
+[ext2]   BGDT at block 2: inode table of group 0 at block 228, group 1 at block 8420
+[vfs]   mounted as ext2
+[vfs] fsMount("/boot/", CONNECTOR_AHCI, 0, 0)
+[fat32] boot sector at LBA 2048: label "LABBOOT    ", 2 sectors/cluster, 32 reserved, 2 FATs x 754 sectors, root cluster 2
+[fat32]   -> FAT at LBA 2080, cluster 2 at LBA 3588
+[vfs]   mounted as FAT32
+
+[vfs] fsDetermineMountPoint("/") -> "/"
+[vfs] fsDetermineMountPoint("/boot/kernel.bin") -> "/boot/"
+[vfs] fsDetermineMountPoint("/bootstrap.txt") -> "/"
+[vfs] fsDetermineMountPoint("/etc/motd") -> "/"
+
+[vfs] ls /  (mount "/", path inside it "/")
+    .                     inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    lost+found            inode   11  type 2 (dir)   mode 0x41c0  size 12288
+    big.bin               inode   12  type 1 (file)  mode 0x81a4  size 307200
+    bin                   inode   13  type 2 (dir)   mode 0x41ed  size 1024
+    docs                  inode   15  type 2 (dir)   mode 0x41ed  size 1024
+    etc                   inode   19  type 2 (dir)   mode 0x41ed  size 1024
+    motd-link             inode   22  type 7 (link)  mode 0xa1ff  size 9
+[vfs] ls /boot/  (mount "/boot/", path inside it "/")
+    LIMINE                <DIR>       first cluster 3
+    EFI                   <DIR>       first cluster 4
+    KERNEL.BIN            file    384864 B  first cluster 6
+[vfs] ls /boot/limine  (mount "/boot/", path inside it "/limine")
+    limine.conf           file        88 B  first cluster 382
+    limine-bios.sys       file    216644 B  first cluster 383
+[vfs] ls /etc  (mount "/", path inside it "/etc")
+    .                     inode   19  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    motd                  inode   20  type 1 (file)  mode 0x81a4  size 99
+    passwd                inode   21  type 1 (file)  mode 0x81a4  size 28
+
+[ext2]   /etc/motd: inode 20, 99 B = 1 blocks; block[0..11] = 1438 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+---------- /etc/motd ----------
+Hello from the ext2 partition (cavOS mounts it at "/").
+This line is the second line of /etc/motd.
+----------
+[fat32]   /limine/limine.conf: 88 B in a chain of 1 clusters starting at 382
+---------- /boot/limine/limine.conf ----------
+timeout: 0
+
+/oskernel-lab 0x09
+    protocol: limine
+    kernel_path: boot():/kernel.bin
+----------
+
+[fat32]   /kernel.bin: 384864 B in a chain of 376 clusters starting at 6
+[kernel] /boot/kernel.bin: 384864 bytes, FNV-1a 0x32471ba4, 753 AHCI commands, 1130 sectors, 164 ms
+[ext2]   /big.bin: inode 12, 307200 B = 300 blocks; block[0..11] = 754,755,756,757,758,759,760,761,762,763,764,765 block[12] (single indirect) = 766, block[13] (double) = 1023; indirect blocks read: 3
+[kernel] /big.bin: 307200 bytes, FNV-1a 0x4fa57155, 306 AHCI commands, 610 sectors, 96 ms
+[ext2]   /docs/deep/nested/note.txt: inode 18, 22 B = 1 blocks; block[0..11] = 1436 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[kernel] /docs/deep/nested/note.txt: 22 bytes, FNV-1a 0x1afe5128, 10 AHCI commands, 15 sectors, 6 ms
+[kernel] /missing.txt: not found
+
+[prdt] buffer VA 0xfffffe8000800000: page 0 -> PA 0x75000, page 1 -> PA 0x77000 (frame 0x76000 in between)
+[prdt] mode: PRDT_CAVOS, one PRDT entry = PA of page 0, 8192 bytes
+[prdt] sectors 0-7 in page 0: match; sectors 8-15 in page 1: WRONG; frame in between written by the disk: YES
+
+[kernel] total: 1113 AHCI commands, 1843 sectors read; cli; hlt
+

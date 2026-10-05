@@ -1,0 +1,54 @@
+# cavOS (commit 2ba0edb) booted from ~/cavOS/disk.img with the NIC flags of its 'make qemu', captured 2026-10-03 12:34 +0700
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2)
+# Command: timeout 40 qemu-system-x86_64 -d guest_errors -serial stdio -drive file=disk.img,format=raw,id=disk,if=none -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -m 4g -netdev user,id=mynet0 -net nic,model=e1000,netdev=mynet0 -object filter-dump,id=id,netdev=mynet0,file=cavos.pcap -vga vmware -display none -enable-kvm -snapshot -no-reboot
+# = src/kernel/Makefile 'qemu' target, except: -display none (headless), -snapshot (disk not modified), -no-reboot, filter-dump (from its 'qemu_dbg' target). Machine = QEMU default 'pc' (i440fx), not q35.
+# Serial = cavOS debugf() output until the timeout killed QEMU (bash runs on the framebuffer, not on serial).
+
+qemu-system-x86_64: warning: host doesn't support requested feature: CPUID[eax=80000001h].ECX.svm [bit 2]
+[serial] Installing serial...
+[graphics] Resolution fixed: fb{ffff8000fd000000} dim(xy){1024x768} bpp{32}
+[console] Initiated with font: dim(xy){8x14}
+[pmm] Bitmap initiated: bitmapStartPhys{0x60000} size{20050}
+[acpi::info] starting uACPI, version 3.1.0
+[acpi::info] RSDP 0x00000000000F5250 00000014 v00 (BOCHS )
+[acpi::info] RSDT 0x00000000BFFE2320 00000034 v01 (BOCHS  BXPC    )
+[acpi::info] DSDT 0x00000000BFFE0040 00002194 v01 (BOCHS  BXPC    )
+[acpi::info] FACP 0x00000000BFFE21D4 00000074 v01 (BOCHS  BXPC    )
+[acpi::info] APIC 0x00000000BFFE2248 00000078 v03 (BOCHS  BXPC    )
+[acpi::info] HPET 0x00000000BFFE22C0 00000038 v01 (BOCHS  BXPC    )
+[acpi::info] WAET 0x00000000BFFE22F8 00000028 v01 (BOCHS  BXPC    )
+[acpi::info] FACS 0x00000000BFFE0000 00000040
+[acpi::warn] uacpi_kernel_get_nanoseconds_since_boot() appears to be a stub, this may cause problems
+[acpi::info] loaded 1 AML blob (0 errors)
+[acpi::info] namespace initialization done: 54 devices, 0 thermal zones
+[acpi::info] Found century register for RTC: register{0x32}
+[apic] Detection completed: lapic{fee00000} ioapic{fec00000} 
+
+====== REACHED SYSTEM ======
+[timer] Ready to fire: frequency{1193MHz}
+[tasks] Current execution ready for multitasking
+[networking] Ready to scan for NICs..
+[pci::svga-II] VMWare SVGA-II graphics card detected!
+[pci::e1000] Intel E1000 NIC detected! dev{100e}
+[pci::e1000] Fetched BAR[0] and MMIO is used: membase{feb80000}
+[ioapic::pci] Redirection [00:03.0] -> [00:03.0]: gsi{11} [0:1]
+[pci::ahci] Detected controller! name{Intel ICH9} quirks{0}
+[pci::ahci] Performing BIOS->OS handoff required!
+[pci::ahci] SATA drive found at port 0
+[ioapic::pci] Redirection [00:04.0] -> [00:04.0]: gsi{11} [0:1]
+[syscalls] System calls are ready to fire: 99/450
+[cpu] Extra CPU features have all been enabled without issue
+qemu-system-x86_64: terminating on signal 15 from pid 20995 (timeout)
+
+##### pcap: python3 scripts/pcap_summary.py cavos.pcap  (lwIP inside cavOS: DHCP, then ARP probes/announcements for the new address)
+# /home/thinker/l08tmp/cavos.pcap: pcap v2.4, linktype 1 (Ethernet), snaplen 65536
+  1  +0.000000s  len  350  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP DISCOVER xid=0x00002781
+  2  +0.000057s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP OFFER xid=0x00002781 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  3  +0.991415s  len  350  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 > 255.255.255.255 DHCP REQUEST xid=0x00002781 server=10.0.2.2 requested=10.0.2.15
+  4  +0.991434s  len  590  52:55:0a:00:02:02 > ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 > 255.255.255.255 DHCP ACK xid=0x00002781 yiaddr=10.0.2.15 server=10.0.2.2 mask=255.255.255.0 router=10.0.2.2 dns=10.0.2.3 lease=86400s
+  5  +1.410930s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 0.0.0.0
+  6  +3.020679s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 0.0.0.0
+  7  +4.350142s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 0.0.0.0
+  8  +6.243962s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 10.0.2.15
+  9  +8.137739s  len   42  52:54:00:12:34:56 > ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.15 tell 10.0.2.15
+# 9 frames

@@ -1,0 +1,129 @@
+# Lab 0x0c - Userspace & ELF Loader: real output, captured 2026-10-03 19:56 +0700
+# QEMU emulator version 10.2.1 (Debian 1:10.2.1+ds-1ubuntu3.2); Limine 8.7.0 (BIOS); toolchain: cross (/home/tmniosc/opt/cross/bin/x86_64-cavos-gcc) -O2; TCG -cpu max
+# QEMU: qemu-system-x86_64 -M q35 -m 256M -serial stdio -no-reboot -no-shutdown -nic none -cpu max -display none -drive file=os.img,format=raw,if=ide
+# Boot lines from [networking] to the syscall/SSE setup are the same as Lab 0x0b and are cut here (marked ...).
+
+##### host: make image
+[1/6] create 96 MiB raw image -> os.img
+[2/6] MBR: partition 1 FAT32 (boot flag) 1..40 MiB, partition 2 Linux (0x83) 40 MiB..end
+[3/6] limine bios-install
+[4/6] FAT32 on partition 1, same layout as cavOS: /kernel.bin, /limine/, /EFI/BOOT/
+[5/6] ext2 on partition 2 (block size 1024, files from rootfs/)
+  /bin/hello: 9064 bytes
+[6/6] expected FNV-1a (computed on the host)
+done: os.img
+
+##### host: x86_64-cavos-readelf -hlSW userbin/hello (trimmed)
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Entry point address:               0x4000b0
+  Start of program headers:          64 (bytes into file)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         2
+  [ 1] .text             PROGBITS        00000000004000b0 0000b0 000e4e 00  AX  0   0 16
+  [ 2] .rodata           PROGBITS        0000000000400f00 000f00 000238 00   A  0   0 32
+  [ 3] .data             PROGBITS        0000000000402000 002000 000004 00  WA  0   0  4
+  [ 4] .bss              NOBITS          0000000000402020 002004 001000 00  WA  0   0 32
+  LOAD           0x000000 0x0000000000400000 0x0000000000400000 0x001138 0x001138 R E 0x1000
+  LOAD           0x002000 0x0000000000402000 0x0000000000402000 0x000004 0x001020 RW  0x1000
+   00     .text .rodata 
+   01     .data .bss 
+
+##### QEMU serial
+=== Lab 0x0c - Userspace & ELF Loader ===
+
+[apic] Detection completed: lapic{0xfee00000} ioapic{0xfec00000} 
+[timer] PIT ch0 mode 2, divisor 1193 -> 1193182/1193 = ~1000.15 Hz (cavOS prints this divisor as "frequency{1193MHz}")
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge
+[timer] calibrating: LAPIC counts down from 0xffffffff while we wait 10 PIT ticks...
+[timer] LAPIC current count = 0xfff725f2 -> 580109 LAPIC ticks in 10 ms -> apicFreq = 58010 ticks/ms (div 16 -> timer input clock ~928 MHz)
+[ioapic] ISA IRQ 0 -> override -> GSI 2 = I/O APIC pin 2 -> vector 0x20 -> LAPIC 0 active-high edge MASKED
+[timer] LVT timer = 0x20021 (vector 0x21, bit 17 periodic), INITCNT = 58010 -> one interrupt per ms
+[ioapic] ISA IRQ 1 -> (no override) GSI 1 = I/O APIC pin 1 -> vector 0x22 -> LAPIC 0 active-high edge
+[mouse] config read after 0xA8 = 0x41 (IRQ1=1 IRQ12=0 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] config written (|= 2)  = 0x43 (IRQ1=1 IRQ12=1 SYS=0 port1-clock-off=0 port2-clock-off=0 translate=1)
+[mouse] 0xD4 0xF6 (set defaults) -> 0xfa, 0xD4 0xF4 (enable reporting) -> 0xfa  (0xFA = ACK)
+[ioapic] ISA IRQ 12 -> (no override) GSI 12 = I/O APIC pin 12 -> vector 0x23 -> LAPIC 0 active-high edge
+[tasks] task 0 = this kmain execution, PML4 at 0x56000, PML4[255] (stack slot) = 0x0 (empty)
+[tasks] Current execution ready for multitasking
+[boot] pmm, paging, GDT/TSS, ACPI, IDT, APIC, timer, PS/2, tasks ready
+
+...
+[boot] syscalls and SSE ready
+[vfs] ls /bin  (mount "/", path inside it "/bin")
+    .                     inode   13  type 2 (dir)   mode 0x41ed  size 1024
+    ..                    inode    2  type 2 (dir)   mode 0x41ed  size 1024
+    hello                 inode   14  type 1 (file)  mode 0x81ed  size 9064
+    kernel-copy.bin       inode   15  type 1 (file)  mode 0x81ed  size 436688
+
+[kernel] run("/bin/hello"), argc 3, envc 2
+[ext2]   /bin/hello: inode 14, 9064 B = 9 blocks; block[0..11] = 1058,1059,1060,1061,1062 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[elf] /bin/hello: 9064 bytes, type 2 (ET_EXEC), machine 0x3e, entry 0x4000b0, 2 program headers of 56 bytes at offset 0x40
+[elf]   PT_LOAD offset 0x0 vaddr 0x400000 filesz 0x1138 memsz 0x1138 flags R-X -> 2 page(s), 2 new, 0 byte(s) zeroed
+[elf]   PT_LOAD offset 0x2000 vaddr 0x402000 filesz 0x4 memsz 0x1020 flags RW- -> 2 page(s), 2 new, 4124 byte(s) zeroed
+[elf] stack: strings + AT_RANDOM from 0x7fffffffffc4 to 0x800000000000, RSP = 0x7ffffffffed0 (RSP % 16 = 0), 38 qwords in all
+[elf]   [RSP]    = 3 (argc)
+[elf]   [RSP+8] = 0x7fffffffffd4 (argv[0])
+[elf]   [RSP+16] = 0x7fffffffffdf (argv[1])
+[elf]   [RSP+24] = 0x7fffffffffe5 (argv[2])
+[t=  332] [3 /bin/hello] write(1): hello from /bin/hello, an ELF file loaded from ext2 into ring 3
+[t=  334] [3 /bin/hello] write(1): entry RSP = 0x7ffffffffed0 (RSP % 16 = 0)
+[t=  335] [3 /bin/hello] write(1): argc = 3
+[t=  336] [3 /bin/hello] write(1): argv[0] = "/bin/hello" at 0x7fffffffffd4
+[t=  337] [3 /bin/hello] write(1): argv[1] = "first" at 0x7fffffffffdf
+[t=  338] [3 /bin/hello] write(1): argv[2] = "second arg" at 0x7fffffffffe5
+[t=  339] [3 /bin/hello] write(1): envp[0] = "HOME=/"
+[t=  340] [3 /bin/hello] write(1): envp[1] = "LAB=0x0c"
+[t=  340] [3 /bin/hello] write(1): auxv: AT_PHDR (3) = 0x400040
+[t=  341] [3 /bin/hello] write(1): auxv: AT_HWCAP (16) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_FLAGS (8) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_BASE (7) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_ENTRY (9) = 0x4000b0
+[t=  343] [3 /bin/hello] write(1): auxv: AT_PHENT (4) = 0x38
+[t=  344] [3 /bin/hello] write(1): auxv: AT_PHNUM (5) = 0x2
+[t=  344] [3 /bin/hello] write(1): auxv: AT_SECURE (23) = 0x0
+[t=  344] [3 /bin/hello] write(1): auxv: AT_PAGESZ (6) = 0x1000
+[t=  344] [3 /bin/hello] write(1): auxv: AT_RANDOM (25) = 0x7fffffffffc4
+[t=  345] [3 /bin/hello] write(1): .data dataVal = 1234, .bss 4096 bytes, non-zero: 0
+[t=  346] [3 /bin/hello] write(1): double argc * 1.5 + 0.25 = 475 / 100
+[t=  346] [3 /bin/hello] exit(3) -> taskKill
+[kernel] task 3 ended, exit code 3
+[t=  352] [2 helper ] reaper: task 3 (/bin/hello) freed: 13 frames (stack, TSS stack, syscall stack, code) + 7 page tables (PDPT, PD, PT, PML4); pmm free 64787 -> 64807
+
+[kernel] run("/bin/hello"), argc 2, envc 2
+[ext2]   /bin/hello: inode 14, 9064 B = 9 blocks; block[0..11] = 1058,1059,1060,1061,1062 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[elf] /bin/hello: 9064 bytes, type 2 (ET_EXEC), machine 0x3e, entry 0x4000b0, 2 program headers of 56 bytes at offset 0x40
+[elf]   PT_LOAD offset 0x0 vaddr 0x400000 filesz 0x1138 memsz 0x1138 flags R-X -> 2 page(s), 2 new, 0 byte(s) zeroed
+[elf]   PT_LOAD offset 0x2000 vaddr 0x402000 filesz 0x4 memsz 0x1020 flags RW- -> 2 page(s), 2 new, 4124 byte(s) zeroed
+[elf] stack: strings + AT_RANDOM from 0x7fffffffffd1 to 0x800000000000, RSP = 0x7ffffffffee8 (RSP % 16 = 8), 35 qwords in all
+[elf]   [RSP]    = 2 (argc)
+[elf]   [RSP+8] = 0x7fffffffffe1 (argv[0])
+[elf]   [RSP+16] = 0x7fffffffffec (argv[1])
+[t=  387] [4 /bin/hello] write(1): hello from /bin/hello, an ELF file loaded from ext2 into ring 3
+[t=  388] [4 /bin/hello] write(1): entry RSP = 0x7ffffffffee8 (RSP % 16 = 8)
+[t=  389] [4 /bin/hello] write(1): argc = 2
+[t=  389] [4 /bin/hello] write(1): argv[0] = "/bin/hello" at 0x7fffffffffe1
+[t=  390] [4 /bin/hello] write(1): argv[1] = "one" at 0x7fffffffffec
+[t=  390] [4 /bin/hello] write(1): envp[0] = "HOME=/"
+[t=  390] [4 /bin/hello] write(1): envp[1] = "LAB=0x0c"
+[t=  391] [4 /bin/hello] write(1): auxv: AT_PHDR (3) = 0x400040
+[t=  392] [4 /bin/hello] write(1): auxv: AT_HWCAP (16) = 0x0
+[t=  392] [4 /bin/hello] write(1): auxv: AT_FLAGS (8) = 0x0
+[t=  393] [4 /bin/hello] write(1): auxv: AT_BASE (7) = 0x0
+[t=  393] [4 /bin/hello] write(1): auxv: AT_ENTRY (9) = 0x4000b0
+[t=  394] [4 /bin/hello] write(1): auxv: AT_PHENT (4) = 0x38
+[t=  394] [4 /bin/hello] write(1): auxv: AT_PHNUM (5) = 0x2
+[t=  395] [4 /bin/hello] write(1): auxv: AT_SECURE (23) = 0x0
+[t=  395] [4 /bin/hello] write(1): auxv: AT_PAGESZ (6) = 0x1000
+[t=  395] [4 /bin/hello] write(1): auxv: AT_RANDOM (25) = 0x7fffffffffd1
+[t=  396] [4 /bin/hello] write(1): .data dataVal = 1234, .bss 4096 bytes, non-zero: 0
+[t=  396] [4 /bin/hello] write(1): double argc * 1.5 + 0.25 = 325 / 100
+[t=  397] [4 /bin/hello] exit(2) -> taskKill
+[t=  399] [2 helper ] reaper: task 4 (/bin/hello) freed: 13 frames (stack, TSS stack, syscall stack, code) + 7 page tables (PDPT, PD, PT, PML4); pmm free 64787 -> 64807
+[kernel] task 4 ended, exit code 2
+
+[kernel] run("/bin/missing"), argc 1, envc 0
+[elf] Could not open /bin/missing
+[kernel] elfExecute failed
+
+[kernel] done, cli; hlt

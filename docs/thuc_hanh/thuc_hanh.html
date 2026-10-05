@@ -43,19 +43,24 @@ serial, hình vẽ lên màn hình, một con số in ra chứng minh điều v�
 <tr><td><a href="lab_0x05_acpi_apic.html">Lab 0x05 - ACPI, APIC &amp; Timer</a></td><td><a href="../ly_thuyet/bai/bai_08_acpi.html">Bài 8</a> + <a href="../ly_thuyet/bai/bai_10_apic_timer.html">Bài 10</a></td><td>bảng ACPI (RSDT/XSDT, MADT), LAPIC/IOAPIC, timer calibrate theo PIT, ~1000 tick/giây</td></tr>
 <tr><td><a href="lab_0x06_ps2.html">Lab 0x06 - PS/2 Keyboard &amp; Mouse</a></td><td><a href="../ly_thuyet/bai/bai_11_ps2_keyboard_mouse.html">Bài 11</a></td><td>phím gõ qua QEMU monitor thành chữ, gói chuột 3 byte thành dx/dy, sự kiện evdev</td></tr>
 <tr><td><a href="lab_0x07_tasks.html">Lab 0x07 - Multitasking &amp; Scheduler</a></td><td><a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12</a></td><td>kernel thread chạy xen kẽ 1 ms/lát, task ngủ, task đọc phím được IRQ1 đánh thức, bảng tick mỗi task</td></tr>
+<tr><td><a href="lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a></td><td><a href="../ly_thuyet/bai/bai_13_networking.html">Bài 13</a> + <a href="../ly_thuyet/bai/bai_14_pci_nic.html">Bài 14</a></td><td>bảng thiết bị PCI và cỡ BAR, card E1000 nhận/gửi bằng DMA, DHCP + ARP + 2 ping tới router QEMU, pcap đối chiếu</td></tr>
+<tr><td><a href="lab_0x09_ahci_fs.html">Lab 0x09 - AHCI &amp; Filesystems</a></td><td><a href="../ly_thuyet/bai/bai_15_ahci_filesystems.html">Bài 15</a></td><td>controller AHCI và các cổng, MBR, mount ext2 ở / và FAT32 ở /boot/, ls và đọc file khớp checksum, PRDT với buffer không liền vật lý</td></tr>
+<tr><td><a href="lab_0x0a_fast_syscalls.html">Lab 0x0a - Fast Syscalls</a></td><td><a href="../ly_thuyet/bai/bai_16_fast_syscalls.html">Bài 16</a></td><td>STAR/LSTAR/FMASK, chương trình ring 3 gọi write/getpid/exit, RCX/R11 lúc vào và ra, SYSCALL so với int 0x80, GS của ring 3 trỏ vào kernel</td></tr>
+<tr><td><a href="lab_0x0b_sse_fpu.html">Lab 0x0b - SSE &amp; FPU</a></td><td><a href="../ly_thuyet/bai/bai_17_sse_fpu.html">Bài 17</a></td><td>CR0/CR4/XCR0 trước và sau initiateSSE, #UD khi SSE tắt, hai task tranh YMM0: fxsave mất nửa cao YMM, xsave đủ</td></tr>
+<tr><td><a href="lab_0x0c_elf_userspace.html">Lab 0x0c - Userspace &amp; ELF Loader</a></td><td><a href="../ly_thuyet/bai/bai_18_userspace_elf_loader.html">Bài 18</a></td><td>/bin/hello nạp từ ext2: hai PT_LOAD (.bss xoá 4124 byte), stack argc/argv/envp/auxv như cavOS, chương trình ring 3 in lại những gì nhận được, RSP lệch 8 khi argc + envc chẵn</td></tr>
 </tbody>
 </table></div>
 <h2 id="nguyên-tắc">Nguyên tắc</h2>
-<p class="lede"><em>Ba điều đã trả giá mới rút ra được.</em></p>
+<p class="lede"><em>Ba quy tắc giữ cho lab và ghi chú khớp nhau.</em></p>
 <ul>
-<li><strong>Phải build + boot QEMU thật rồi mới chép output vào note.</strong> Không bịa output, không bịa bài học —
-đã từng sai, xem mục "Ghi chú trung thực" trong <a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a>.</li>
+<li><strong>Phải build + boot QEMU thật rồi mới chép output vào note.</strong> Không bịa output, không bịa bài học; mỗi khối output trên site trích từ một file trong <code>lab/outputs/</code>.</li>
 <li><strong>Tách module từ Lab 0x02 trở đi</strong>: <code>io.h</code> / <code>serial.{h,c}</code> / <code>boot.{h,c}</code> / <code>pmm.{h,c}</code> / <code>paging.{h,c}</code>,
 còn <code>kernel.c</code> chỉ điều phối. String in ra để <strong>tiếng Anh</strong>, comment giải thích tiếng Việt.</li>
 <li><strong>Bám cách cavOS thật làm</strong>, không tự chế kiểu khác — ví dụ PMM tính <code>mmTotal</code> bằng cộng dồn length các
 vùng khác <code>RESERVED</code>, y như <code>bootloader.c</code>.</li>
 </ul>
 <h2 id="source-và-cách-chạy">Source và cách chạy</h2>
+<p class="lede"><em>Sửa trong vault, build trong WSL.</em></p>
 <div class="code"><div class="code-bar">text</div><pre><code>lab/src/oskernel-lab/     ← bản lưu trong vault (backup + push GitHub)
 ~/oskernel-lab/                 ← bản làm việc trong WSL, BUILD Ở ĐÂY</code></pre></div>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/03-pmm-vmm
@@ -70,10 +75,11 @@ bố cục ảnh đĩa: <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">C�
 được backup lên GitHub.</p>
 </div>
 <h2 id="output-thật-đã-lưu">Output thật đã lưu</h2>
+<p class="lede"><em>Mỗi lab một file log ở <code>lab/outputs/</code>; trang lab trích từ đó.</em></p>
 <ul>
-<li><code>lab/outputs/lab-0x03-run.txt</code> — bản đầy đủ bảng <code>pmm_dump_map</code> (rộng ~176 cột, markdown không vừa)</li>
-<li><code>lab/outputs/lab-0x03-run-2026-09-03.txt</code> — lần chạy 2026-09-03, sau khi vá bug bitmap</li>
-<li><code>lab/outputs/cavos-boot-2026-09-03.txt</code> — boot log của <strong>cavOS thật</strong>, để đối chiếu với lab</li>
+<li><code>lab/outputs/lab-0x03-run-2026-09-03.txt</code> — Lab 0x03, gồm bảng <code>pmm_dump_map</code> đủ 10 cột (rộng ~176 cột, trang chỉ trích)</li>
+<li><code>lab/outputs/lab-0x04-run.txt</code> … <code>lab-0x0c-run.txt</code> — Lab 0x04 tới 0x0c, mỗi file do <code>make run</code> hoặc <code>scripts/run_all.sh</code> của lab đó ghi</li>
+<li><code>lab/outputs/cavos-boot-2026-09-03.txt</code>, <code>cavos-net-run.txt</code> — log của <strong>cavOS thật</strong>, để đối chiếu với lab</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Thực hành</footer>

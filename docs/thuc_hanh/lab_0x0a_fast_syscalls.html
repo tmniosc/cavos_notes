@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x0a - Fast Syscalls · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x0a_fast_syscalls.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x0a - Fast Syscalls</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, syscall, sysret, msr, swapgs, ring 3, int 0x80</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a></strong>.
+Kernel cài lệnh <code>syscall</code> đúng như <code>initiateSyscallInst()</code> của cavOS, chép nguyên đoạn <code>syscall_entry</code> của cavOS, rồi chạy vài chương trình ring 3 nhỏ. Chúng gọi
+<code>write</code>, <code>getpid</code>, <code>exit</code>, kể lại thanh ghi lúc vào và lúc ra kernel, đo 10000 lần <code>syscall</code> so với 10000 lần <code>int 0x80</code>, và chọc vào GS để thấy GS của
+ring 3 đang trỏ vào đâu.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/0a-fast-syscalls/</code> (chép từ <code>09-ahci-fs/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image &amp;&amp; make run</code>.
+Source lưu ở <code>lab/src/oskernel-lab/0a-fast-syscalls/</code>, log đầy đủ (3 bản build) ở <code>lab/outputs/lab-0x0a-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x09, thêm phần SYSCALL và một cách tạo task ring 3 từ vài chục byte code.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>... như Lab 0x09 (AHCI, FAT32, ext2 vẫn mount trước, như _start() của cavOS)
+syscall.{h,c} MỚI, theo cpu/fastSyscall.c + cpu/isr.asm (syscall_entry) + syscalls/syscalls.c:
+              initiateSyscallInst (CPUID, STAR, LSTAR, EFER.SCE, FMASK, KERNEL_GS_BASE = &amp;threadInfo),
+              syscall_entry (chép từng lệnh), syscallHandler, bảng syscalls[450];
+              syscall 1 write, 39 getpid, 60 exit + 440..443 "báo cáo" của lab
+user.S        MỚI: 4 chương trình ring 3 viết bằng asm (main, gs0, gs1, badret), chỉ dùng địa chỉ theo RIP
+task.{h,c}    + taskCreateUser: PML4 riêng, code ở VA 0x8000000000 (PTE_USER), stack user,
+              stack syscall riêng (whileSyscallRsp), CS = 0x53, SS = 0x4b
+schedule.c    + threadInfo.syscall_stack = next-&gt;whileSyscallRsp; nạp FS_BASE, GS_BASE, KERNEL_GS_BASE (như cavOS)
+isr.c         + int 0x80 -&gt; syscallHandler (như cavOS); lỗi CPU ở ring 3 -&gt; giết task thay vì panic
+scripts/run_all.sh  chạy 3 bản build, ghi log</code></pre></div>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một bản thường và hai bản cố ý làm lại hai chỗ nguy hiểm của cavOS.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0a-fast-syscalls
+make image &amp;&amp; make run
+make clean &amp;&amp; make image DEMO=-DINT80_STI  &amp;&amp; make run   # sti trong đường int 0x80, như cavOS
+make clean &amp;&amp; make image DEMO=-DBAD_SYSRET &amp;&amp; make run   # RCX không canonical trước sysret
+bash scripts/run_all.sh lab-0x0a-run.txt                  # cả ba, ghi log</code></pre></div>
+<p>Mọi output dưới đây là thật: QEMU 10.2.1 TCG (máy này không có KVM), cross gcc <code>x86_64-cavos-gcc -O2</code>, Limine 8.7.0, SeaBIOS, chạy ngày 2026-10-03.</p>
+
+<h2 id="msr">Kết quả 1: bốn MSR</h2>
+<p class="lede"><em>Trước và sau <code>initiateSyscallInst()</code>.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[syscalls] MSRs before: EFER 0xd00 (SCE=0) STAR 0x0 (SYSCALL CS=0x0 SS=0x8; SYSRET CS=0x13 SS=0xb)
+[syscalls]      LSTAR 0x0 (syscall_entry = 0xffffffff8000d0e0) FMASK 0x0 (IF|DF) GS_BASE 0x0 KERNEL_GS_BASE 0xffffffff8006d210 (&amp;threadInfo = 0xffffffff8006d210)
+[syscalls] CPUID 0x80000001 EDX = 0x2193fbfd, bit 11 (SYSCALL/SYSRET) = 1
+[syscalls] MSRs after initiateSyscallInst(): EFER 0xd01 (SCE=1) STAR 0x40002800000000 (SYSCALL CS=0x28 SS=0x30; SYSRET CS=0x53 SS=0x4b)
+[syscalls]      LSTAR 0xffffffff8000d0e0 (syscall_entry = 0xffffffff8000d0e0) FMASK 0x600 (IF|DF) GS_BASE 0x0 KERNEL_GS_BASE 0xffffffff8006d210 (&amp;threadInfo = 0xffffffff8006d210)</code></pre></div>
+<ul>
+<li><code>STAR = 0x0040002800000000</code>: bit 47:32 = <code>0x28</code> (code kernel; SS kernel = <code>0x28 + 8 = 0x30</code>), bit 63:48 = <code>0x40</code> = <code>GDT_USER_CODE - 16</code>. SYSRET tính CS user
+= <code>0x40 + 16</code> và SS user = <code>0x40 + 8</code>, cộng RPL 3: <code>0x53</code> và <code>0x4b</code>. Đó là lý do GDT của cavOS đặt data user (<code>0x48</code>) <em>trước</em> code user (<code>0x50</code>), Bài 7.</li>
+<li><code>FMASK = 0x600</code>: khi <code>syscall</code>, CPU xoá IF (bit 9) và DF (bit 10) trong RFLAGS. Kernel vào với ngắt tắt.</li>
+<li><code>EFER 0xd00 → 0xd01</code>: bật SCE (bit 0). Bit 8, 10, 11 (LME, LMA, NXE) Limine đã bật sẵn.</li>
+<li>Dòng "before" cho thấy <code>KERNEL_GS_BASE</code> đã là <code>&amp;threadInfo</code>: scheduler của cavOS (và lab) ghi MSR này ở mỗi lần đổi task, từ trước khi có syscall.</li>
+</ul>
+
+<h2 id="vao-ra">Kết quả 2: vào và ra kernel</h2>
+<p class="lede"><em>Chương trình ring 3 đo trước, kernel đo trong, rồi ring 3 đo lại sau <code>sysret</code>.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] task 3 (main): 231 bytes of code at VA 0x8000000000, CS=0x53 SS=0x4b RSP=0x800000000000, syscall stack top 0xfffffe8001013000
+[t=  326] [3 main   ] write(1): hello from ring 3 (CPL 3) via SYSCALL
+[t=  329] [3 main   ] in the kernel: CS=0x28 SS=0x30 RSP=0xfffffe8001012ed0 (syscall stack top 0xfffffe8001013000)
+[t=  331] [3 main   ]   RCX=0x8000000032 = return address | R11=0x202 vs user RFLAGS 0x202 | saved user RSP=0x800000000000 (match)
+[t=  332] [3 main   ]   at entry, after swapgs: GS_BASE=0xffffffff8006d210 KERNEL_GS_BASE=0xffffffff8006d210 (the user's GS); the handler then sets KERNEL_GS_BASE = &amp;threadInfo
+[t=  334] [3 main   ] back in ring 3 after sysret: CS=0x53 SS=0x4b RCX=0x8000000032 R11=0x202; GS_BASE seen by this syscall's entry 0xffffffff8006d210 (= GS in ring 3 just before it)</code></pre></div>
+<ul>
+<li><code>syscall</code> không đổi stack: <code>syscall_entry</code> tự đổi sang stack syscall của task (đỉnh <code>0xfffffe8001013000</code>, RSP trong handler cách đỉnh <code>0x130</code> byte: đúng 24 qword khung + phần hàm C).</li>
+<li><code>RCX</code> = địa chỉ ngay sau lệnh <code>syscall</code> (<code>0x8000000032</code>), <code>R11</code> = RFLAGS của user. <code>sysret</code> dùng đúng hai thanh ghi đó để quay về, nên sau khi về ring 3 chúng vẫn
+mang giá trị ấy, và CS/SS là <code>0x53</code>/<code>0x4b</code> như STAR đã tính.</li>
+<li><strong>GS của ring 3 là <code>&amp;threadInfo</code></strong>: <code>syscall_entry</code> làm <code>swapgs</code> lúc vào nhưng không làm lại lúc ra, và handler ghi <code>KERNEL_GS_BASE = &amp;threadInfo</code>. Sau syscall
+đầu tiên, GS của chương trình là địa chỉ kernel. Ở lần vào này, cả hai MSR đều là <code>&amp;threadInfo</code>.</li>
+</ul>
+
+<h2 id="do-toc-do">Kết quả 3: 10000 SYSCALL và 10000 int 0x80</h2>
+<p class="lede"><em>Cùng một handler, khác đường vào.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  369] [3 main   ] benchmark, 10000 x getpid: SYSCALL 21616848 TSC ticks (2161 per call), int 0x80 46681846 (4668 per call)
+[t=  371] [3 main   ] [syscalls] no handler for syscall 123 -&gt; -ENOSYS
+[t=  372] [3 main   ] exit(7) -&gt; taskKill
+[kernel] task 3 ended, exit code 7
+...
+[kernel] SYSCALL entries 10008, int 0x80 entries 10000</code></pre></div>
+<ul>
+<li>Hai lần chạy có đo (bản thường và bản <code>BAD_SYSRET</code>) cho <code>int 0x80</code> chậm hơn <code>syscall</code> khoảng 2,2 và 3,6 lần (2161 so với 4668, 1379 so với 4981 tick mỗi lần). Số dao động
+giữa các lần chạy. Đây là QEMU TCG giả lập từng lệnh, nên con số tuyệt đối chỉ đúng cho
+QEMU; trên CPU thật hai đường đều nhanh hơn nhiều. Phần chênh nằm ở đường vào: <code>int</code> tra IDT, kiểm DPL, đọc TSS lấy RSP0, đẩy 5 qword; <code>syscall</code> chỉ nạp vài MSR vào thanh ghi.</li>
+<li>Syscall số 123 không có handler: kernel trả <code>-ENOSYS</code> (-38), chương trình chạy tiếp.</li>
+</ul>
+
+<h2 id="gs">Kết quả 4: GS trỏ vào kernel</h2>
+<p class="lede"><em>Hai chương trình chỉ đọc <code>%gs:0</code>: một cái trước mọi syscall, một cái ngay sau một syscall.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] task 4 (gs0): 11 bytes of code at VA 0x8000000000, CS=0x53 SS=0x4b RSP=0x800000000000, syscall stack top 0xfffffe8001018000
+[isr] vector 0xe #PF Page Fault  err=0x4
+      RIP=0x0000008000000000 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+      CR2=0x0000000000000000  err bits: P=0 W=0 U=1 RSVD=0 I=0  (page not present)
+      -&gt; fault in ring 3 (CPL 3): kill task 4 (gs0), the kernel goes on
+
+[kernel] task 5 (gs1): 18 bytes of code at VA 0x8000000000, CS=0x53 SS=0x4b RSP=0x800000000000, syscall stack top 0xfffffe800101d000
+[isr] vector 0xe #PF Page Fault  err=0x5
+      RIP=0x0000008000000007 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+      CR2=0xffffffff8006d210  err bits: P=1 W=0 U=1 RSVD=0 I=0  (protection violation)
+      -&gt; fault in ring 3 (CPL 3): kill task 5 (gs1), the kernel goes on</code></pre></div>
+<ul>
+<li><strong>gs0</strong>: GS base = <code>gsbase</code> của task (0), nên <code>%gs:0</code> là địa chỉ 0: trang không có (P = 0).</li>
+<li><strong>gs1</strong>: chỉ một <code>getpid</code> trước đó. CR2 = <code>0xffffffff8006d210</code> = <code>&amp;threadInfo</code>, và P = 1: trang có, nhưng là trang kernel, ring 3 không được đọc. GS base của chương trình
+user thật sự đang là địa chỉ của một cấu trúc kernel. Không đọc được nội dung, nhưng biết được nó nằm ở đâu.</li>
+<li>Lỗi ở ring 3 chỉ giết task đó; kernel chạy tiếp (mã thoát âm = số vector).</li>
+</ul>
+
+<h2 id="int80-sti">Kết quả 5: <code>int 0x80</code> mà bật ngắt</h2>
+<p class="lede"><em>Bản <code>DEMO=-DINT80_STI</code> làm như cavOS: <code>sti</code> ở mọi đường vào <code>syscallHandler</code>, kể cả <code>int 0x80</code>.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>########## Run 2: DEMO=-DINT80_STI (sti in the int 0x80 path, like cavOS)
+...
+[t=  261] [3 main   ] back in ring 3 after sysret: CS=0x53 SS=0x4b RCX=0x8000000032 R11=0x202; GS_BASE seen by this syscall's entry 0xffffffff8006d210 (= GS in ring 3 just before it)
+
+[sched] task 3 was preempted in ring 0 on its own TSS stack (RSP 0xffff800000076f20, TSS stack top 0xffff800000077000): copying its frame to the top overwrites the frame of the interrupt it was handling</code></pre></div>
+<p>Sau dòng đó máy không in thêm gì: vòng đo <code>int 0x80</code> không bao giờ xong. Lý do:</p>
+<ol>
+<li><code>int 0x80</code> từ ring 3 đổi sang stack TSS của task (RSP0); khung ngắt nằm ở <em>đỉnh</em> stack đó.</li>
+<li>Handler <code>sti</code>. Timer bắn giữa chừng, ngay trên stack TSS (ring 0 không đổi stack); <code>schedule()</code> lưu khung của lần ngắt timer này rồi sang task khác.</li>
+<li>Khi quay lại, <code>schedule()</code> luôn chép khung đã lưu lên đỉnh stack TSS của task rồi <code>iretq</code>. Đỉnh đó đang chứa khung <code>int 0x80</code> của user: bị đè. Handler chạy nốt rồi "trở về" bằng một
+khung kernel, không về ring 3 được nữa.</li>
+</ol>
+<p>Đường <code>syscall</code> không bị, vì nó chạy trên stack syscall riêng. Bản thường của lab vì vậy chỉ <code>sti</code> cho đường <code>syscall</code>.</p>
+
+<h2 id="badret">Kết quả 6: RCX không canonical</h2>
+<p class="lede"><em>Bản <code>DEMO=-DBAD_SYSRET</code>: một syscall đặt địa chỉ trả về thành <code>0x800000000000</code>, như <code>sigreturn</code> của cavOS lấy RCX từ stack user mà không kiểm.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  417] [6 badret ] setting the return RIP (RCX) to 0x800000000000 without a canonical check, then sysret
+[isr] vector 0xd #GP General Protection Fault  err=0x0
+      RIP=0x0000800000000000 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+      -&gt; fault in ring 3 (CPL 3): kill task 6 (badret), the kernel goes on</code></pre></div>
+<p>QEMU TCG báo #GP <em>sau</em> khi đã về ring 3 (CS = <code>0x53</code>), nên chỉ task đó chết. Intel SDM mô tả khác cho CPU Intel: với RCX không canonical, <code>sysret</code> gây #GP khi CPU
+<em>còn ở ring 0</em>, nhưng RSP đã là RSP của user. Handler khi đó chạy ở ring 0 trên một stack do user chọn. Đó là lỗ hổng CVE-2012-0217 từng có ở nhiều hệ điều hành; cách tránh là kiểm RCX
+canonical trước <code>sysret</code>, hoặc về bằng <code>iretq</code>.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Đường vào/ra chép nguyên văn; khác ở phần bao quanh.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x0a</th></tr></thead>
+<tbody>
+<tr><td><code>syscall_entry</code>, MSR, <code>syscallHandler</code></td><td colspan="2">giống nhau (swapgs không đối xứng, CR2 làm thanh ghi tạm, <code>sti</code> trong handler)</td></tr>
+<tr><td><code>sti</code> ở đường <code>int 0x80</code></td><td>có</td><td>không (<code>DEMO=-DINT80_STI</code> để có)</td></tr>
+<tr><td>Số syscall</td><td>khoảng 100 syscall kiểu Linux</td><td>write, getpid, exit + 4 syscall báo cáo</td></tr>
+<tr><td>Chương trình ring 3</td><td>ELF nạp từ ext2 (Bài 18)</td><td>vài chục byte asm chép vào một trang</td></tr>
+<tr><td>Lỗi CPU ở ring 3</td><td>gửi signal cho task</td><td>giết task</td></tr>
+<tr><td>Kiểm số syscall</td><td><code>id &gt; MAX_SYSCALLS</code></td><td><code>id &gt;= MAX_SYSCALLS</code></td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa code và chạy lại.</em></p>
+<details class="quiz"><summary>Đổi GDT cho code user đứng trước data user (code <code>0x48</code>, data <code>0x50</code>). <code>sysret</code> còn đúng không?</summary>
+<p>Không. SYSRET luôn lấy CS = STAR[63:48] + 16 và SS = STAR[63:48] + 8. Không có giá trị STAR nào cho CS = <code>0x48</code> và SS = <code>0x50</code> cùng lúc. Thứ tự "data trước, code sau" là bắt buộc.</p></details>
+<details class="quiz"><summary>Bỏ <code>RFLAGS_IF</code> khỏi FMASK. Có gì nguy hiểm?</summary>
+<p>Kernel vào với ngắt đang bật, ngay lúc RSP vẫn là stack user (trước <code>xchg</code>). Một ngắt rơi vào đúng mấy lệnh đầu sẽ đẩy khung lên stack user, ở ring 0 (không đổi stack vì CPL đã là 0).</p></details>
+<details class="quiz"><summary>Vì sao <code>syscall_entry</code> phải <code>swapgs</code> trước khi làm bất cứ gì khác?</summary>
+<p>Vì nó cần biết stack kernel của task, mà chỗ duy nhất đọc được mà không cần thanh ghi nào là <code>%gs:0</code> sau khi đổi GS sang <code>threadInfo</code>. <code>syscall</code> không đổi RSP, và mọi thanh ghi đa
+dụng đều đang mang giá trị của user.</p></details>
+<details class="quiz"><summary>Lab đo <code>int 0x80</code> chậm hơn <code>syscall</code> khoảng 2–4 lần. Con số đó có dùng được cho máy thật không?</summary>
+<p>Không. Đây là TCG: QEMU dịch và giả lập từng lệnh, nên chi phí của <code>int</code>/<code>iretq</code> so với <code>syscall</code>/<code>sysret</code> phụ thuộc cách QEMU viết phần giả lập. Kết luận "SYSCALL nhanh hơn"
+đúng trên CPU thật, nhưng tỉ lệ phải đo trên máy thật.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a> · nền <a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a> (thứ tự selector, RSP0),
+<a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a> (khung đổi task, stack TSS).</li>
+<li>Lab trước: <a href="lab_0x09_ahci_fs.html">Lab 0x09 - AHCI &amp; Filesystems</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x0a - Fast Syscalls</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

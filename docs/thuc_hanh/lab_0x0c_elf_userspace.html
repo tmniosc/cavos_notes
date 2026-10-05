@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x0c - Userspace &amp; ELF Loader · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x0c_elf_userspace.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x0c - Userspace &amp; ELF Loader</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, elf, pt_load, auxv, argv, ring 3, userspace</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a></strong>.
+Lab cuối gom mọi thứ trước đó. Một chương trình C được build thành file ELF, chép vào <code>/bin</code> của phân vùng ext2. Kernel đọc nó qua AHCI (Lab 0x09), map từng đoạn
+<code>PT_LOAD</code> vào một PML4 mới, dựng stack ban đầu (argc, argv, envp, auxv) giống <code>stackGenerateUser()</code> của cavOS, rồi cho nó chạy ở ring 3. Chương trình gọi syscall (Lab 0x0a),
+tính số thực bằng SSE (Lab 0x0b), và in lại mọi thứ nó nhận được.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/0c-elf-userspace/</code> (chép từ <code>0b-sse-fpu/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image &amp;&amp; make run</code>.
+Source ở <code>lab/src/oskernel-lab/0c-elf-userspace/</code>, log đầy đủ ở <code>lab/outputs/lab-0x0c-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x0b, thêm loader ELF ở phía kernel và một chương trình C ở phía user.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>... như Lab 0x0b (AHCI, FAT32/ext2, SYSCALL, SSE)
+elf.{h,c}     MỚI, theo utilities/elf.c + multitasking/stack.c: elf_check_file, elfProcessLoad,
+              elfExecute (PML4 mới, map PT_LOAD, stack argc/argv/envp/auxv như stackGenerateUser)
+task.{h,c}    + taskCreateUserBlank: task ring 3 chưa có code (stack user, stack syscall, FPU)
+kernel.c      run() = cavOS run(): elfExecute -&gt; taskCreateFinish -&gt; chờ task chết
+user/hello.c  MỚI: chương trình ring 3 bằng C, _start đọc argc/argv/envp/auxv từ stack
+user/ulib.h   MỚI: syscall write/exit kiểu Linux, vài hàm in
+user/user.ld  MỚI: ELF tĩnh ở 0x400000, hai đoạn: text (R X, gồm cả ELF header) và data (R W)
+GNUmakefile   + build user/*.c -&gt; userbin/*; mkimage_fs.sh chép userbin/* vào /bin của ext2</code></pre></div>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một lần build: chương trình user, ổ đĩa có nó bên trong, kernel nạp nó.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0c-elf-userspace
+make image &amp;&amp; make run
+bash scripts/run_all.sh lab-0x0c-run.txt     # thêm readelf phía host vào log</code></pre></div>
+<p>Kernel chạy <code>/bin/hello</code> hai lần với số tham số khác nhau, rồi thử một file không có. Output thật: QEMU 10.2.1 TCG <code>-cpu max</code>, cross gcc <code>-O2</code>, Limine 8.7.0, chạy ngày 2026-10-03.</p>
+
+<h2 id="file-elf">Kết quả 1: file ELF nhìn từ host</h2>
+<p class="lede"><em><code>readelf</code> cho biết loader sẽ thấy gì.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>  /bin/hello: 9064 bytes
+##### host: x86_64-cavos-readelf -hlSW userbin/hello (trimmed)
+  Type:                              EXEC (Executable file)
+  Machine:                           Advanced Micro Devices X86-64
+  Entry point address:               0x4000b0
+  Start of program headers:          64 (bytes into file)
+  Size of program headers:           56 (bytes)
+  Number of program headers:         2
+  [ 1] .text             PROGBITS        00000000004000b0 0000b0 000e4e 00  AX  0   0 16
+  [ 2] .rodata           PROGBITS        0000000000400f00 000f00 000238 00   A  0   0 32
+  [ 3] .data             PROGBITS        0000000000402000 002000 000004 00  WA  0   0  4
+  [ 4] .bss              NOBITS          0000000000402020 002004 001000 00  WA  0   0 32
+  LOAD           0x000000 0x0000000000400000 0x0000000000400000 0x001138 0x001138 R E 0x1000
+  LOAD           0x002000 0x0000000000402000 0x0000000000402000 0x000004 0x001020 RW  0x1000
+   00     .text .rodata
+   01     .data .bss</code></pre></div>
+<ul>
+<li>Loader chỉ cần <em>program header</em> (dòng <code>LOAD</code>); bảng section (<code>.text</code>, <code>.data</code>…) là cho linker và debugger.</li>
+<li>Đoạn 1 bắt đầu ở offset 0 của file: nó mang theo cả ELF header và bảng program header vào bộ nhớ, ở <code>0x400000</code>.</li>
+<li>Đoạn 2: <code>filesz</code> 4 byte (biến <code>.data</code>) nhưng <code>memsz</code> <code>0x1020</code>: phần thừa là <code>.bss</code>, không nằm trong file, loader phải tự xoá về 0.</li>
+</ul>
+
+<h2 id="nap">Kết quả 2: kernel nạp file</h2>
+<p class="lede"><em>Đọc từ ext2, kiểm header, map hai đoạn, dựng stack.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] run("/bin/hello"), argc 3, envc 2
+[ext2]   /bin/hello: inode 14, 9064 B = 9 blocks; block[0..11] = 1058,1059,1060,1061,1062 block[12] (single indirect) = 0, block[13] (double) = 0; indirect blocks read: 0
+[elf] /bin/hello: 9064 bytes, type 2 (ET_EXEC), machine 0x3e, entry 0x4000b0, 2 program headers of 56 bytes at offset 0x40
+[elf]   PT_LOAD offset 0x0 vaddr 0x400000 filesz 0x1138 memsz 0x1138 flags R-X -&gt; 2 page(s), 2 new, 0 byte(s) zeroed
+[elf]   PT_LOAD offset 0x2000 vaddr 0x402000 filesz 0x4 memsz 0x1020 flags RW- -&gt; 2 page(s), 2 new, 4124 byte(s) zeroed
+[elf] stack: strings + AT_RANDOM from 0x7fffffffffc4 to 0x800000000000, RSP = 0x7ffffffffed0 (RSP % 16 = 0), 38 qwords in all
+[elf]   [RSP]    = 3 (argc)
+[elf]   [RSP+8] = 0x7fffffffffd4 (argv[0])
+[elf]   [RSP+16] = 0x7fffffffffdf (argv[1])
+[elf]   [RSP+24] = 0x7fffffffffe5 (argv[2])</code></pre></div>
+<ul>
+<li>9 block mà chỉ 5 số block: file ELF có một khoảng trống (giữa <code>0x1138</code> và <code>0x2000</code>), và <code>mke2fs</code> lưu nó thành "lỗ" (block số 0). Loader của ext2 trả về toàn số 0 cho lỗ.</li>
+<li>Đoạn 1 dài <code>0x1138</code> byte nên chiếm 2 trang; đoạn 2 cần 2 trang vì <code>.bss</code> kéo dài tới <code>0x403020</code>. 4124 = <code>0x1020 - 4</code> byte được xoá.</li>
+<li>Chuỗi argv/envp và 16 byte <code>AT_RANDOM</code> nằm ở đỉnh stack; ngay dưới là các con trỏ và auxv. RSP cuối cùng trỏ vào <code>argc</code>.</li>
+</ul>
+
+<h2 id="ring3">Kết quả 3: chương trình kể lại những gì nó nhận</h2>
+<p class="lede"><em>Từ góc nhìn của chính chương trình ring 3.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  332] [3 /bin/hello] write(1): hello from /bin/hello, an ELF file loaded from ext2 into ring 3
+[t=  334] [3 /bin/hello] write(1): entry RSP = 0x7ffffffffed0 (RSP % 16 = 0)
+[t=  335] [3 /bin/hello] write(1): argc = 3
+[t=  336] [3 /bin/hello] write(1): argv[0] = "/bin/hello" at 0x7fffffffffd4
+[t=  337] [3 /bin/hello] write(1): argv[1] = "first" at 0x7fffffffffdf
+[t=  338] [3 /bin/hello] write(1): argv[2] = "second arg" at 0x7fffffffffe5
+[t=  339] [3 /bin/hello] write(1): envp[0] = "HOME=/"
+[t=  340] [3 /bin/hello] write(1): envp[1] = "LAB=0x0c"
+[t=  340] [3 /bin/hello] write(1): auxv: AT_PHDR (3) = 0x400040
+[t=  341] [3 /bin/hello] write(1): auxv: AT_HWCAP (16) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_FLAGS (8) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_BASE (7) = 0x0
+[t=  342] [3 /bin/hello] write(1): auxv: AT_ENTRY (9) = 0x4000b0
+[t=  343] [3 /bin/hello] write(1): auxv: AT_PHENT (4) = 0x38
+[t=  344] [3 /bin/hello] write(1): auxv: AT_PHNUM (5) = 0x2
+[t=  344] [3 /bin/hello] write(1): auxv: AT_SECURE (23) = 0x0
+[t=  344] [3 /bin/hello] write(1): auxv: AT_PAGESZ (6) = 0x1000
+[t=  344] [3 /bin/hello] write(1): auxv: AT_RANDOM (25) = 0x7fffffffffc4
+[t=  345] [3 /bin/hello] write(1): .data dataVal = 1234, .bss 4096 bytes, non-zero: 0
+[t=  346] [3 /bin/hello] write(1): double argc * 1.5 + 0.25 = 475 / 100
+[t=  346] [3 /bin/hello] exit(3) -&gt; taskKill
+[kernel] task 3 ended, exit code 3</code></pre></div>
+<ul>
+<li>auxv hiện ra theo thứ tự ngược với thứ tự đẩy: cavOS đẩy <code>AT_NULL</code> trước, <code>AT_PHDR</code> sau cùng, nên <code>AT_PHDR</code> đứng đầu danh sách.</li>
+<li><code>AT_PHDR = 0x400040</code>: bảng program header nằm trong bộ nhớ, ngay sau ELF header 64 byte. Libc dùng nó để tìm đoạn TLS.</li>
+<li><code>.data</code> mang giá trị từ file (1234), <code>.bss</code> đọc ra toàn 0: đúng phần <code>filesz</code> và phần xoá của loader.</li>
+<li>Phép tính <code>double</code> (SSE) cho 4,75 với argc = 3; mã thoát của chương trình là <code>argc</code>.</li>
+</ul>
+
+<h2 id="rsp">Kết quả 4: RSP lúc vào phụ thuộc số tham số</h2>
+<p class="lede"><em>Cùng chương trình, bớt một tham số.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] run("/bin/hello"), argc 2, envc 2
+[elf] stack: strings + AT_RANDOM from 0x7fffffffffd1 to 0x800000000000, RSP = 0x7ffffffffee8 (RSP % 16 = 8), 35 qwords in all
+[t=  388] [4 /bin/hello] write(1): entry RSP = 0x7ffffffffee8 (RSP % 16 = 8)
+[t=  396] [4 /bin/hello] write(1): double argc * 1.5 + 0.25 = 325 / 100
+[t=  397] [4 /bin/hello] exit(2) -&gt; taskKill
+
+[kernel] run("/bin/missing"), argc 1, envc 0
+[elf] Could not open /bin/missing
+[kernel] elfExecute failed</code></pre></div>
+<p>Phần dưới chuỗi gồm 25 + argc + envc qword (22 cho auxv, 2 số 0 kết thúc, 1 argc). Với argc + envc lẻ, tổng chẵn và RSP rơi đúng mốc 16 byte; với argc + envc chẵn, RSP lệch 8. ABI x86-64
+yêu cầu RSP chia hết cho 16 lúc vào <code>_start</code>. Chương trình vẫn chạy vì <code>_start</code> của nó (như <code>crt1</code> của musl) tự <code>and $-16, %rsp</code> trước khi gọi C.</p>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng thứ tự các bước và cùng danh sách auxv; bỏ phần chương trình động.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x0c</th></tr></thead>
+<tbody>
+<tr><td>Đọc file</td><td><code>fsKernelOpen</code> + <code>fsRead</code></td><td><code>fsReadFile</code> của Lab 0x09</td></tr>
+<tr><td>Ghi vào không gian của task mới</td><td><code>ChangePageDirectory</code> sang PML4 mới rồi <code>memcpy</code></td><td>qua HHDM, không đổi CR3</td></tr>
+<tr><td>Chuỗi argv/envp, AT_RANDOM</td><td>trong heap của task</td><td>ở đỉnh stack</td></tr>
+<tr><td>PT_INTERP, ET_DYN</td><td>nạp interpreter ở <code>0x100000000000</code>, PIE ở <code>0x50000000000</code></td><td>không hỗ trợ</td></tr>
+<tr><td>Kiểm vị trí PT_LOAD</td><td>không</td><td>phải nằm trong nửa user, dưới stack</td></tr>
+<tr><td>stdin/stdout/stderr</td><td><code>run()</code> mở <code>/dev/stdin</code>, <code>/dev/stdout</code>, <code>/dev/stderr</code> làm fd 0, 1, 2</td><td><code>write(1)</code> in thẳng ra serial</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi sửa và chạy lại.</em></p>
+<details class="quiz"><summary>Bỏ dòng xoá <code>.bss</code> trong <code>elfProcessLoad</code>. Lab còn in "non-zero: 0" không?</summary>
+<p>Vẫn có thể in 0, vì trang mới cấp đã được xoá lúc map. Nhưng nếu đoạn <code>.bss</code> nằm chung trang với phần cuối của <code>.data</code> trong file, phần đuôi trang đó sẽ mang byte của file (đoạn chép
+theo <code>filesz</code> không chạm tới, nhưng một loader chép nguyên trang thì có). Xoá tường minh <code>memsz - filesz</code> mới chắc chắn đúng.</p></details>
+<details class="quiz"><summary>Đổi <code>user.ld</code> để đoạn text không chứa header (bỏ <code>FILEHDR PHDRS</code>). <code>AT_PHDR</code> còn đúng không?</summary>
+<p>Không. Loader tính <code>AT_PHDR = p_vaddr thấp nhất + e_phoff</code>, giả định header nằm ở đầu đoạn đầu tiên. Không có header trong bộ nhớ thì địa chỉ đó trỏ vào code. Libc dựa vào
+<code>AT_PHDR</code> để tìm <code>PT_TLS</code> sẽ đọc sai.</p></details>
+<details class="quiz"><summary>Vì sao chương trình gọi được <code>write</code> mà không cần libc?</summary>
+<p>Syscall chỉ là lệnh <code>syscall</code> với số trong RAX và tham số trong RDI, RSI, RDX (Bài 16). <code>ulib.h</code> viết đúng mấy dòng asm đó. Libc chỉ bọc lại cho tiện và thêm xử lý lỗi.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a> · nền <a href="../ly_thuyet/bai/bai_15_ahci_filesystems.html">Bài 15</a> (đọc file),
+<a href="../ly_thuyet/bai/bai_16_fast_syscalls.html">Bài 16</a> (syscall), <a href="../ly_thuyet/bai/bai_17_sse_fpu.html">Bài 17</a> (SSE), <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6</a> (PML4 riêng).</li>
+<li>Lab trước: <a href="lab_0x0b_sse_fpu.html">Lab 0x0b - SSE &amp; FPU</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x0c - Userspace &amp; ELF Loader</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>

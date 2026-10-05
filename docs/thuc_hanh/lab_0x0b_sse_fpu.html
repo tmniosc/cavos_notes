@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lab 0x0b - SSE &amp; FPU · Học cavOS</title>
+<link rel="stylesheet" href="../assets/noir.css">
+</head>
+<body data-root="../" data-page="thuc_hanh/lab_0x0b_sse_fpu.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../index.html">Học cavOS</a><span class="sep">/</span><a href="thuc_hanh.html">Thực hành</a></div>
+    <h1>Lab 0x0b - SSE &amp; FPU</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> lab, hands-on, sse, avx, x87, cr0, cr4, xcr0, fxsave, xsave, context switch</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a></strong>.
+Kernel bật x87, SSE và AVX theo đúng <code>initiateSSE()</code> của cavOS, và lưu trạng thái FPU khi đổi task bằng <code>fxsave</code>/<code>fxrstor</code> như <code>schedule()</code> của cavOS. Hai chương
+trình ring 3 chạy cùng lúc, mỗi cái giữ một mẫu riêng trong <code>YMM0</code> và trên stack x87, rồi đếm xem sau mỗi lần bị đổi đi và đổi về, mẫu của nó còn nguyên không. Ba bản build so
+ba cách lưu: <code>fxsave</code> như cavOS, <code>xsave</code>, và không lưu gì.</p>
+</div>
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/0b-sse-fpu/</code> (chép từ <code>0a-fast-syscalls/</code>) · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make image &amp;&amp; make run</code>
+(QEMU <code>-cpu max</code>). Source ở <code>lab/src/oskernel-lab/0b-sse-fpu/</code>, log đầy đủ ở <code>lab/outputs/lab-0x0b-run.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Giữ nguyên Lab 0x0a, thêm <code>initiateSSE()</code> và vùng lưu FPU trong mỗi task.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>... như Lab 0x0a (AHCI, FAT32/ext2, SYSCALL, task ring 3 từ asm)
+sse.{h,c}     MỚI, theo cpu/system.c initiateSSE(): CPUID (SSE, FXSR, XSAVE, AVX), CR0.EM=0 MP=1,
+              CR4.OSFXSR + OSXMMEXCPT, fninit, CR0.NE, CR4.OSXSAVE + XCR0 = 7; + in CR0/CR4/XCR0
+task.{h,c}    + fpuenv[1024] (căn 64) + mxcsr; task mới: FCW = 0x37f, MXCSR = 0x1f80 (như cavOS)
+schedule.c    + lưu/nạp FPU cho task user: fxsave + stmxcsr / fxrstor + ldmxcsr (như cavOS);
+              DEMO=-DXSAVE: xsave/xrstor mặt nạ 7; DEMO=-DNO_FPU_SAVE: không lưu
+syscall.c     + syscall 444: báo kết quả kiểm của fpu_A / fpu_B
+user.S        thay mới: probe (1 lệnh SSE + 1 lệnh AVX), fpu_A (mẫu 0xAA, x87 = 1111), fpu_B (0x55, 2222)
+GNUmakefile   QEMU -cpu max: TCG có AVX
+scripts/run_all.sh  chạy 3 bản build, ghi log</code></pre></div>
+
+<h2 id="chay">Chạy</h2>
+<p class="lede"><em>Một bản giống cavOS, hai bản để so.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0b-sse-fpu
+make image &amp;&amp; make run                                    # fxsave/fxrstor như cavOS
+make clean &amp;&amp; make image DEMO=-DXSAVE &amp;&amp; make run         # xsave/xrstor
+make clean &amp;&amp; make image DEMO=-DNO_FPU_SAVE &amp;&amp; make run   # không lưu FPU
+bash scripts/run_all.sh lab-0x0b-run.txt</code></pre></div>
+<p>Mỗi chương trình fpu: nạp mẫu 32 byte vào <code>YMM0</code> và một số nguyên vào <code>ST(0)</code>, rồi 40 lần: quay khoảng 200000 vòng (đủ để timer 1 ms cắt và đổi sang task kia), cất
+<code>YMM0</code> và <code>ST(0)</code> ra stack, so với mẫu. Output thật: QEMU 10.2.1 TCG <code>-cpu max</code>, cross gcc <code>-O2</code>, Limine 8.7.0, chạy ngày 2026-10-03.</p>
+
+<h2 id="bat-sse">Kết quả 1: trước và sau <code>initiateSSE()</code></h2>
+<p class="lede"><em>Limine để SSE tắt; một lệnh SSE trong ring 3 lúc này là #UD.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[kernel] FPU switch mode: fxsave/fxrstor + stmxcsr/ldmxcsr, like cavOS
+[sse] left by Limine: CR0 0x80010011 (EM=0 MP=0 TS=0 NE=0), CR4 0x20 (OSFXSR=0 OSXMMEXCPT=0 OSXSAVE=0)
+
+[kernel] task 3 (probe): 18 bytes of code, FPU area at 0xffffffff8001ea40 (FCW 0x37f, MXCSR 0x1f80)
+[isr] vector 0x6 #UD Invalid Opcode  err=0x0
+      RIP=0x0000008000000000 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+      -&gt; fault in ring 3 (CPL 3): kill task 3 (probe), the kernel goes on
+
+[sse] CPUID.1: EDX 0xfcbfbfd (SSE bit25=1 FXSR bit24=1), ECX 0xf6f8320b (XSAVE bit26=1 AVX bit28=1)
+[cpu] The xsave instruction is available. Enabling..
+[cpu] The AVX extensions are available. Enabling..
+[sse] CPUID.0xD: XSAVE area for the bits now in XCR0 = 832 bytes (fxsave: 512)
+[sse] after initiateSSE(): CR0 0x80010033 (EM=0 MP=1 TS=0 NE=1), CR4 0x40620 (OSFXSR=1 OSXMMEXCPT=1 OSXSAVE=1), XCR0 0x7
+
+[kernel] task 4 (probe): 18 bytes of code, FPU area at 0xffffffff8001ea40 (FCW 0x37f, MXCSR 0x1f80)
+[t=  320] [4 probe  ] exit(0) -&gt; taskKill</code></pre></div>
+<ul>
+<li>Trước: <code>CR4.OSFXSR = 0</code>. Lệnh đầu tiên của probe (<code>movaps</code>, tại <code>0x8000000000</code>) gây #UD.</li>
+<li>Sau: CR0 thêm MP (bit 1) và NE (bit 5); CR4 thêm OSFXSR (bit 9), OSXMMEXCPT (bit 10), OSXSAVE (bit 18); <code>XCR0 = 7</code> = x87 + SSE + AVX. Probe chạy được cả <code>movaps</code> lẫn
+<code>vmovdqu ymm</code>.</li>
+<li>CPUID.0xD: với 3 thành phần đó, vùng <code>xsave</code> cần 832 byte. <code>fxsave</code> chỉ ghi 512 byte: thiếu đúng 256 byte nửa cao của 16 thanh ghi YMM (16 × 16 byte), cộng phần header.</li>
+</ul>
+
+<h2 id="fxsave">Kết quả 2: <code>fxsave</code> như cavOS</h2>
+<p class="lede"><em>XMM và x87 sống sót qua đổi task; nửa cao YMM thì không.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>########## Run 1: make run (fxsave/fxrstor, like cavOS)
+[t=  411] [6 fpu_B  ] pattern 0x55: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 32 times
+[t=  417] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 40, x87 ST(0) wrong 0, switched in 35 times</code></pre></div>
+<ul>
+<li><code>fpu_A</code> sai nửa cao ở cả 40 lần kiểm. <code>fpu_A</code> nạp <code>YMM0</code> trước; rồi <code>fpu_B</code> chạy và nạp <code>YMM0</code> của nó. Khi đổi về A, <code>fxrstor</code> trả lại nửa thấp (XMM0) của A,
+nhưng nửa cao vẫn là của B, vì <code>fxsave</code> không lưu nó.</li>
+<li><code>fpu_B</code> không thấy lỗi chỉ vì nó là task cuối cùng ghi nửa cao, và A không ghi lại nữa. Lỗi thuộc về task bị đè, không phải task đè.</li>
+<li>x87 <code>ST(0)</code> và XMM0 đúng hết: đó là phần <code>fxsave</code> có lưu.</li>
+</ul>
+
+<h2 id="xsave">Kết quả 3: <code>xsave</code></h2>
+<p class="lede"><em>Cùng chương trình, chỉ đổi lệnh lưu trong scheduler.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>########## Run 2: DEMO=-DXSAVE
+[kernel] FPU switch mode: xsave/xrstor with mask XCR0 = 7 (DEMO=-DXSAVE)
+[t=  434] [6 fpu_B  ] pattern 0x55: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 34 times
+[t=  438] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 36 times</code></pre></div>
+<p><code>xsave</code> với mặt nạ <code>EDX:EAX = 7</code> lưu mọi thành phần đang bật trong XCR0, kể cả nửa cao YMM. Cả hai task đều 0 lỗi. Vùng lưu cần căn 64 byte và đủ cỡ CPUID.0xD báo
+(832 byte ở đây; lab cấp 1024).</p>
+
+<h2 id="khong-luu">Kết quả 4: không lưu gì</h2>
+<p class="lede"><em>Để thấy vì sao phải lưu.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>########## Run 3: DEMO=-DNO_FPU_SAVE
+[kernel] FPU switch mode: none (DEMO=-DNO_FPU_SAVE)
+[t=  423] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 40, YMM0 high 128 bits wrong 40, x87 ST(0) wrong 40, switched in 32 times
+[t=  427] [6 fpu_B  ] pattern 0x55: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 33 times</code></pre></div>
+<p>Không lưu thì A thấy mọi thứ của B: cả YMM0 lẫn số trên đỉnh stack x87 (lệnh <code>fild</code> của B đẩy 2222 lên trên số 1111 của A). Hai task dùng chung một bộ thanh ghi FPU.</p>
+
+<figure class="diagram">
+<svg id="svg-lab0bymm" role="img" aria-label="Timeline: task A loads YMM0 with AA in both halves; switch: fxsave saves A's low half only; task B loads 55 in both halves; switch: fxsave saves B's low half, fxrstor restores A's low half AA; A now has low half AA and high half 55" width="100%" viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-lab0bymm-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-lab0bymm .lbl{fill:#c2c0b6;} #svg-lab0bymm .mono{font-family:'SF Mono',Consolas,monospace;} #svg-lab0bymm .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="105" y="24" text-anchor="middle" class="lbl" font-size="10.5" font-weight="600">A runs: vmovdqu</text>
+<text x="360" y="24" text-anchor="middle" class="lbl" font-size="10.5" font-weight="600">B runs: vmovdqu</text>
+<text x="615" y="24" text-anchor="middle" class="lbl" font-size="10.5" font-weight="600">back to A</text>
+<text x="105" y="44" text-anchor="middle" class="lbl" font-size="9">YMM0 high | low</text>
+<text x="360" y="44" text-anchor="middle" class="lbl" font-size="9">YMM0 high | low</text>
+<text x="615" y="44" text-anchor="middle" class="lbl" font-size="9">YMM0 high | low</text>
+<rect x="30" y="54" width="75" height="36" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="67" y="77" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">AA..</text>
+<rect x="105" y="54" width="75" height="36" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="142" y="77" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">AA..</text>
+<rect x="285" y="54" width="75" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="322" y="77" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">55..</text>
+<rect x="360" y="54" width="75" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="397" y="77" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">55..</text>
+<rect x="540" y="54" width="75" height="36" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="577" y="77" text-anchor="middle" fill="#F0C9C9" font-size="10" class="mono">55..</text>
+<rect x="615" y="54" width="75" height="36" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="652" y="77" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">AA..</text>
+<line x1="185" y1="72" x2="280" y2="72" class="flow" stroke-width="1.4" marker-end="url(#svg-lab0bymm-arrow)"/>
+<line x1="440" y1="72" x2="535" y2="72" class="flow" stroke-width="1.4" marker-end="url(#svg-lab0bymm-arrow)"/>
+<rect x="30" y="124" width="300" height="34" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="180" y="145" text-anchor="middle" fill="#D3D1C7" font-size="9.5">switch: fxsave A (512 B: x87 + XMM0-15 only)</text>
+<rect x="390" y="124" width="300" height="34" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="540" y="145" text-anchor="middle" fill="#D3D1C7" font-size="9.5">switch: fxsave B, fxrstor A (low half back)</text>
+<text x="360" y="194" text-anchor="middle" class="lbl" font-size="9.5">the high 128 bits of YMM0 are never saved, so A ends up with B's high half</text>
+<text x="360" y="212" text-anchor="middle" class="lbl" font-size="9.5">xsave with the AVX bit in its mask saves and restores them too</text>
+</svg>
+<figcaption>Vì sao <code>fpu_A</code> sai nửa cao ở bản <code>fxsave</code>.</figcaption>
+</figure>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng cách bật, cùng cách lưu; lab có thêm hai chế độ để so.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Chỗ</th><th>cavOS</th><th>Lab 0x0b</th></tr></thead>
+<tbody>
+<tr><td><code>initiateSSE</code>, giá trị FPU ban đầu, <code>fxsave</code> + <code>stmxcsr</code></td><td colspan="2">giống nhau</td></tr>
+<tr><td>Vùng lưu</td><td>512 byte, căn 16</td><td>1024 byte, căn 64 (đủ cho <code>xsave</code>)</td></tr>
+<tr><td>Lưu trước <code>initiateSSE()</code></td><td>không có task user lúc đó</td><td>chỉ lưu khi SSE đã bật (lab chạy một probe trước đó)</td></tr>
+<tr><td>Lệnh lưu</td><td><code>fxsave</code></td><td><code>fxsave</code>; <code>DEMO=-DXSAVE</code>: <code>xsave</code>; <code>DEMO=-DNO_FPU_SAVE</code>: không</td></tr>
+</tbody>
+</table></div>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Đoán trước, rồi đổi code và chạy lại.</em></p>
+<details class="quiz"><summary>Đổi chương trình fpu chỉ dùng <code>XMM0</code> (lệnh <code>movdqu</code>, không dùng YMM). Bản <code>fxsave</code> còn lỗi không?</summary>
+<p>Không: <code>fxsave</code> lưu đủ XMM0–15. Nhưng nếu task kia vẫn dùng lệnh VEX 128 bit (<code>vmovdqu xmm</code>), lệnh đó xoá nửa cao YMM về 0, nên một task khác đang dùng YMM vẫn mất nửa cao.</p></details>
+<details class="quiz"><summary>Vì sao kernel cavOS (và lab) không cần lưu FPU cho kernel thread?</summary>
+<p>Kernel biên dịch với <code>-mno-sse -mno-sse2 -mno-80387 -mno-mmx</code>: compiler không bao giờ sinh lệnh FPU/SSE trong code kernel. Thanh ghi FPU lúc đang ở kernel vẫn là của task user
+vừa chạy, và không ai trong kernel động vào.</p></details>
+<details class="quiz"><summary>Bỏ dòng <code>fninit</code> trong <code>initiateSSE()</code>. Có ảnh hưởng tới task user không?</summary>
+<p>Gần như không: mỗi task user được <code>fxrstor</code> từ vùng lưu có FCW = <code>0x37f</code> ngay lần đầu chạy, đè lên trạng thái x87 cũ. <code>fninit</code> chỉ đặt x87 về trạng thái chuẩn cho chính
+lúc đó.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a> · nền <a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>
+(đổi task), <a href="../ly_thuyet/bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a> (task ring 3, syscall báo cáo).</li>
+<li>Lab trước: <a href="lab_0x0a_fast_syscalls.html">Lab 0x0a - Fast Syscalls</a>.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Lab 0x0b - SSE &amp; FPU</footer>
+</main>
+</div>
+<script src="../assets/site.js"></script>
+<script src="../assets/noir.js"></script>
+</body>
+</html>
