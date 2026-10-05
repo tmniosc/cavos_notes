@@ -22,18 +22,23 @@
 Kernel chỉ là một file nằm bên trong nó.</em></p>
 </div>
 <h2 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h2>
-<p class="lede"><em>Tưởng tượng bạn viết xong một lá thư (<code>kernel.bin</code>) và muốn người ta đọc được. Không thể đưa lá thư trần
-cho bưu điện — phải bỏ vào <strong>phong bì có địa chỉ đúng chuẩn</strong> thì họ mới chuyển.</em></p>
+<p class="lede"><em>Tưởng tượng bạn chế xong một cỗ máy (<code>kernel.bin</code>) và gửi tới một nhà xưởng. Người nhận hàng ở xưởng
+không biết lắp máy, nên bạn đóng cỗ máy vào <strong>một thùng hàng có kèm sẵn robot lắp ráp</strong>.</em></p>
 <ul>
-<li><strong>Lá thư</strong> = <code>kernel.bin</code>, thứ bạn thực sự viết ra.</li>
-<li><strong>Phong bì</strong> = <code>os.img</code>: một ổ đĩa giả, bên trong có hệ thống file, có chỗ ghi "khởi động từ đâu".</li>
-<li><strong>Người đưa thư</strong> = Limine (bootloader): máy vừa bật thì chưa ai biết <code>kernel.bin</code> là gì, cần một
-chương trình nhỏ biết cách đọc đĩa, tìm file, nạp vào RAM rồi nhảy vào.</li>
-<li><strong>Con tem ở góc phong bì</strong> = 2 byte <code>0x55AA</code> cuối sector 0. Thiếu nó thì BIOS coi như đĩa không boot được,
+<li><strong>Nhà xưởng</strong> = máy tính, <strong>chỗ đặt máy</strong> = RAM.</li>
+<li><strong>Người nhận hàng</strong> = firmware (BIOS hoặc UEFI), có sẵn trong máy từ trước. Người này chỉ biết đúng một việc:
+tìm thùng có nhãn chuẩn, rồi bấm nút bật robot ở chỗ quy định. Bên trong thùng có gì thì không quan tâm.</li>
+<li><strong>Thùng hàng</strong> = <code>os.img</code>: một ổ đĩa giả, bên trong có hệ thống file.</li>
+<li><strong>Robot lắp ráp</strong> = Limine (bootloader), nằm ngay trong thùng. Bật lên là nó đọc tờ hướng dẫn, lấy cỗ máy ra,
+đặt vào xưởng (nạp vào RAM) rồi bấm nút chạy (nhảy vào kernel).</li>
+<li><strong>Tờ hướng dẫn</strong> = <code>limine.conf</code>: cỗ máy nằm ở đâu trong thùng, lắp theo kiểu nào.</li>
+<li><strong>Cỗ máy</strong> = <code>kernel.bin</code>, thứ bạn thực sự viết ra.</li>
+<li><strong>Nhãn "hàng khởi động được"</strong> = 2 byte <code>0x55AA</code> cuối sector 0. Thiếu nó thì BIOS coi như đĩa không boot được,
 bỏ qua luôn.</li>
 </ul>
-<p>Vì máy có <strong>hai kiểu firmware</strong> (BIOS đời cũ và UEFI đời mới), phong bì phải dán <strong>hai địa chỉ</strong>: một chỗ
-cho BIOS đọc, một chỗ cho UEFI đọc. Cả hai rốt cuộc dẫn về cùng một lá thư.</p>
+<p>Xưởng có <strong>hai kiểu người nhận hàng</strong> (BIOS đời cũ và UEFI đời mới), mỗi người quen bấm một chỗ khác nhau.
+Nên robot có <strong>hai nút bật</strong>: BIOS bấm nút ở đầu thùng (sector 0), UEFI mở thùng ra tìm nút ở <code>/EFI/BOOT/BOOTX64.EFI</code>.
+Bấm nút nào thì cũng là cùng một robot, đọc cùng một tờ hướng dẫn, lắp cùng một cỗ máy.</p>
 <h2 id="bản-đồ-bên-trong">Bản đồ bên trong</h2>
 <p class="lede"><em>Ba vùng, đọc từ đầu đĩa xuống. Mỗi vùng có đúng một nhiệm vụ.</em></p>
 <figure class="diagram">
