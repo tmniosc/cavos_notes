@@ -54,21 +54,32 @@ Từ đó bấm <em>Tiếp</em> cuối mỗi trang để đi Bài 1, Bài 2…</
 <p>Muốn biết phần nào nằm ở spec nào: <a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</p>
 <h2 id="khái-niệm-cốt-lõi">Khái niệm (tra cứu)</h2>
 <p class="lede"><em>Thứ dùng đi dùng lại ở nhiều bài, viết chung cho mọi kernel x86-64; cuối mỗi trang có link tới chỗ cavOS dùng nó.</em></p>
+<p><strong>Chế độ CPU</strong></p>
 <ul>
-<li><a href="khai_niem/paging.html">Paging</a> — nền tảng nhất, đọc trước</li>
-<li><a href="khai_niem/long_mode.html">Long Mode</a> — chế độ 64-bit, nơi kernel thực sự chạy</li>
 <li><a href="khai_niem/real_mode_va_protected_mode.html">Real Mode và Protected Mode</a> — bootloader BIOS, A20, vào protected mode, kernel Multiboot, trampoline CPU phụ</li>
-<li><a href="khai_niem/higher_half_kernel.html">Higher-Half Kernel</a> — vì sao kernel nằm ở nửa cao không gian ảo</li>
-<li><a href="khai_niem/hhdm.html">HHDM</a> — cửa sổ nhìn toàn bộ RAM vật lý, và chuyện hai địa chỉ ảo trỏ một chỗ</li>
-<li><a href="khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a> — ảnh đĩa boot: MBR + FAT32 + Limine, hai đường BIOS/UEFI</li>
-<li><a href="khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a> · <a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
-<li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — kernel chạy được ở địa chỉ nào cũng được, và đặt ngẫu nhiên mỗi lần boot</li>
 <li><a href="khai_niem/x86_segmentation.html">x86 Segmentation</a> — segment + 3 chế độ (real/protected/long)</li>
 <li><a href="khai_niem/gdt.html">GDT</a> — bảng segment descriptor, selector, TSS, CPL/DPL/RPL</li>
-<li><a href="khai_niem/esp_va_uefi_boot.html">ESP và UEFI boot</a> — GPT và ESP, BootOrder, đường dẫn dự phòng, một bootloader đọc kernel thế nào</li>
-<li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI, kernel có cần gọi firmware không</li>
-<li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, firmware kiểm chữ ký, shim và MOK, measured boot</li>
+<li><a href="khai_niem/long_mode.html">Long Mode</a> — chế độ 64-bit, nơi kernel thực sự chạy</li>
+</ul>
+<p><strong>Bộ nhớ</strong></p>
+<ul>
+<li><a href="khai_niem/paging.html">Paging</a> — nền tảng nhất, nếu chỉ đọc một trang thì đọc trang này trước</li>
+<li><a href="khai_niem/higher_half_kernel.html">Higher-Half Kernel</a> — vì sao kernel nằm ở nửa cao không gian ảo</li>
+<li><a href="khai_niem/hhdm.html">HHDM</a> — cửa sổ nhìn toàn bộ RAM vật lý, và chuyện hai địa chỉ ảo trỏ một chỗ</li>
+<li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — kernel chạy được ở địa chỉ nào cũng được, và đặt ngẫu nhiên mỗi lần boot</li>
+</ul>
+<p><strong>Định dạng file</strong></p>
+<ul>
 <li><a href="khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a> — ứng dụng UEFI là PE32+, kernel là ELF; Microsoft x64 vs System V, vì sao -mno-red-zone</li>
+</ul>
+<p><strong>Boot và firmware</strong></p>
+<ul>
+<li><a href="khai_niem/esp_va_uefi_boot.html">ESP và UEFI boot</a> — GPT và ESP, BootOrder, đường dẫn dự phòng, một bootloader đọc kernel thế nào</li>
+<li><a href="khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a> — ảnh đĩa boot: MBR + FAT32 + Limine, hai đường BIOS/UEFI</li>
+<li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, firmware kiểm chữ ký, shim và MOK, measured boot</li>
+<li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI, kernel có cần gọi firmware không</li>
+<li><a href="khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a> — giao kèo giữa bootloader và kernel, Limine làm ví dụ chính</li>
+<li><a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
 <li><a href="khai_niem/limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a> — mỗi việc Limine làm hộ, nếu tự viết loader UEFI thì phải làm thế nào</li>
 </ul>
 <h2 id="tài-liệu-gốc">Tài liệu gốc</h2>
