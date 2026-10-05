@@ -29,12 +29,12 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 
 | Máy | Vault (`<vault>`) | OS | User WSL | KVM | Chạy QEMU cavOS |
 | --- | --- | --- | --- | --- | --- |
-| Máy 1 | `D:\tmniosc\cavos_notes` | Windows 10 | `tmniosc` | không | `~/cavos-qemu.sh` |
-| Máy 2 | `E:\tmniosc\#lab\computer_system\cavos_notes` | Windows 11 | `thinker` | **có** `/dev/kvm` | `make qemu` (sau khi `usermod -aG kvm`) |
+| Máy 1 | `D:\tmniosc\system_programming_notes\cavos_notes` | Windows 10 | `tmniosc` | không | `~/cavos-qemu.sh` |
+| Máy 2 | `E:\tmniosc\system_programming_notes\cavos_notes` | Windows 11 | `thinker` | **có** `/dev/kvm` | `make qemu` (sau khi `usermod -aG kvm`) |
 
-> Máy 2 dựng ngày 2026-09-30: cavOS clone `2ba0edb`, Limine v8.7.0. `#` trong đường dẫn vault phải
-> quote khi dùng trong shell (`"/mnt/e/tmniosc/#lab/..."`). Git trên máy 2 báo "dubious ownership" với vault
-> → dùng `git -c safe.directory=E:/tmniosc/#lab/computer_system/cavos_notes ...`.
+> Máy 2 dựng ngày 2026-09-30: cavOS clone `2ba0edb`, Limine v8.7.0. Vault cả 2 máy dời vào
+> `system_programming_notes\` (2026-10-05; trước đó máy 2 ở `E:\tmniosc\#lab\computer_system\`). Git trên máy 2 báo
+> "dubious ownership" với vault → dùng `git -c safe.directory=E:/tmniosc/system_programming_notes/cavos_notes ...`.
 
 ## Quy tắc chạy lệnh
 - **Build trong `~` (ext4), TUYỆT ĐỐI không trên `/mnt/*` (`c` `d` `e`)** — `/mnt` là 9p nên `tar` rớt file,
@@ -89,7 +89,7 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 
 ## Quy ước viết note
 - **Đọc code** trong WSL. **Ghi note** vào vault (ổ Windows).
-- **Site là MỘT khoá học tuyến tính** (2026-10-03): Bài 0 → Bài 18 ở `docs/ly_thuyet/bai/bai_NN_<tên>.html`,
+- **Site là MỘT khoá học tuyến tính** (2026-10-03): trang "Bắt đầu" (file `bai_00_bat_dau.html`, tựa không ghi "Bài 0", user 2026-10-04) → Bài 18 ở `docs/ly_thuyet/bai/bai_NN_<tên>.html`,
   đúng thứ tự `_start()`. Sidebar (site.js) và nút Trước/Sau đi theo thứ tự đó. Khái niệm (`khai_niem/`) là phần
   **tra cứu**, không nằm trên đường chính; Tài liệu gốc để biết spec nào nói phần nào.
 - **Mỗi bài theo đúng khuôn 7 mục, theo thứ tự:** `Mục đích` (`#muc-dich`) → `Nói thật đơn giản` (`.card-head`,
@@ -102,9 +102,18 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
 - Viết bài mới (Bài 8 trở đi): đọc code thật trong `~/cavOS` → viết theo khuôn → sửa chip/cột "Tình trạng" trong
   `docs/ly_thuyet/ly_thuyet.html` (dàn ý → đã viết), chuyển bài từ nhóm "Sắp tới" sang "Bài học" trong site.js,
   cập nhật bản đồ trong Bài 0 (ô xanh) và mục "Tiến độ học" bên dưới.
+- **Không kể chuyện vá lỗi trong lúc làm lab** (user 2026-10-03): trang chỉ giữ kết quả cuối. Demo cố ý (cờ `DEMO=`)
+  và chỗ khác/lỗi của cavOS thì vẫn viết, như một cái bẫy hay một phép so sánh, không như lịch sử.
 - **Mọi mục `h2` mở đầu bằng 1 câu đời thường** `<p class="lede"><em>…</em></p>` trước khi vào code/chi
   tiết — user là người mới, mỗi mục phải đọc-là-hiểu. Chi tiết kỹ thuật để bên dưới.
 - Code viết dạng text đã escape trong `.code > .code-bar(c|bash|asm|ld|make|text) + pre > code`; `noir.js` tự tô màu.
+
+- **Trang khái niệm (`khai_niem/`) viết chung cho mọi kernel** (user 2026-10-04): không dựa vào cavOS; ví dụ lấy từ x86-64,
+  GCC, Linux, Limine/Multiboot. Phần riêng của cavOS (code, số đo readelf/QEMU) dời sang mục Đọc thêm của bài học đọc đúng đoạn code đó.
+  Cuối trang có mục `#trong-khoa-hoc` "Gặp ở đâu trong khoá học" = link tới bài. Trang về Limine viết thành "boot protocol" chung,
+  Limine làm ví dụ chính. Xong cả 15 trang (2026-10-04). Phần cavOS đã dời tới: Bài 1 Đọc thêm (#trang-thai-luc-vao,
+  #pie-kaslr gồm CFLAGS/LDFLAGS + KASLR không chạy, #ban-do-dia-chi, #tru-2gib-cavos, #disk-img, #secure-boot-cavos), Bài 3 #vung-cam,
+  Bài 8 #khong-uefi-runtime, Bài 12 #ap-limine. Đổi tựa: "Boot Protocol & Limine", "ESP và UEFI boot", "Paging".
 
 ## Quy ước lab
 - **Gộp theo cụm "chạy thấy được"**, KHÔNG map 1:1 với bài (bảng trong `docs/thuc_hanh/thuc_hanh.html`).
@@ -130,6 +139,35 @@ Trang bài nằm ở `docs/ly_thuyet/bai/` (tên file dạng `bai_06_virtual_mem
 - [x] Bài 10 - APIC & Timer — initiateAPIC/ioApicRedirect/initiateApicTimer, calibrate 10 tick PIT; lỗi: irqPerCoreAllocate gán thay so sánh, timerTicks không volatile; lab 0x05
 - [x] Bài 11 - PS2 Keyboard & Mouse — initiateKb/kbIrq/handleKbEvent, kbEvdevGenerate, initiateMouse/mouseIrq, /dev/input + /dev/stdin; lỗi: Caps/Shift/mũi tên, init race 0x20 bị kbIrq ăn; lab 0x06
 - [x] Bài 12 - Multitasking & Scheduler — Task struct, schedule(rsp) dựng khung ở đỉnh stack TSS, handControl qua page fault cố ý, taskSleepMs, kernel threads; lỗi: rip++ sai độ dài lệnh, lost wakeup kbTaskRead, use-after-free helperReaper, task idle không bao giờ chạy; lab 0x07
+- [x] Bài 13 - Networking — initiateNetworking (selectedNIC=0, phải trước PCI), struct NIC bọc netif lwIP, tcpip_init → lwipInitInThread (netif_add, etharp_output, linkoutput=lwipOutput, dhcp_start), netQueue 128 ô (IRQ ghi, helperNet đọc) → handlePacket → tcpip_input; sys_arch trên taskCreateKernel; networking/stack/ cũ không còn được gọi; lab 0x08
+- [x] Bài 14 - PCI & NIC — ConfigReadWord 0xCF8/0xCFC, initiatePCI quét 256×32×8, class → driver; initiateE1000: command bit 1/2/10, BAR0 MMIO qua HHDM, MAC từ EERD, CTRL.SLU, vòng RX/TX 256 descriptor, ioApicPciRegister qua _PRT (uACPI); lệch datasheet: RCTL_BUFFER_SIZE_8192 = 0, RDT = 256, TX không trả trang, EOI trước ICR → ngắt rỗng; QEMU e1000 giữ frame 1000 ms sau mỗi lần ghi RCTL (flush_queue_timer); lab 0x08
+- [x] Bài 15 - AHCI & Filesystems — initiateAHCI (bus master, ABAR=BAR5 qua HHDM, GHC.HR, BOHC, GHC.AE, ahciPortProbe SSTS/SIG, ahciPortRebase CLB/FB/CTBA), ahciRead (slot, FIS READ DMA EXT, PRDT, chờ CI); disk.c openDisk MBR, diskBytes = cổng SATA đầu; fsMount isFat (byte 66) / isExt2 (type 0x83), prefix dài nhất; ext2 superblock/BGDT/inode/block gián tiếp; FAT32 chuỗi cluster + cache; fsOpenGeneric/handlers; lệch: SIG đọc trước FRE (ổ CD bị coi là SATA), PRDT giả định liền vật lý, handoff luôn chạy, baseDoubly sai đơn vị; lab 0x09
+- [x] Bài 16 - Fast Syscalls — initiateSyscallInst (CPUID 80000001 EDX11, KERNEL_GS_BASE=&threadInfo, STAR=0x0040002800000000, LSTAR, EFER.SCE, FMASK=IF|DF), syscall_entry (swapgs, CR2 làm thanh ghi tạm, RSP=[gs:0], khung giống ngắt, sysret KHÔNG swapgs), syscallHandler (sti, bảng 450 ô kiểu Linux, 99 có hàm), stack syscall mỗi task (schedule ghi threadInfo.syscall_stack + FS/GS MSR), int 0x80 DPL3 cùng handler; lỗi: GS ring 3 = &threadInfo, int 0x80 + sti → schedule đè khung trên stack TSS, id > MAX_SYSCALLS lệch một, sigreturn không kiểm RCX canonical (CVE-2012-0217 trên Intel); lab 0x0a
+- [x] Bài 17 - SSE & FPU — initiateSSE (CPUID SSE/FXSR, CR0.EM=0 MP=1, CR4.OSFXSR+OSXMMEXCPT, fninit, CR0.NE, CR4.OSXSAVE + XCR0=7 nếu XSAVE+AVX), kernel -mno-sse nên chỉ lưu FPU cho task user, fpuenv[512] căn 16 FCW 0x37f MXCSR 0x1f80, schedule eager fxsave/fxrstor + stmxcsr/ldmxcsr; lỗi: bật AVX mà fxsave không lưu nửa cao YMM (lab đo 40/40), MXCSR lưu thừa; Limine để OSFXSR=0; lab 0x0b
+- [x] Bài 18 - Userspace & ELF Loader — run() (elfExecute, mở /dev/stdin|stdout|stderr làm fd 0-2, taskCreateFinish, WAITING_CHILD_SPECIFIC), elfExecute (đọc cả file, elf_check_file, PML4 mới + tạm đổi CR3, PT_INTERP → ld.so ở 0x100000000000, ET_DYN ở 0x50000000000), elfProcessLoad (map PF_USER|PF_RW bỏ qua p_flags, memset .bss), stackGenerateUser (auxv 10 loại, chuỗi trong heap, AT_PHDR = vaddr thấp nhất + e_phoff); lệch: không W^X, không kiểm p_vaddr thuộc nửa user, RSP lệch 8 khi argc+envc chẵn, bash nhận envp rỗng; lab 0x0c
+
+### ĐANG LÀM (2026-10-03): viết nốt Bài 13–18 ("hoàn thiện các bài Sắp tới")
+User yêu cầu viết hết nhóm "Sắp tới (mới có dàn ý)", sau đó soát + sửa toàn bộ trang. Mỗi bài: đọc `~/cavOS` thật → lab
+chạy thật (nếu làm được) → trang theo khuôn 7 mục → ly_thuyet.html (chip "đã viết") → site.js (Sắp tới → Bài học) →
+Bài 0 (ô xanh) → Tiến độ học. Lab dự kiến:
+- [x] Lab 0x08 pci-nic (code + log từ máy 2, chạy lại được trên máy này) + trang `lab_0x08_pci_nic.html`; Bài 13 + Bài 14
+      viết xong, đã chuyển sang "Bài học" (script đánh dấu: scratchpad `cavos_mark.py` của session; làm tay cũng được)
+- [x] Bài 15 AHCI & Filesystems + Lab 0x09 ahci-fs (ổ MBR + FAT32 + ext2 dựng bằng scripts/mkimage_fs.sh, `scripts/run_all.sh` ghi
+      `lab/outputs/lab-0x09-run.txt`; máy này KVM không chạy được: /dev/kvm có nhưng ENODEV)
+- [x] Bài 16 Fast Syscalls + Lab 0x0a fast-syscalls (user.S = chương trình ring 3 bằng asm chép vào 1 trang PTE_USER ở VA 0x8000000000;
+      3 bản build: thường, DEMO=-DINT80_STI (treo: khung int 0x80 bị schedule() đè), DEMO=-DBAD_SYSRET; log lab-0x0a-run.txt)
+- [x] Bài 17 SSE & FPU + Lab 0x0b sse-fpu (QEMU -cpu max; fpu_A/fpu_B giữ mẫu trong YMM0 + ST(0); 3 bản: fxsave như cavOS → nửa cao YMM sai 40/40,
+      DEMO=-DXSAVE → 0 lỗi, DEMO=-DNO_FPU_SAVE → sai hết; log lab-0x0b-run.txt)
+- [x] Bài 18 Userspace & ELF Loader + Lab 0x0c elf-userspace (elf.c theo elfExecute/stackGenerateUser; user/hello.c → ELF tĩnh /bin/hello
+      trên ext2, user.ld FILEHDR PHDRS để AT_PHDR = 0x400040; chương trình in argc/argv/envp/auxv, .data/.bss, double; log lab-0x0c-run.txt)
+- [x] Theme (2026-10-03): `noir.js` luôn dựng cột phải (outline) ở màn hình >= 1400px, kể cả trang không có mục lục
+      (sửa ở `D:\tmniosc\claude_setup\skills\dark-noir-docs\assets\`, chép sang docs/assets + .claude/skills của 2 vault)
+- [x] Soát vault này (2026-10-04): 18 bài đúng khuôn 7 mục, mọi h2 có lede, bỏ icon ✓/✗, đường dẫn vault mới; trang Lab 0x03
+      viết lại chỉ từ log 2026-09-03 (bỏ lần chạy 2026-06-01 còn lỗi bitmap; Bài 5 trình bày lỗi làm tròn như một cái bẫy).
+      Log lần chạy cũ `lab-0x03-run.txt` đã xoá (2026-10-04).
+- [x] Soát uefi_notes (2026-10-04): bỏ chuyện vá lỗi trên trang + comment source + README (màu chữ theo tác vụ giải thích ở lab 0x16 #mau,
+      CopyMem ở lab 0x04 thành "bẫy"), mục "Bẫy đã gặp" → "Bẫy", lede đủ, 57 trang qua bộ kiểm
+Máy đang làm: Windows 10, vault `D:\tmniosc\system_programming_notes\cavos_notes`, WSL user `tmniosc`, có `/dev/kvm`.
 
 > Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 
