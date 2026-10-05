@@ -281,6 +281,7 @@ và 0x70/0x71 (CMOS) rơi vào byte của <code>rsp1</code> = 0, nên chương t
 <p>Gần như chắc là không: kernel biên dịch với <code>-mno-sse</code>, không có lệnh nào đòi stack căn 16 byte. Đó cũng là lý do cavOS chạy được dù gọi C khi RSP lệch.</p></details>
 
 <h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
 <ul>
 <li>Lý thuyết: <a href="../ly_thuyet/bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>, <a href="../ly_thuyet/bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a> · nền <a href="../ly_thuyet/khai_niem/gdt.html">GDT</a>, <a href="../ly_thuyet/khai_niem/x86_segmentation.html">x86 Segmentation</a>.</li>
 <li>Lab trước: <a href="lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (PMM và PML4 riêng vẫn chạy trong lab này).</li>

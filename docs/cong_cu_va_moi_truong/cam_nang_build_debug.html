@@ -26,6 +26,7 @@
 <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a> rồi rẽ <a href="dung_moi_truong_cavos.html">Dựng môi trường cavOS</a> / <a href="dung_moi_truong_oskernel_lab.html">Dựng môi trường oskernel-lab</a>.</p>
 </div>
 <h2 id="build-chạy">Build &amp; chạy</h2>
+<p class="lede"><em>Năm lệnh make cho cavOS thật, từ build toolchain tới chạy QEMU.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/cavOS
 make tools          # build cross-compiler x86_64-cavos-gcc (1 LẦN duy nhất, lâu)
 make disk           # build disk.img (kernel + bootloader + userland). Cần sudo cho bước ports
@@ -36,6 +37,7 @@ make clean          # dọn .o</code></pre></div>
 <p>Mẹo: chạy <code>sudo -v</code> ngay trước <code>make disk</code> để sudo không timeout ở bước <code>ports</code> (bootstrap Alpine).</p>
 </div>
 <h2 id="debug-gdb-qemu">Debug (GDB + QEMU)</h2>
+<p class="lede"><em>QEMU mở cổng cho GDB, rồi GDB dừng kernel ở bất cứ dòng nào.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>make qemu_dbg       # QEMU mở gdb stub (thường cổng :1234, dừng chờ)
 make dev            # clean + build_dirty + qemu_dbg</code></pre></div>
 <p>GDB kết nối:</p>
@@ -44,8 +46,10 @@ make dev            # clean + build_dirty + qemu_dbg</code></pre></div>
 (gdb) break _start
 (gdb) continue</code></pre></div>
 <h2 id="output-debug-serial">Output debug serial</h2>
+<p class="lede"><em>Cách gỡ lỗi rẻ nhất: in ra cổng serial.</em></p>
 <p><code>debugf()</code> (<a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>) in ra COM1 → QEMU hiển thị qua cờ <code>-serial</code> (xem <code>src/kernel/Makefile</code> mục <code>qemu</code>).</p>
 <h2 id="xem-code-bằng-zed-clangd-lsp">Xem code bằng Zed + clangd (LSP)</h2>
+<p class="lede"><em>Cho editor biết đúng cờ biên dịch của kernel thì nhảy định nghĩa, tìm chỗ dùng mới chạy.</em></p>
 <div class="callout quote">
 <p>Đọc/điều hướng code (jump-to-def, find-refs, hover type) dễ hơn nhiều khi clangd hiểu đúng flag kernel.
 Kernel freestanding dùng flag đặc thù (<code>-ffreestanding -mcmodel=kernel -I&lt;custom&gt;</code>...) → <strong>bắt buộc</strong> có
@@ -73,6 +77,7 @@ clangd chạy native + path khớp <code>compile_commands.json</code> (đường
 lâu + cần sudo). <code>compile_commands.json</code> sinh ra ở gốc repo, Zed đọc được ngay.</p>
 </div>
 <h2 id="lab-kernel-oskernel-lab-build-artifacts-tự-sinh">Lab kernel (<code>~/oskernel-lab</code>) — build artifacts tự sinh</h2>
+<p class="lede"><em>Các lab dùng chung một file make, và mỗi lần build để lại bốn file để soi.</em></p>
 <p>Các mini-project lab dùng chung <code>common.mk</code> (mỗi project chỉ khai <code>SRCS/KERNEL/IMG</code> rồi <code>include ../common.mk</code>).</p>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/01-bootloader-parser
 make            # build kernel.bin + 4 artifact (.map .dis .sym .elf.txt)
@@ -127,6 +132,7 @@ Trong Makefile, <strong>đừng</strong> để comment cùng dòng với <code>V
 → thấy <code>.text</code>=AX, <code>.rodata</code>=A, <code>.data</code>/<code>.bss</code>=WA (gốc của W^X — xem <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> §0.1.2).</p>
 </div>
 <h2 id="ảnh-đĩa-osimg">Ảnh đĩa <code>os.img</code></h2>
+<p class="lede"><em>os.img là cả một ổ đĩa, không chỉ là kernel.</em></p>
 <p><code>os.img</code> không phải kernel mà là <strong>ảnh nguyên ổ đĩa</strong> (lab: 64 MiB): MBR + FAT32 @1 MiB + Limine.
 Bố cục từng vùng, hai đường boot BIOS/UEFI, mạch từ <code>kernel.c</code> tới lúc <code>kmain</code> chạy, và mấy lệnh soi
 ảnh đĩa: xem <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</p>
@@ -135,7 +141,7 @@ Bố cục từng vùng, hai đường boot BIOS/UEFI, mạch từ <code>kernel.
 <div class="code"><div class="code-bar">bash</div><pre><code>sudo apt install -y build-essential qemu-system-x86 mtools parted xorriso git
 git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
 make -C ~/opt/limine
-cp -r "/mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab" ~/oskernel-lab
+cp -r "/mnt/d/tmniosc/system_programming_notes/cavos_notes/lab/src/oskernel-lab" ~/oskernel-lab
 cd ~/oskernel-lab/00-hello-serial &amp;&amp; make info &amp;&amp; make run</code></pre></div>
 <ul>
 <li><strong><code>v8.x-binary</code>, KHÔNG v9+</strong>: từ Limine 9, <code>kernel_path</code> đổi tên và <code>LIMINE_KERNEL_ADDRESS_REQUEST</code> bị thay
@@ -146,6 +152,7 @@ không sửa file: <code>make run LIMINE_DIR=/duong/dan/khac</code>.</li>
 <li>Chép <strong>1 chiều</strong> <code>/mnt/d</code> → <code>~</code>; <strong>không bao giờ build</strong> trên <code>/mnt</code> (9p + CRLF, xem lỗi bên dưới).</li>
 </ul>
 <h2 id="lỗi-thường-gặp-đã-trải-qua">Lỗi thường gặp (đã trải qua)</h2>
+<p class="lede"><em>Triệu chứng, nguyên nhân và cách tránh, gom một chỗ.</em></p>
 <ul>
 <li><code>env: bash\r</code> → CRLF (do build trên ổ Windows). Build trong <code>~</code>, git Linux giữ LF.</li>
 <li><code>tar</code> thiếu file (<code>opcode/i386.h</code>) → giải nén trên <code>/mnt/</code> (9p). Build trong <code>~</code> (ext4).</li>

@@ -20,6 +20,7 @@
 <p>Tự viết lại phần <strong>boot + serial</strong> từ số 0 (gộp <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> + <a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>).
 Vị trí: <code>~/oskernel-lab/00-hello-serial/</code> · source lưu ở <code>lab/src/oskernel-lab/00-hello-serial/</code>.</p>
 <h2 id="mục-tiêu">Mục tiêu</h2>
+<p class="lede"><em>Kernel nhỏ nhất có thể: được Limine nạp, rồi in một dòng ra cổng serial.</em></p>
 <ul>
 <li>Limine nạp kernel ELF64 vào <a href="../ly_thuyet/khai_niem/long_mode.html">Long Mode</a> → nhảy vào entry <code>kmain</code> (= <code>ENTRY(kmain)</code> trong <code>linker.ld</code>).</li>
 <li>Init COM1 (8N1, 115200) theo <a href="../ly_thuyet/tai_lieu_goc/uart_16550.html">UART 16550</a>.</li>
@@ -28,10 +29,11 @@ Vị trí: <code>~/oskernel-lab/00-hello-serial/</code> · source lưu ở <code
 <div class="callout quote">
 <p><strong>Base revision = 2</strong> (khớp cavOS gốc, không dùng 3) — <code>LIMINE_BASE_REVISION(2)</code> trong <code>kernel.c</code></p>
 <ul>
-<li>comment <code>linker.ld</code>. Đã rebuild + boot QEMU lại OK (2026-05-31). Xem <a href="../ly_thuyet/khai_niem/limine_protocol.html#4-base-revision-bắt-tay-phiên-bản">Limine Protocol §4</a>.</li>
+<li>comment <code>linker.ld</code>. Đã rebuild + boot QEMU lại OK (2026-05-31). Xem <a href="../ly_thuyet/khai_niem/limine_protocol.html#base-revision">Limine Protocol §4</a>.</li>
 </ul>
 </div>
 <h2 id="các-mảnh-chính">Các mảnh chính</h2>
+<p class="lede"><em>Bốn file: linker script, request của Limine, driver serial, và kmain.</em></p>
 <ul>
 <li><code>linker.ld</code>: <code>ENTRY(kmain)</code> (lab dùng <code>kmain</code> làm entry, không phải <code>_start</code>), <code>. = 0xffffffff80000000</code>,
 PHDRS (text/rodata/data = <code>PT_LOAD</code>, <strong>không ghi <code>FLAGS</code></strong> → ld tự suy W^X từ section flags — xem
@@ -44,8 +46,10 @@ dựng bằng <code>scripts/mkimage.sh</code>) — bố cục ảnh đĩa: <a hr
 <li><code>serial.c</code>: <code>outb/inb</code>, init COM1, <code>serial_putc</code> chờ LSR bit5 (THRE).</li>
 </ul>
 <h2 id="kết-quả">Kết quả</h2>
-<p>QEMU <code>-serial stdio</code> in ra <code>Hello Serial</code>. ✓</p>
+<p class="lede"><em>Một dòng chữ trên serial là bằng chứng cả chuỗi boot chạy đúng.</em></p>
+<p>QEMU <code>-serial stdio</code> in ra <code>Hello Serial</code>.</p>
 <h2 id="4-file-phân-tích-build-sinh-sẵn-soi-layout-đã-học">4 file phân tích build sinh sẵn (soi layout đã học)</h2>
+<p class="lede"><em>Mỗi lần build sinh bốn file để soi kernel đã được xếp ra sao.</em></p>
 <p>Makefile lab tự tạo mỗi lần build — dùng để <strong>thấy tận mắt</strong> higher-half / ALIGN / W^X:</p>
 <div class="table-wrap"><table>
 <thead>
@@ -104,6 +108,7 @@ và link với <code>-Wl,-z,max-page-size=0x1000</code> — thiếu cờ này MA
 <code>…80200000</code> chứ không phải <code>…80001000</code>.</p>
 </div>
 <h2 id="liên-hệ">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết và công cụ đi kèm.</em></p>
 <ul>
 <li>Lý thuyết: <a href="../ly_thuyet/bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../ly_thuyet/bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>.</li>
 <li>Build/QEMU: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>

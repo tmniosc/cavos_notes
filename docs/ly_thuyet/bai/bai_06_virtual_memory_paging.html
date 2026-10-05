@@ -97,7 +97,7 @@ Bitmap này nằm trong RAM xin qua <code>VirtualAllocate</code>. Hiện chưa h
   globalPagedir = (uint64_t *)pdVirt;
 }</code></pre></div>
 <p>Bảng Limine đã map sẵn kernel ở nửa cao, HHDM và framebuffer, nên kernel chỉ cần <strong>thêm/sửa entry</strong>. <code>CR3</code> vẫn trỏ bảng
-của Limine; ta chỉ đổi nội dung bảng (xem <a href="../khai_niem/hhdm.html#cr3-vs-hhdm-ai-làm-gì-đừng-nhầm">HHDM: CR3 vs HHDM</a>).
+của Limine; ta chỉ đổi nội dung bảng (xem <a href="../khai_niem/hhdm.html#cr3-va-direct-map">HHDM: CR3 vs HHDM</a>).
 <code>mov cr3</code> thật chỉ xảy ra về sau, khi đổi address space giữa các task (mục 6 bên dưới, Bài 12).</p>
 
 <h3 id="paging-h">3. Định dạng entry và macro cắt VA (<code>paging.h</code>)</h3>

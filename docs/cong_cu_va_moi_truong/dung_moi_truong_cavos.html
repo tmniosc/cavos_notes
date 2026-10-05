@@ -35,6 +35,7 @@ rồi <code>make qemu</code> bật máy ảo lên chạy.</li>
 </ul>
 <p>Thứ tự bắt buộc: <strong>gói → máy dịch → disk.img</strong>. Thiếu bước nào thì bước sau chặn ngay.</p>
 <h2 id="0-máy-hiện-tại">0. Máy hiện tại</h2>
+<p class="lede"><em>Ba đường dẫn cần nhớ.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -86,6 +87,7 @@ rồi <code>make qemu</code> bật máy ảo lên chạy.</li>
 </tbody>
 </table></div>
 <h2 id="2-clone-repo">2. Clone repo</h2>
+<p class="lede"><em>Lấy cavOS về thư mục nhà trong WSL.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>git clone https://github.com/malwarepad/cavOS.git ~/cavOS</code></pre></div>
 <ul>
 <li><strong>Bắt buộc để trong <code>~</code></strong> (ext4 native), lý do ở <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a>.</li>
@@ -93,6 +95,7 @@ rồi <code>make qemu</code> bật máy ảo lên chạy.</li>
 Kiến thức nằm ở vault này, không nằm trong repo. (Ngược hẳn với lab — xem <a href="dung_moi_truong_oskernel_lab.html">Dựng môi trường oskernel-lab</a>.)</li>
 </ul>
 <h2 id="3-cross-compiler-make-tools-1-lần-duy-nhất-lâu">3. Cross-compiler: <code>make tools</code> (1 LẦN duy nhất, LÂU)</h2>
+<p class="lede"><em>Build một bộ gcc riêng cho cavOS: làm một lần, chờ lâu.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/cavOS &amp;&amp; make tools</code></pre></div>
 <p>Sinh ra <code>~/opt/cross/bin/x86_64-cavos-gcc</code> (kèm <code>objdump/readelf/nm/ld</code> cùng tiền tố).
 Script tự tải nguồn binutils + GCC rồi build → <strong>rất lâu</strong>, phụ thuộc tốc độ mạng.</p>
@@ -222,6 +225,7 @@ Chậm hơn KVM khá nhiều nhưng boot tới <code>REACHED SYSTEM</code> vẫn
 đúng cơ chế <a href="../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> tự dựng. Lý thuyết và thực hành khớp nhau ở đây.</p>
 </div>
 <h2 id="7-bẫy-đã-dính-đừng-dính-lại">7. Bẫy đã dính (đừng dính lại)</h2>
+<p class="lede"><em>Triệu chứng, nguyên nhân và cách tránh, gom một chỗ.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>

@@ -407,15 +407,14 @@ make run</code></pre></div>
 <details class="quiz"><summary>Vì sao <code>FindFreeRegion</code> được phép bắt đầu quét từ <code>lastDeepFragmented</code> mà không bỏ sót frame trống nào?</summary><p>Vì mốc đó chỉ dời lên ngay sau một frame vừa cấp, khi mọi frame phía dưới đều đang dùng; và mỗi lần trả một frame thấp hơn, <code>MarkBlocks</code> kéo mốc xuống lại. Nên phía dưới mốc luôn không có frame trống.</p></details>
 
 <h2 id="doc-them">Đọc thêm</h2>
-<p class="lede"><em>Lỗi thật đã gặp khi làm lab, chỗ cavOS không chặn biên, và các liên hệ.</em></p>
+<p class="lede"><em>Một cái bẫy khi làm tròn, chỗ cavOS không chặn biên, và các liên hệ.</em></p>
 
-<h3 id="bug-lam-tron">Lab 0x03 đã vá một lỗi làm tròn khi đánh dấu bitmap</h3>
-<p>Bản đầu của <code>bm_mark</code> trong lab tính số frame bằng <code>n = len / PAGE</code>, tức làm tròn <strong>xuống</strong>. Mọi vùng memmap đều dài bội số của 4 KiB nên không sao; chỉ riêng lần tự đánh dấu bitmap (8301 byte, không chia hết) là lộ lỗi.</p>
-<p>Ở lần chạy cũ (2026-06-01, <code>lab/outputs/lab-0x03-run.txt</code>), bitmap nằm ở <code>0x60000</code>–<code>0x6206d</code>, trải 3 frame nhưng chỉ 2 frame được đánh dấu. Frame thứ ba <code>0x62000</code> vẫn "trống" trong khi đang chứa 109 byte cuối của bitmap, và đúng là <code>alloc #1 PA = 0x62000</code>:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>[pmm] bitmap at PA = 0x0000000000060000  (block #96)  VA = 0xffff800000060000
-[pmm] free frames  = 65196
-[pmm] alloc #1 PA  = 0x0000000000062000</code></pre></div>
-<p>Lần đó không sập chỉ vì may. Frame <code>0x62000</code> được <code>paging_init</code> dùng làm PML4 mới và chép đủ 512 entry từ PML4 của Limine vào. Theo trang lab, PML4 này chỉ có entry 192/256/511 khác 0 (từ byte 1536 trở đi; entry 192 do <code>vmap</code> thêm sau), nên 109 byte đầu bị ghi đè bằng số 0. 109 byte đó là bit của block 65 536 trở lên, tức PA từ <code>0x10000000</code>: phía trên 256 MiB RAM, không có RAM thật. Sổ vì thế báo khoảng 869 frame "ảo" là trống. Lab chỉ cấp vài frame ở vùng thấp nên chưa bao giờ chạm tới chúng; một chương trình cấp nhiều hơn sẽ nhận về địa chỉ không có RAM phía sau. Bản sửa dùng <code>DivRoundUp(len, PAGE_SIZE)</code>; lần chạy 2026-09-03 ở mục Tự làm cho thấy frame cấp đầu tiên nằm ngay <em>sau</em> frame cuối của bitmap. cavOS không dính lỗi này vì nhánh "dùng" của <code>MarkRegion</code> đã làm tròn lên.</p>
+<h3 id="bug-lam-tron">Bẫy: làm tròn xuống khi đánh dấu bitmap</h3>
+<p>Số frame mà một vùng chiếm phải làm tròn <strong>lên</strong>: <code>DivRoundUp(len, PAGE_SIZE)</code>, không phải <code>len / PAGE_SIZE</code>. Mọi vùng memmap đều dài bội số của 4 KiB nên hai cách cho cùng
+kết quả; chỉ riêng lần tự đánh dấu chính bitmap là khác, vì bitmap dài 8301 byte, không chia hết cho 4096.</p>
+<p>Trong Lab 0x03, bitmap nằm ở <code>0x53000</code>–<code>0x5506d</code>: 3 frame. Làm tròn xuống chỉ đánh dấu 2 frame, nên frame <code>0x55000</code> (đang chứa 109 byte cuối của bitmap) được coi là trống và
+sẽ là frame đầu tiên được cấp. Ai nhận frame đó (ví dụ PML4 mới) sẽ ghi đè lên 109 byte cuối của sổ, tức các bit của vùng địa chỉ cao, và sổ bắt đầu báo sai mà không có lỗi nào hiện ra.
+Lab dùng <code>DivRoundUp</code>, nên frame cấp đầu tiên là <code>0x56000</code>, ngay sau bitmap. cavOS cũng làm tròn lên trong nhánh "dùng" của <code>MarkRegion</code>.</p>
 
 <h3 id="chan-bien">cavOS không chặn biên trong <code>MarkBlocks</code></h3>
 <p><code>MarkBlocks</code> lặp <code>BitmapSet</code> từ <code>start</code> tới <code>start + size</code> mà không so với <code>BitmapSizeInBlocks</code>. Vòng "đóng non-USABLE" có chạm những entry ở địa chỉ rất cao, như framebuffer <code>0xfd000000</code> hay vùng RESERVED <code>0xfd00000000</code>. Chỉ số block của chúng lớn hơn nhiều so với số block mà sổ có (sổ chỉ tính theo <code>mmTotal</code>), nên các bit đó rơi ra ngoài sổ, ghi vào RAM nằm sau sổ qua HHDM. Lab thêm một dòng chặn trong <code>bm_mark</code>:</p>
@@ -424,7 +423,7 @@ make run</code></pre></div>
         break;
     ...
 }</code></pre></div>
-<p>Trước đó lab còn từng tính cỡ sổ theo "địa chỉ cuối cao nhất" thay vì <code>mmTotal</code>, làm bitmap phình tới khoảng 33 MB vì entry <code>0xfd00000000</code>. Đổi sang cách cộng dồn của cavOS thì còn 8 KB.</p>
+<p>Cùng gốc với lỗi này là bẫy tính cỡ sổ theo "địa chỉ cuối cao nhất" thay vì <code>mmTotal</code>: entry <code>0xfd00000000</code>–<code>0x10000000000</code> đẩy con số lên 1 TiB, bitmap thành 32 MiB. Cách cộng dồn của cavOS cho 8301 byte.</p>
 
 <h3 id="cau-hoi-mo">Câu hỏi mở cũ (đã trả lời)</h3>
 <ul>

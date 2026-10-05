@@ -35,6 +35,7 @@ chục phút chờ. (Có cross rồi thì <code>common.mk</code> tự dùng, kh�
 <li><strong>Cần một bootloader rời</strong>: Limine bản binary tải sẵn về <code>~/opt/limine</code>, dùng để cài vào ảnh đĩa <code>os.img</code>.</li>
 </ul>
 <h2 id="0-máy-hiện-tại">0. Máy hiện tại</h2>
+<p class="lede"><em>Ba đường dẫn cần nhớ.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -49,7 +50,7 @@ chục phút chờ. (Có cross rồi thì <code>common.mk</code> tự dùng, kh�
 </tr>
 <tr>
 <td>Bản lưu trong vault</td>
-<td><code>D:\tmniosc\cavos_notes\Thực hành\src\oskernel-lab</code></td>
+<td><code>D:\tmniosc\system_programming_notes\cavos_notes\lab\src\oskernel-lab</code></td>
 </tr>
 <tr>
 <td>Limine</td>
@@ -83,6 +84,7 @@ chục phút chờ. (Có cross rồi thì <code>common.mk</code> tự dùng, kh�
 </tbody>
 </table></div>
 <h2 id="2-limine-bootloader">2. Limine (bootloader)</h2>
+<p class="lede"><em>Lấy bản Limine đã build sẵn, chỉ cần build công cụ cài đặt.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>git clone -b v8.x-binary --depth 1 https://github.com/limine-bootloader/limine ~/opt/limine
 make -C ~/opt/limine CC=gcc
 ~/opt/limine/limine version        # kiểm: Limine 8.7.0</code></pre></div>
@@ -98,7 +100,8 @@ make -C ~/opt/limine CC=gcc
 <code>cc</code>, mà Ubuntu sạch chưa chắc có symlink đó.</p>
 </div>
 <h2 id="3-lấy-source-lab-về">3. Lấy source lab về</h2>
-<div class="code"><div class="code-bar">bash</div><pre><code>cp -r /mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab ~/oskernel-lab
+<p class="lede"><em>Chép source từ vault sang WSL rồi build ở đó.</em></p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cp -r /mnt/d/tmniosc/system_programming_notes/cavos_notes/lab/src/oskernel-lab ~/oskernel-lab
 chmod +x ~/oskernel-lab/scripts/mkimage.sh</code></pre></div>
 <p>Chép <strong>1 chiều</strong> vault → WSL, và <strong>build trong <code>~</code></strong> (lý do ở <a href="dung_moi_truong_chung.html">Dựng môi trường chung</a>).</p>
 <div class="code"><div class="code-bar">text</div><pre><code>~/oskernel-lab/
@@ -113,6 +116,7 @@ chmod +x ~/oskernel-lab/scripts/mkimage.sh</code></pre></div>
 ├─ 02-framebuffer/        Bài 4
 └─ 03-pmm-vmm/            Bài 5 + 05</code></pre></div>
 <h2 id="4-build-chạy">4. Build + chạy</h2>
+<p class="lede"><em>Bốn lệnh make, giống nhau cho mọi lab.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/00-hello-serial
 make info      # in ra đang dùng cross gcc hay gcc hệ thống
 make           # kernel.bin + kernel.map/.dis/.sym/.elf.txt
@@ -126,11 +130,12 @@ make CROSS_PREFIX=$HOME/opt/cross/bin/x86_64-cavos-</code></pre></div>
 <p>Chi tiết 4 artifact phân tích build: <a href="cam_nang_build_debug.html">Cẩm nang build &amp; debug</a> · bố cục ảnh đĩa: <a href="../ly_thuyet/khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a>.</p>
 <h2 id="5-sửa-code-thì-nhớ-chép-ngược">5. Sửa code thì nhớ chép ngược</h2>
 <p class="lede"><em>Chỉ vault mới được đẩy lên GitHub. Code nằm trong WSL mà không chép ngược thì không có bản sao nào.</em></p>
-<div class="code"><div class="code-bar">bash</div><pre><code>cp -r ~/oskernel-lab/. /mnt/d/tmniosc/cavos_notes/lab/src/oskernel-lab/
-cd /mnt/d/tmniosc/cavos_notes &amp;&amp; git add lab/src &amp;&amp; git commit -m "lab: ..." &amp;&amp; git push</code></pre></div>
+<div class="code"><div class="code-bar">bash</div><pre><code>cp -r ~/oskernel-lab/. /mnt/d/tmniosc/system_programming_notes/cavos_notes/lab/src/oskernel-lab/
+cd /mnt/d/tmniosc/system_programming_notes/cavos_notes &amp;&amp; git add lab/src &amp;&amp; git commit -m "lab: ..." &amp;&amp; git push</code></pre></div>
 <p>Đừng chép ngược file rác build (<code>.o</code>, <code>kernel.bin</code>, <code>os.img</code>, <code>.map/.dis/.sym/.elf.txt</code>) —
 <code>make clean</code> trước cho gọn.</p>
 <h2 id="6-bẫy-đã-dính-đừng-dính-lại">6. Bẫy đã dính (đừng dính lại)</h2>
+<p class="lede"><em>Triệu chứng, nguyên nhân và cách tránh, gom một chỗ.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>

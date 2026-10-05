@@ -77,7 +77,7 @@ từ đó về sau, bước nào hỏng cũng in ra xem được.</p>
 </figure>
 
 <h3 id="khoi-tao">Khởi tạo COM1: <code>initiateSerial()</code> và <code>serial_enable()</code></h3>
-<p><code>initiateSerial()</code> là hàm <strong>đầu tiên</strong> <code>_start()</code> gọi (thứ tự đầy đủ ở <a href="bai_00_bat_dau.html">Bài 0</a>). Trích <code>drivers/serial.c</code>:</p>
+<p><code>initiateSerial()</code> là hàm <strong>đầu tiên</strong> <code>_start()</code> gọi (thứ tự đầy đủ ở <a href="bai_00_bat_dau.html">Bắt đầu</a>). Trích <code>drivers/serial.c</code>:</p>
 <div class="code"><div class="code-bar">c</div><pre><code>void serial_enable(int device) {
   outportb(device + 1, 0x00);
   outportb(device + 3, 0x80); /* Enable divisor mode */

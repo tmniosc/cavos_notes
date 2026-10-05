@@ -22,6 +22,7 @@
 Dùng ở <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>. Port COM1 = <code>0x3F8</code>, COM2 = <code>0x2F8</code>.</p>
 </div>
 <h2 id="bản-đồ-thanh-ghi-offset-so-với-base">Bản đồ thanh ghi (offset so với base)</h2>
+<p class="lede"><em>Tám cổng liền nhau; một bit trong LCR đổi nghĩa hai cổng đầu.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -71,6 +72,7 @@ Dùng ở <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>. Por
 </tbody>
 </table></div>
 <h2 id="bit-quan-trọng">Bit quan trọng</h2>
+<p class="lede"><em>Bốn bit đủ để gửi, nhận và bật ngắt.</em></p>
 <ul>
 <li><strong>LCR.DLAB (bit7)</strong>: =1 để truy cập divisor latch (DLL/DLM), =0 để dùng dữ liệu/IER.</li>
 <li><strong>LSR bit0</strong> = Data Ready (có byte để đọc).</li>
@@ -78,6 +80,7 @@ Dùng ở <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>. Por
 <li><strong>MCR</strong>: DTR, RTS, <strong>OUT2</strong> (OUT2 cho phép IRQ UART tới PIC/APIC).</li>
 </ul>
 <h2 id="baud">Baud</h2>
+<p class="lede"><em>Tốc độ là một phép chia của đồng hồ 1.8432 MHz.</em></p>
 <p>Clock 1.8432 MHz / 16 = 115200 max. <code>baud = 115200 / divisor</code>.
 divisor = 3 → 38400 (cấu hình cavOS). <strong>8N1</strong> = 8 data, no parity, 1 stop.</p>
 <p>→ Giải mã <code>serial_enable()</code> từng dòng: xem <a href="../bai/bai_02_serial_uart.html">Bài 2 - Serial UART</a>.</p>

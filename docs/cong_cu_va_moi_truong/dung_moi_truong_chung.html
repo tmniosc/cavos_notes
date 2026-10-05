@@ -35,6 +35,7 @@ Hai chỗ khác nhau, đừng lẫn.</li>
 <li><strong>Dụng cụ chung</strong>: vài gói <code>apt</code> mà cả cavOS lẫn lab đều cần. Cài một lần, dùng cho cả hai.</li>
 </ol>
 <h2 id="bản-đồ-cái-gì-nằm-đâu">Bản đồ: cái gì nằm đâu</h2>
+<p class="lede"><em>Mỗi thứ nằm ở đâu, phía Windows và phía WSL.</em></p>
 <div class="table-wrap"><table>
 <thead>
 <tr>
@@ -56,8 +57,8 @@ Hai chỗ khác nhau, đừng lẫn.</li>
 </tr>
 <tr>
 <td><strong>Vault</strong> (note)</td>
-<td>Windows <code>D:\tmniosc\cavos_notes</code></td>
-<td>trong WSL: <code>/mnt/d/tmniosc/cavos_notes</code></td>
+<td>Windows <code>D:\tmniosc\system_programming_notes\cavos_notes</code></td>
+<td>trong WSL: <code>/mnt/d/tmniosc/system_programming_notes/cavos_notes</code></td>
 </tr>
 <tr>
 <td>Vault trên GitHub</td>
@@ -163,12 +164,14 @@ Ba kiểu hỏng đã gặp:</p>
 </tbody>
 </table></div>
 <h2 id="kiểm-tra-nhanh-môi-trường">Kiểm tra nhanh môi trường</h2>
+<p class="lede"><em>Vài lệnh để biết máy đã đủ đồ nghề chưa.</em></p>
 <div class="code"><div class="code-bar">bash</div><pre><code>wsl.exe -l -v                                  # chạy từ Windows: distro + trạng thái
 whoami; echo $HOME; df -h /                    # user, home, dung lượng ext4
 for t in gcc make git parted qemu-system-x86_64 nasm mformat; do \
   printf "%-20s %s\n" "$t" "$(command -v $t || echo MISSING)"; done
 ls ~/cavOS ~/oskernel-lab ~/opt 2&gt;/dev/null    # đã dựng tới đâu</code></pre></div>
 <h2 id="rẽ-nhánh">Rẽ nhánh</h2>
+<p class="lede"><em>Từ đây đi một trong hai đường: cavOS thật, hoặc các lab.</em></p>
 <figure class="diagram">
 <svg id="svg-env-branches" role="img" aria-label="env branches" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>

@@ -134,7 +134,7 @@ void pmm_note_object(const char *name, uint64_t pa_begin, uint64_t pa_end) {
     object_count++;
 }
 
-/* độ rộng cột — khớp đúng file outputs/lab-0x03-run.txt */
+/* độ rộng cột — khớp đúng file outputs/lab-0x03-run-2026-09-03.txt */
 #define W_ADDR   20
 #define W_TYPE   10
 #define W_ALLOC   7

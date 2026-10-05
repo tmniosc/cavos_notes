@@ -18,45 +18,32 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p><strong>Thực hành <a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a> + <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a></strong> (gộp cụm — PMM
-và VMM phải đi chung). Tự dựng bitmap cấp frame, rồi tự WALK page table map VA→PA và chứng minh nó chạy.</p>
+<p><strong>Đi cùng bài: <a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a> + <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a></strong>
+(gộp một lab vì PMM và VMM phải đi chung). Tự dựng bitmap cấp frame từ memmap, rồi tự dựng PML4, map một VA mới qua 4 tầng bảng, và chứng minh nó chạy.</p>
 </div>
-<p><strong>Vị trí:</strong> <code>~/oskernel-lab/03-pmm-vmm/</code> · base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make run</code>.</p>
-<p>Source: <code>lab/src/oskernel-lab/03-pmm-vmm/</code>.</p>
-<div class="callout warn">
-<div class="label">Đã vá một bug đánh dấu bitmap — có thật, đã đối chiếu source</div>
-</div>
-<div class="callout quote">
-<p><code>bm_mark</code> bản đầu làm tròn <strong>XUỐNG</strong> (<code>n = len / PAGE</code>), nên bitmap 8301 B tại <code>0x60000</code> trải 3 frame
-(<code>0x60000/0x61000/0x62000</code>) nhưng <strong>chỉ mark 2</strong>. Frame thứ ba vẫn "free" trong khi nó đang chứa 109 byte
-cuối của chính bitmap → <code>pmm_alloc</code> cấp phát trúng nó.</p>
-<p>Không sập, nhưng chỉ vì <strong>may</strong>. Frame <code>0x62000</code> thành PML4 mới (log: <code>our pml4 (VA) = 0xffff800000062000</code>),
-và <code>paging_init</code> (<code>paging.c</code>) chép <strong>đủ 512 entry</strong> từ PML4 của Limine vào, nên 109 byte đầu frame (đuôi bitmap)
-bị ghi đè bằng các entry thấp, toàn số 0. 109 byte đó là bit của block 65 536–66 404, tức PA từ <code>0x10000000</code>: phía trên
-256 MiB RAM, không có RAM thật. Sổ vì thế báo khoảng 869 frame "ảo" là trống. Lab chỉ cấp vài frame ở vùng thấp nên chưa chạm tới
-chúng; cấp nhiều hơn là nhận về địa chỉ không có RAM phía sau.</p>
-<p>Nay dùng <code>DivRoundUp(len, PAGE_SIZE)</code> — làm tròn <strong>LÊN</strong>. Xác nhận ở mục "Chạy lại 2026-09-03" bên dưới;
-output cũ giữ ở <code>lab/outputs/lab-0x03-run.txt</code> để đối chiếu.</p>
-<p>Lỗi này <strong>không phải suy đoán</strong>: đã so trực tiếp với source gốc lấy lại được, đúng là bản gốc ghi
-<code>n = len / PAGE</code>. Chỉ riêng lần tự-đánh-dấu bitmap mới lộ ra, vì mọi vùng memmap khác đều có length
-chia hết 4 KiB nên làm tròn xuống hay lên đều như nhau.</p>
-</div>
-<h2 id="cấu-trúc-module">Cấu trúc module</h2>
-<div class="code"><div class="code-bar">text</div><pre><code>io.h        — outb/inb (inline)
-serial.{h,c}— UART 16550 (Bài 2)
-boot.{h,c}  — Limine requests + hhdm + P2V/PAGE + memset8 (Bài 1/3)
-pmm.{h,c}   — bitmap PMM + pmm_dump_map (Bài 5)
-paging.{h,c}— VMM/page table: paging_init/vmap/vresolve (Bài 6)
-kernel.c    — kmain: orchestrate + in kết quả</code></pre></div>
-<p><code>SRCS := kernel.c boot.c serial.c pmm.c paging.c</code>. String output <strong>tiếng Anh</strong>; comment tiếng Việt.</p>
-<h2 id="làm-gì">Làm gì</h2>
-<p><strong>PMM (Bài 5):</strong> bitmap 1 bit/frame 4 KiB từ memmap (<code>0xff</code>=used mặc định → mở USABLE → đóng non-USABLE),
-<code>pmm_alloc/free</code>, truy cập bitmap qua HHDM. <strong>VMM (Bài 6):</strong> tự dựng PML4 mới + <code>mov cr3</code>, <code>vmap()</code> walk 4
-tầng cấp bảng con từ PMM, <code>vresolve()</code> dịch ngược VA→PA. Test: ghi qua VA mới, đọc lại qua HHDM của cùng PA.</p>
-<h2 id="bộ-nhớ-vật-lý-không-liền-mạch-mấu-chốt-của-pmm">Bộ nhớ vật lý KHÔNG liền mạch (mấu chốt của PMM)</h2>
-<p class="lede"><em>Đừng tưởng RAM là một dải liền từ 0. Không gian địa chỉ vật lý là bản đồ chung; RAM chỉ chiếm vài mảnh,
-xen kẽ là vùng cấm (BIOS, ACPI) và MMIO (thiết bị). Đây là lý do PMM phải đọc memmap.</em></p>
-<p>Dump memmap thật (QEMU <code>-m 256M</code>, từ <a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>):
+<p><strong>Vị trí:</strong> <code>~/oskernel-lab/03-pmm-vmm/</code> · Limine base revision <strong>2</strong>. <strong>Chạy:</strong> <code>make run</code>.
+Source ở <code>lab/src/oskernel-lab/03-pmm-vmm/</code>, log đầy đủ ở <code>lab/outputs/lab-0x03-run-2026-09-03.txt</code>.</p>
+
+<h2 id="cau-truc-module">Cấu trúc module</h2>
+<p class="lede"><em>Năm file nhỏ: cổng serial, phần Limine, sổ frame, bảng trang, và kmain điều phối.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>io.h          outb/inb (inline)
+serial.{h,c}  UART 16550 (Bài 2)
+boot.{h,c}    Limine requests + hhdm + P2V/PAGE + memset8 (Bài 1, Bài 3)
+pmm.{h,c}     bitmap PMM + pmm_dump_map (Bài 5)
+paging.{h,c}  paging_init / vmap / vresolve / walk (Bài 6)
+kernel.c      kmain: gọi theo thứ tự, in kết quả</code></pre></div>
+
+<h2 id="lam-gi">Làm gì</h2>
+<p class="lede"><em>Lập sổ ghi frame nào còn trống, rồi dùng sổ đó để xin trang cho một bảng trang tự dựng.</em></p>
+<ul>
+<li><strong>PMM (Bài 5):</strong> tính <code>mmTotal</code> như cavOS, đặt bitmap 1 bit/frame ở vùng USABLE đầu tiên đủ lớn (truy cập qua HHDM), <code>memset 0xff</code> → mở các vùng USABLE → đóng lại các vùng khác
+→ tự đánh dấu chính bitmap. <code>pmm_alloc</code>/<code>pmm_free</code> hai lần, kiểm số frame trống.</li>
+<li><strong>VMM (Bài 6):</strong> cấp một frame làm PML4 mới, chép 512 entry từ PML4 của Limine, <code>mov cr3</code>. <code>vmap()</code> đi 4 tầng, tầng nào chưa có thì xin frame từ PMM. Ghi qua VA mới, đọc qua
+HHDM của cùng PA, rồi <code>vresolve()</code> dịch ngược.</li>
+</ul>
+
+<h2 id="bo-nho-khong-lien">Bộ nhớ vật lý không liền mạch</h2>
+<p class="lede"><em>RAM không phải một dải liền từ 0. Nó chỉ chiếm vài mảnh của không gian địa chỉ, xen giữa là vùng cấm và thiết bị; vì thế PMM phải đọc memmap.</em></p>
 <figure class="diagram">
 <svg id="svg-phys-mem-not-contiguous" role="img" aria-label="phys mem not contiguous" style="max-width:1083px" width="100%" viewBox="0 0 760 254" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
@@ -77,7 +64,7 @@ xen kẽ là vùng cấm (BIOS, ACPI) và MMIO (thiết bị). Đây là lý do 
 <text x="50" y="86" text-anchor="middle" fill="#C6E7CC" font-size="9" font-weight="600" class="mono">BR</text>
 <rect x="70" y="54" width="90" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
 <text x="115" y="80" text-anchor="middle" fill="#C6E7CC" font-size="9.5" font-weight="600">USABLE</text>
-<text x="115" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">252 KB</text>
+<text x="115" y="95" text-anchor="middle" fill="#8FC79A" font-size="8.5">low RAM</text>
 <rect x="160" y="54" width="32" height="54" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
 <text x="176" y="86" text-anchor="middle" fill="#F0C9C9" font-size="9" font-weight="600" class="mono">R</text>
 <rect x="192" y="54" width="190" height="54" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
@@ -111,233 +98,154 @@ xen kẽ là vùng cấm (BIOS, ACPI) và MMIO (thiết bị). Đây là lý do 
 <text x="380" y="242" text-anchor="middle" class="lbl" font-size="8.5">not to scale</text>
 </svg>
 </figure>
-3 điều rút ra:</p>
 <ul>
-<li><strong>RAM nằm rải rác</strong>, không liền: có lỗ ở <code>0x9fc00</code> (BIOS), quanh <code>0xfd000000</code> (PCI hole), và một vùng
-RESERVED tít ở <code>0xfd00000000</code>.</li>
-<li><strong>Địa chỉ cao ≠ RAM</strong>: <code>0xfd000000</code> (framebuffer) và <code>0xfd00000000</code> là <strong>MMIO</strong> — ghi vào = điều khiển
-thiết bị, không lưu dữ liệu. Xem <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
-<li>→ Nếu tính tổng RAM bằng "địa chỉ cuối cao nhất" thì <strong>sai</strong> (phình theo lỗ MMIO). Phải <strong>cộng dồn length
-các vùng RAM thật</strong> — đó là lý do <code>mmTotal</code> (xem dưới).</li>
+<li><strong>RAM nằm rải rác</strong>: có lỗ ở <code>0x9fc00</code> (BIOS), phía trên 256 MiB chỉ còn vùng thiết bị (<code>0xb0000000</code>, <code>0xfd000000</code>...), và một vùng RESERVED rất cao ở <code>0xfd00000000</code>.</li>
+<li><strong>Địa chỉ cao không phải RAM</strong>: <code>0xfd000000</code> (framebuffer) và <code>0xfd00000000</code> là MMIO: ghi vào là điều khiển thiết bị, không lưu dữ liệu. Xem
+<a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4</a>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
+<li>Vì vậy tổng RAM phải <strong>cộng dồn length các vùng</strong>, không lấy "địa chỉ cuối cao nhất" (sẽ phình theo lỗ MMIO).</li>
 </ul>
-<h2 id="tính-kích-thước-bitmap-bám-đúng-cavos-mmtotal">Tính kích thước bitmap — bám đúng cavOS (<code>mmTotal</code>)</h2>
-<p>cavOS <code>bootloader.c</code> tính tổng RAM = <strong>cộng dồn <code>length</code> các vùng KHÁC <code>RESERVED</code></strong> (không lấy max-end):</p>
-<div class="code"><div class="code-bar">c</div><pre><code>mmTotal = 0;
-for (mỗi entry)
-    if (entry-&gt;type != LIMINE_MEMMAP_RESERVED)   // RESERVED = MMIO/PCI hole → bỏ
-        mmTotal += entry-&gt;length;                // cộng dồn RAM thật + reclaimable
-pmm_blocks = DivRoundUp(mmTotal, 4096);          // số frame cần theo dõi
-pmm_bytes  = DivRoundUp(pmm_blocks, 8);          // cỡ bitmap</code></pre></div>
-<p>Lab đã sửa đúng kiểu này (trước đó lab dùng "max-end" → bitmap phình 33 MB; giờ chỉ ~8 KB).</p>
-<div class="callout quote">
-<p><strong>Guard biên <code>bm_mark</code></strong>: vòng "đóng non-USABLE" có chạm entry MMIO địa chỉ rất cao (<code>0xfd00000000</code>)<br/>
-→ block index vượt xa <code>pmm_blocks</code>. Nếu không chặn sẽ <strong>ghi tràn ngoài bitmap</strong>. Lab thêm
-<code>if(first+i &gt;= pmm_blocks) break;</code> — chỉ đánh dấu trong phạm vi bitmap.</p>
-</div>
-<h2 id="kết-quả-thật-qemu--m-q35--m-256m-2026-06-01">Kết quả thật (QEMU <code>-M q35 -m 256M</code>, 2026-06-01)</h2>
-<div class="callout quote">
-<p><strong>Output ĐẦY ĐỦ</strong> (bảng <code>pmm_dump_map</code> 6 cột địa chỉ — PA/VA-HHDM/VA-kernel begin+end — rộng ~176 cột,
-không vừa markdown) lưu ở: <strong><code>lab/outputs/lab-0x03-run.txt</code></strong>. Dưới đây là phần rút gọn.</p>
-</div>
-<div class="code"><div class="code-bar">text</div><pre><code>[pmm] total frames = 66405  bitmap bytes = 8301
-[pmm] bitmap at PA = 0x60000  (block #96)  VA = 0xffff800000060000
-[pmm] alloc #1 PA = 0x62000   alloc #2 = 0x63000   (giảm 2, free lại → OK)
-[vmm] built new PML4 + mov cr3;  our pml4 (VA) = 0xffff800000062000
-[vmm] map VA 0x600000000000 -&gt; PA 0x63000
-[vmm] tables for VA: PDPT=0x64000 (new) PD=0x65000 (new) PT=0x66000 (new)
-[vmm] write via new VA, read via HHDM = 0xdeadbeefcafebabe  OK (same PA!)
-[vmm] vresolve(VA) = 0x63000  OK</code></pre></div>
-<p><strong>Trích bảng <code>pmm_dump_map</code></strong> (bản đầy đủ 6 cột begin+end ở file .txt; đây bỏ cột end cho gọn). Mỗi <strong>VÙNG</strong>
-memmap 1 dòng, kèm dòng con <code>&gt;</code> cho từng <strong>OBJECT</strong> nằm trong vùng đó:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>| PA begin   | VA-HHDM begin      | VA-kernel begin    | type     | alloc | stores       | size     |
-| 0x00060000 | 0xffff800000060000 | -                  | USABLE   |   Y   | (region)     |   252 K  |
-| 0x00060000 | 0xffff800000060000 | -                  |  (obj)   |   .   | &gt; PMM bitmap |     8 K  | ← object con
-| 0x00062000 | 0xffff800000062000 | -                  |  (obj)   |   .   | &gt; PML4 (new) |     4 K  |   nằm CÙNG vùng
-| 0x00064000 | 0xffff800000064000 | -                  |  (obj)   |   .   | &gt; PDPT testVA|     4 K  |   USABLE 0x60000,
-| 0x00065000 | 0xffff800000065000 | -                  |  (obj)   |   .   | &gt; PD testVA  |     4 K  |   mỗi bảng đúng
-| 0x00066000 | 0xffff800000066000 | -                  |  (obj)   |   .   | &gt; PT testVA  |     4 K  |   1 frame 4 KiB
-| 0x0ff53000 | 0xffff80000ff53000 | 0xffffffff80000000 | KERNEL   |   n   | (region)     |    16 K  | ← 2 dải VA, 1 PA = aliasing
-| 0x0ff86000 | 0xffff80000ff86000 | -                  | BOOT_REC |   Y   | (region)     |   356 K  |
-| 0x0ff9e000 | 0xffff80000ff9e000 | -                  |  (obj)   |   .   | &gt; PML4 (old) |     4 K  | ← bảng Limine cũ
-| 0xfd000000 | -                  | -                  | FRAMEBUF |   n   | framebuffer  |  4000 K  |</code></pre></div>
-<div class="callout quote">
-<p>Cột <strong>size</strong>: object page table đều <code>4 K</code> (= 1 frame, đúng "512 entry × 8 byte"); bitmap <code>8 K</code> (~3 frame).</p>
-</div>
-<div class="callout warn">
-<p><strong>PDPT/PD/PT trong bảng là <code>testVA</code> — của riêng VA test <code>0x600000000000</code></strong>, do lab <code>vmap</code> cấp. KHÔNG phải
-bảng con của HHDM/kernel! Bảng con HHDM/kernel do <strong>Limine dựng</strong>; <code>paging_init</code> copy 512 entry PML4 = copy
-<strong>con trỏ</strong> → PML4 (new) <strong>dùng chung</strong> các bảng con đó với PML4 (old) → chúng nằm trong vùng Limine
-(BOOT_REC), lab không cấp nên <strong>không liệt kê</strong>. Đó là lý do copy 512 entry là đủ để HHDM+kernel vẫn chạy
-sau <code>mov cr3</code>. (Bảng chỉ hiện những gì <strong>lab tự cấp</strong>: bitmap, PML4 new, 3 bảng testVA; cộng PML4 old đọc từ CR3.)</p>
-</div>
-<div class="callout quote">
-<p><strong>Bảng con HHDM/kernel nằm PA nào?</strong> <code>paging_dump_walk</code> walk thật 2 VA cho thấy:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>HHDM   VA=0xffff800000000000:  PML4[256] -&gt; PDPT@0x0ff9a000 -&gt; PD@0x0ff99000 -&gt; 2MB hugepage
-kernel VA=0xffffffff80000000:  PML4[511] -&gt; PDPT@0x0ff9d000 -&gt; PD@0x0ff9c000 -&gt; PT@0x0ff9b000</code></pre></div>
-<ul>
-<li>Tất cả bảng con (<code>0x0ff99000</code>–<code>0x0ff9d000</code>) <strong>nằm trong vùng BOOT_REC <code>0x0ff86000–0x0ffdf000</code></strong> — cùng chỗ
-PML4 old <code>0x0ff9e000</code>. → <strong>Limine gom cả cây page table của nó vào BOOT_REC</strong>; PML4 new mượn qua con trỏ.</li>
-<li><strong>HHDM dùng 2 MiB hugepage</strong> (<code>PS=1</code> ở PD) → chỉ 3 tầng (PML4→PDPT→PD), KHÔNG có PT → 1 entry PD phủ 2 MiB,
-tốn rất ít bảng cho cả 256 MB. <strong>Kernel dùng trang 4 KiB</strong> (đủ 4 tầng) để áp quyền mịn (W^X) cho .text/.data.</li>
-<li><code>PML4[256]</code> (HHDM, nửa cao <code>0xffff8000…</code>) vs <code>PML4[511]</code> (kernel, top <code>0xffffffff80…</code>) — đúng chỉ số đã tính.</li>
-</ul>
-</div>
-<div class="callout quote">
-<p><strong>Dòng <code>(region)</code></strong> = 1 vùng memmap; <strong>dòng <code>&gt; ...</code></strong> = 1 object <strong>nhỏ hơn</strong> vùng cha. Thấy rõ <strong>bitmap +
-cả 4 tầng page table (PML4/PDPT/PD/PT) nằm liền nhau</strong> trong USABLE <code>0x60000</code> (PMM cấp tuần tự); <code>PML4 (old)</code>
-của Limine ở vùng BOOT_REC khác. Vùng <strong>KERNEL</strong> không có dòng con vì nó <strong>chính là</strong> kernel image (cùng
-begin/end), và có <strong>cả VA-HHDM lẫn VA-kernel</strong> → cùng PA, 2 VA = <strong>aliasing</strong>.</p>
-</div>
-<div class="callout quote">
-<p><strong>Đọc bảng:</strong></p>
-<ul>
-<li><strong>VA HHDM (RAM only)</strong>: chỉ vùng RAM mới hiện VA (<code>PA + hhdmOffset</code>); <code>RESERVED</code>/<code>FRAMEBUF</code>/MMIO để <code>-</code><br/>
-→ nhìn cột là biết ngay đâu là RAM. (Lưu ý: HHDM của Limine thực ra map cả dải thấp, nhưng bảng cố ý chỉ
-hiện VA cho vùng RAM để khỏi nhầm "có VA = là RAM".)</li>
-<li><strong>VA (kernel map)</strong>: chỉ <strong>đúng 1 dòng</strong> <code>KERNEL</code> (<code>0xffffffff80000000</code>) — kernel image map riêng. Frame
-kernel vì thế có <strong>2 VA</strong> (HHDM + kernel map) → <strong>aliasing</strong> (<a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> "dùng VA nào").</li>
-<li><strong>alloc</strong> <code>Y/n</code> = cấp phát được hay cấm; <strong>bitmap</strong> đúng 1 dòng <code>Y</code> (<code>0x60000</code>, "quyển sổ").</li>
-</ul>
-</div>
-<div class="callout quote">
-<p><strong><code>address gap (not backed by RAM/device)</code> = đoạn địa chỉ KHÔNG có chip RAM lẫn thiết bị nào nối tới.</strong>
-Không gian địa chỉ vật lý là dãy số 0→2⁴⁸, nhưng máy chỉ "đấu dây" RAM vào vài đoạn + để vài đoạn cho MMIO
-(thiết bị). Khoảng <strong>giữa</strong> các vùng mà memmap không liệt kê gì = <strong>đất trống đã đánh số nhưng chưa xây</strong>:
-ghi vào → mất hút, đọc ra → rác (<code>0xff</code>) hoặc lỗi bus. Khác với <code>RESERVED</code>/<code>FRAMEBUF</code> (vẫn là <em>device</em> —
-có thiết bị phía sau): gap thì <strong>không cả RAM lẫn device</strong>. <strong>Không dùng được</strong> vì <em>địa chỉ tồn tại ≠ có
-phần cứng phía sau</em>.<br/>
-→ PMM cố ý <strong>không cấp</strong> chúng: <code>memset 0xff</code> (đóng tất) rồi chỉ mở vùng <code>USABLE</code> → frame trong gap luôn
-= used, <code>pmm_alloc</code> không bao giờ phát ra. (Vì sao máy để trống nhiều: xem §"Bộ nhớ vật lý không liền mạch".)</p>
-</div>
-<div class="callout quote">
-<p><strong>Cột pgtbl (gốc page table — PML4 — nằm vùng nào)</strong>: <code>old</code> ở <code>0x0ff86000</code> = <strong>PML4 cũ của Limine</strong>
-(CR3 lúc boot, nằm trong vùng BOOT_REC — Limine để cấu trúc của nó ở đây). <code>new</code> ở <code>0x60000</code> = <strong>PML4 mới
-lab tự cấp</strong> (frame đầu sau bitmap, <code>pmm_alloc</code> lấy ra). → Thấy tận mắt: bảng cũ trong vùng Limine, bảng mới
-trong RAM lab xin từ PMM → đúng chuyện "tự dựng bảng riêng + <code>mov cr3</code>" (<a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>).</p>
-</div>
-<div class="callout quote">
-<p><strong>Đối chiếu số</strong>: bitmap ở <code>0x60000</code> chiếm ~3 frame (8301 B) → <code>alloc #1 = 0x62000</code> rơi ngay sau sổ.
-<code>free -2</code> rồi <code>free after free</code> về đúng số cũ → cấp/thu hồi đối xứng. VMM: ghi qua VA mới <code>0x600000000000</code>,
-đọc qua HHDM của cùng PA <code>0x63000</code> → khớp <code>0xdeadbeefcafebabe</code> (chứng minh aliasing); <code>vresolve</code> walk ngược ra đúng PA.</p>
-</div>
-<div class="callout quote">
-<p><strong>Cây 4 tầng nằm đâu</strong> (dòng <code>[vmm] tables for VA</code>): map VA <code>0x600000000000</code> lần đầu vào nhánh trống →
-<code>vmap</code> cấp <strong>lazy</strong> cả 3 bảng trung gian, đều <code>(new)</code>. Chúng nằm <strong>sát nhau ngay sau PML4</strong> (PMM cấp tuần tự):</p>
-<div class="code"><div class="code-bar">text</div><pre><code>PML4 = 0x62000   (paging_init)
-PDPT = 0x64000   (new) ┐
-PD   = 0x65000   (new) ├ 3 bảng trung gian, lazy trong vmap
-PT   = 0x66000   (new) ┘  → entry lá PT trỏ frame dữ liệu 0x63000</code></pre></div>
-<p>→ Toàn bộ page table 4 tầng <strong>đều là frame RAM USABLE</strong> (cột pgtbl chỉ tô gốc PML4 vì lab chỉ lưu PA gốc;
-bảng con in qua dòng log này). Map VA thứ 2 <em>gần đó</em> sẽ thấy <code>(reuse)</code> thay vì <code>(new)</code> — tái dùng bảng cũ.</p>
-</div>
-<div class="callout quote">
-<p><strong>Sơ đồ "PA ←→ VA" trực quan</strong> (mũi tên, aliasing): xem <a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a> — bảng
-<code>pmm_dump_map</code> ở trên đã thể hiện đủ 3 cột PA/VA-HHDM/VA-kernel cho mọi vùng.</p>
-</div>
-<h2 id="chạy-lại-2026-09-03-sau-khi-vá-bug-bitmap">Chạy lại 2026-09-03 (sau khi vá bug bitmap)</h2>
-<div class="callout quote">
-<p><em>Cùng một cấu hình QEMU nhưng Limine xếp bộ nhớ khác lần trước, nên mọi địa chỉ đều dời. Cái <strong>không</strong>
-dời mới là bài học: tổng số frame, cỡ bitmap, và mọi quan hệ giữa các con số.</em>
-Output đầy đủ: <code>lab/outputs/lab-0x03-run-2026-09-03.txt</code>.</p>
-</div>
-<div class="code"><div class="code-bar">text</div><pre><code>[pmm] total frames = 66405  bitmap bytes = 8301        ← Y HỆT lần cũ
-[pmm] bitmap at PA = 0x0000000000053000  (block #83)   ← dời (cũ: 0x60000, block #96)
-[pmm] free frames  = 65181
-[pmm] alloc #1 PA  = 0x0000000000056000                ← BUG ĐÃ VÁ (xem dưới)
-[pmm] alloc #2 PA  = 0x0000000000057000
-[pmm] free -2 = 65179  OK      /  free after free = 65181  OK (back to start)
 
-[vmm] our pml4 (VA) = 0xffff800000056000      PML4 old = 0x0ff88000
-[walk] HHDM   PML4[0x100] -&gt; PDPT@0x0ff84000 -&gt; PD@0x0ff83000 -&gt; 2MB hugepage
-[walk] kernel PML4[0x1ff] -&gt; PDPT@0x0ff87000[0x1fe] -&gt; PD@0x0ff86000 -&gt; PT@0x0ff85000
-[vmm] map VA 0x600000000000 -&gt; PA 0x57000
-[vmm] tables: PDPT=0x58000 (new) PD=0x59000 (new) PT=0x5a000 (new)
+<h2 id="mmtotal">Cỡ bitmap: <code>mmTotal</code> như cavOS</h2>
+<p class="lede"><em>Sổ chỉ cần đủ dòng cho phần RAM thật, nên đếm RAM bằng cách cộng, không bằng cách lấy địa chỉ lớn nhất.</em></p>
+<div class="code"><div class="code-bar">c</div><pre><code>mmTotal = 0;
+for (each entry)
+    if (entry-&gt;type != LIMINE_MEMMAP_RESERVED)   // RESERVED = MMIO / PCI hole: skip
+        mmTotal += entry-&gt;length;
+blocks = DivRoundUp(mmTotal, PAGE_SIZE);         // frames to track
+bytes  = DivRoundUp(blocks, 8);                  // bitmap size</code></pre></div>
+<p>Hai chỗ trong <code>bm_mark</code> cần cẩn thận:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static void bm_mark(uint64_t base, uint64_t len, int used) {
+    uint64_t first = base / PAGE_SIZE;
+    uint64_t count = DivRoundUp(len, PAGE_SIZE);   // round UP: a partly used frame is used
+    for (uint64_t i = 0; i &lt; count; i++) {
+        if (first + i &gt;= blocks)                   // GUARD: never write past the bitmap
+            break;
+        ...</code></pre></div>
+<ul>
+<li><strong>Làm tròn lên.</strong> Mọi vùng memmap dài bội số của 4 KiB, nhưng bitmap thì không (8301 byte). Làm tròn xuống sẽ bỏ sót frame đuôi của bitmap: frame đó bị coi là trống, được cấp cho
+người khác, và họ ghi đè lên cuối sổ.</li>
+<li><strong>Chặn biên.</strong> Vòng "đóng non-USABLE" chạm cả vùng <code>0xfd00000000</code>; chỉ số block của nó vượt xa <code>blocks</code>. Không chặn thì bit rơi ra ngoài sổ, ghi vào RAM nằm sau sổ.</li>
+</ul>
+
+<h2 id="pmm">Kết quả 1: sổ frame</h2>
+<p class="lede"><em>Sổ có 66 405 dòng, nằm ở 3 frame đầu của vùng USABLE thấp nhất, và frame cấp đầu tiên nằm ngay sau sổ.</em></p>
+<p>Output thật (QEMU <code>-M q35 -m 256M</code>, 2026-09-03):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[init] hhdm offset = 0xffff800000000000
+
+[pmm] total frames = 66405  bitmap bytes = 8301
+[pmm] bitmap at PA = 0x0000000000053000  (block #83)  VA = 0xffff800000053000
+[pmm] free frames  = 65181
+[pmm] alloc #1 PA  = 0x0000000000056000
+[pmm] alloc #2 PA  = 0x0000000000057000
+[pmm] free -2 = 65179  OK
+[pmm] free after free = 65181  OK (back to start)</code></pre></div>
+<ul>
+<li>Bitmap ở <code>0x53000</code>–<code>0x5506d</code> (8301 byte), tức frame <code>0x53</code>, <code>0x54</code>, <code>0x55</code>: 3 frame. <code>block #83</code> = <code>0x53000 / 4096</code>.</li>
+<li><code>alloc #1</code> = <code>0x56000</code>, frame ngay <strong>sau</strong> frame cuối của bitmap; frame đuôi <code>0x55000</code> được giữ đúng.</li>
+<li>Sổ sách khớp bằng số: ba vùng USABLE có <code>76 + 65077 + 31 = 65184</code> frame, trừ 3 frame của bitmap còn <strong>65181</strong>, đúng <code>free frames</code>. BOOT_REC chưa được thu hồi nên không tính.</li>
+<li>Cấp 2 rồi trả 2: số frame trống về đúng chỗ cũ.</li>
+<li>Đây là "con gà, quả trứng": allocator đầu tiên phải tự đặt chỗ cho chính nó, rồi tự đánh dấu chỗ đó là đã dùng.</li>
+</ul>
+
+<h2 id="vmm">Kết quả 2: PML4 riêng và một VA mới</h2>
+<p class="lede"><em>Đổi sang bảng trang của mình, map một địa chỉ mới, rồi chứng minh hai địa chỉ khác nhau cùng trỏ về một frame.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[vmm] built new PML4 + mov cr3
+[vmm] our pml4 (VA) = 0xffff800000056000
+[walk] HHDM    VA=0xffff800000000000
+       PML4 @0x0000000000056000 [idx 0x0000000000000100]
+       PDPT @0x000000000ff84000 [idx 0x0000000000000000]
+       PD   @0x000000000ff83000 [idx 0x0000000000000000]
+       PD entry = 2MB hugepage -&gt; PA 0x0000000000000000
+[walk] kernel  VA=0xffffffff80000000
+       PML4 @0x0000000000056000 [idx 0x00000000000001ff]
+       PDPT @0x000000000ff87000 [idx 0x00000000000001fe]
+       PD   @0x000000000ff86000 [idx 0x0000000000000000]
+       PT   @0x000000000ff85000 [idx 0x0000000000000000]
+[vmm] map VA 0x0000600000000000 -&gt; PA 0x0000000000057000
+[vmm] tables for VA: PDPT=0x0000000000058000 (new) PD=0x0000000000059000 (new) PT=0x000000000005a000 (new)
+...
 [vmm] write via new VA, read via HHDM = 0xdeadbeefcafebabe  OK (same PA!)
-[vmm] vresolve(VA) = 0x57000  OK</code></pre></div>
-<p><strong>Bug đã vá — kiểm bằng số:</strong> bitmap <code>0x53000</code> → <code>0x5506d</code>, tức chiếm frame <code>0x53/0x54/0x55</code> (<strong>3 frame</strong>).
-<code>alloc #1</code> ra <code>0x56000</code> = frame ngay <strong>sau</strong> frame cuối của bitmap. Bản cũ sẽ ra <code>0x55000</code> và giẫm lên
-đuôi bitmap. Đối chiếu tiếp: USABLE có <code>76 + 65077 + 31 = 65184</code> frame, trừ 3 frame bitmap = <strong>65181</strong>,
-đúng bằng <code>free frames</code> in ra → sổ sách khớp tuyệt đối.</p>
-<p><strong>Cái gì cố định, cái gì đổi:</strong></p>
+[vmm] vresolve(VA)  = 0x0000000000057000  OK</code></pre></div>
+<ul>
+<li>PML4 mới là frame <code>0x56000</code> (lần cấp đầu tiên). <code>paging_init</code> chép 512 entry từ PML4 của Limine: chép <em>con trỏ</em>, nên PML4 mới dùng chung các bảng con của HHDM và kernel. Nhờ
+vậy kernel vẫn chạy ngay sau <code>mov cr3</code>.</li>
+<li>HHDM đi <code>PML4[0x100]</code> và dừng ở PD (trang 2 MiB, 3 tầng, rất ít bảng cho cả 256 MiB). Kernel đi <code>PML4[0x1ff]</code> đủ 4 tầng tới PT (trang 4 KiB, để đặt quyền riêng cho từng section).</li>
+<li>Các bảng con của HHDM/kernel (<code>0x0ff83000</code>–<code>0x0ff87000</code>) nằm trong vùng BOOT_REC, cạnh PML4 cũ <code>0x0ff88000</code>: Limine gom cả cây bảng trang của nó vào đó.</li>
+<li>VA <code>0x600000000000</code> rơi vào nhánh trống, nên <code>vmap</code> cấp mới cả 3 bảng trung gian (<code>0x58000</code>, <code>0x59000</code>, <code>0x5a000</code>), liền nhau vì PMM cấp tuần tự. Map một VA thứ hai gần đó
+sẽ thấy <code>(reuse)</code>.</li>
+<li>Ghi <code>0xdeadbeefcafebabe</code> qua VA mới, đọc qua HHDM của PA <code>0x57000</code>: cùng giá trị. Hai VA, một frame: đó là <a href="../ly_thuyet/khai_niem/hhdm.html">aliasing</a>.</li>
+</ul>
+
+<h2 id="dump-map">Kết quả 3: bảng <code>pmm_dump_map</code></h2>
+<p class="lede"><em>Một bảng đặt mọi vùng memmap cạnh những thứ lab tự cấp, để thấy cái gì nằm ở đâu.</em></p>
+<p>Mỗi vùng memmap là một dòng <code>(region)</code>; dòng bắt đầu bằng <code>&gt;</code> là một <em>object</em> nằm trong vùng đó. Trích (bỏ các cột "end"; bản đủ 10 cột ở file log):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>| PA begin           | VA-HHDM begin      | VA-kernel begin    | type     | alloc | stores         | size       |
+| 0x0000000000001000 | 0xffff800000001000 | -                  | BOOT_REC |   Y   | (region)       |      328 K |
+| 0x0000000000053000 | 0xffff800000053000 | -                  | USABLE   |   Y   | (region)       |      304 K |
+| 0x0000000000053000 | 0xffff800000053000 | -                  |  (obj)   |   .   | &gt; PMM bitmap   |        8 K |
+| 0x0000000000056000 | 0xffff800000056000 | -                  |  (obj)   |   .   | &gt; PML4 (new)   |        4 K |
+| 0x0000000000058000 | 0xffff800000058000 | -                  |  (obj)   |   .   | &gt; PDPT testVA  |        4 K |
+| 0x0000000000059000 | 0xffff800000059000 | -                  |  (obj)   |   .   | &gt; PD testVA    |        4 K |
+| 0x000000000005a000 | 0xffff80000005a000 | -                  |  (obj)   |   .   | &gt; PT testVA    |        4 K |
+|                    .. address gap (not backed by RAM/device) ..                                            |
+| 0x000000000009fc00 | -                  | -                  | RESERVED |   n   | (region)       |        1 K |
+| 0x0000000000100000 | 0xffff800000100000 | -                  | USABLE   |   Y   | (region)       |   260308 K |
+| 0x000000000ff38000 | 0xffff80000ff38000 | 0xffffffff80000000 | KERNEL   |   n   | (region)       |       16 K |
+| 0x000000000ff70000 | 0xffff80000ff70000 | -                  | BOOT_REC |   Y   | (region)       |      444 K |
+| 0x000000000ff88000 | 0xffff80000ff88000 | -                  |  (obj)   |   .   | &gt; PML4 (old)   |        4 K |
+| 0x00000000fd000000 | -                  | -                  | FRAMEBUF |   n   | framebuffer    |     4000 K |
+| 0x000000fd00000000 | -                  | -                  | RESERVED |   n   | (region)       | 12582912 K |</code></pre></div>
+<ul>
+<li><strong>VA-HHDM</strong> chỉ in cho vùng RAM (<code>PA + hhdm</code>); RESERVED, FRAMEBUF để <code>-</code>, để nhìn cột là biết đâu là RAM. (HHDM của Limine thực ra map cả dải thấp; bảng cố ý không in cho vùng
+không phải RAM.)</li>
+<li><strong>VA-kernel</strong> chỉ có ở dòng KERNEL: frame của kernel có hai VA (HHDM và <code>0xffffffff80000000</code>).</li>
+<li><strong>alloc</strong> <code>Y</code> = RAM có thể cấp (USABLE ngay, BOOT_REC sau khi thu hồi), <code>n</code> = không bao giờ cấp.</li>
+<li><strong>PDPT/PD/PT testVA</strong> là bảng lab tự cấp cho VA thử <code>0x600000000000</code>, không phải bảng của HHDM/kernel (những bảng đó Limine dựng, nằm trong BOOT_REC, PML4 mới chỉ mượn).</li>
+<li><strong>address gap</strong>: đoạn địa chỉ không có RAM lẫn thiết bị nào phía sau. Ghi vào thì mất, đọc ra thì rác. PMM không bao giờ cấp chúng vì bước <code>memset 0xff</code> đã đóng tất cả, và chỉ USABLE
+được mở lại.</li>
+</ul>
+
+<h2 id="co-dinh">Cái gì cố định, cái gì đổi giữa các lần boot</h2>
+<p class="lede"><em>Địa chỉ cụ thể có thể dời mỗi lần boot; quan hệ giữa các con số thì không.</em></p>
 <div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Đại lượng</th>
-<th>Đổi?</th>
-<th>Vì sao</th>
-</tr>
-</thead>
+<thead><tr><th>Đại lượng</th><th>Đổi?</th><th>Vì sao</th></tr></thead>
 <tbody>
-<tr>
-<td><code>total frames = 66405</code>, <code>bitmap bytes = 8301</code></td>
-<td>không</td>
-<td>phụ thuộc <strong>tổng RAM</strong> (<code>mmTotal</code>), mà QEMU vẫn cấp 256 MiB</td>
-</tr>
-<tr>
-<td><code>hhdm offset = 0xffff800000000000</code></td>
-<td>không</td>
-<td>hằng số của 4-level paging</td>
-</tr>
-<tr>
-<td>PA của bitmap / PML4 / các bảng</td>
-<td>đổi hết</td>
-<td>Limine xếp vùng khác đi mỗi lần boot</td>
-</tr>
-<tr>
-<td>Bảng con HHDM/kernel nằm trong BOOT_REC</td>
-<td>không</td>
-<td>Limine luôn gom cây page table của nó vào BOOT_REC</td>
-</tr>
-<tr>
-<td>HHDM = 2 MiB hugepage (3 tầng), kernel = 4 KiB (4 tầng)</td>
-<td>không</td>
-<td>thiết kế của Limine, không phải ngẫu nhiên</td>
-</tr>
+<tr><td><code>total frames = 66405</code>, <code>bitmap bytes = 8301</code></td><td>không</td><td>chỉ phụ thuộc tổng RAM (<code>mmTotal</code>), QEMU vẫn cấp 256 MiB</td></tr>
+<tr><td><code>hhdm offset = 0xffff800000000000</code></td><td>không</td><td>giá trị Limine dùng cho paging 4 tầng</td></tr>
+<tr><td>PA của bitmap, PML4, các bảng</td><td>có thể</td><td>tuỳ cách Limine xếp các vùng của nó</td></tr>
+<tr><td>bảng con của HHDM/kernel nằm trong BOOT_REC</td><td>không</td><td>Limine luôn đặt cây bảng trang của nó ở đó</td></tr>
+<tr><td>frame cấp đầu tiên = ngay sau bitmap</td><td>không</td><td>bitmap ở đầu vùng USABLE đầu tiên, PMM cấp từ thấp lên</td></tr>
 </tbody>
 </table></div>
-<div class="callout quote">
-<p>Lần này bảng con của HHDM/kernel nằm <code>0x0ff83000</code>–<code>0x0ff87000</code>, cùng vùng BOOT_REC với PML4 old
-<code>0x0ff88000</code> — <strong>đúng y kết luận rút ra từ lần chạy cũ</strong> dù số đã khác hoàn toàn. Đó là dấu hiệu bài học
-đúng chứ không phải trùng hợp.</p>
-</div>
-<h2 id="điểm-học-chính">Điểm học chính</h2>
-<h3 id="1-pmm-tự-host-bitmap-đóng-hết-mở-usable-đóng-non-usable">1. PMM tự host bitmap, đóng hết → mở USABLE → đóng non-USABLE</h3>
-<p>Bitmap đặt ngay trong vùng USABLE đầu tiên (qua HHDM). <code>memset 0xff</code> (mọi frame used) → <code>bm_mark(...,0)</code> mở
-các vùng USABLE → <code>bm_mark(...,1)</code> đóng lại non-USABLE → tự mark chính bitmap. Đúng trình tự cavOS <code>pmm.c</code>.</p>
-<div class="callout quote">
-<p><strong>Bitmap nằm ở đâu</strong> (in ra serial): <code>PA = 0x60000</code> (vùng USABLE đầu, khớp memmap), <code>block #96</code>
-(<code>0x60000/4096</code> — chính frame mà bitmap tự đánh dấu used), <code>VA = 0xffff800000060000</code> (= PA + hhdmOffset,
-<a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>). Bitmap chiếm ~3 frame (8301 B) → <code>0x60000..0x62000</code> → <strong>alloc đầu rơi <code>0x62000</code></strong>, ngay sau sổ.
-Đây là "con gà–quả trứng": allocator đầu tiên phải tự cấp chỗ cho chính mình.</p>
-</div>
-<h3 id="2-tự-dựng-pml4-mới-để-có-mov-cr3-thật">2. Tự dựng PML4 mới — để có "mov cr3 THẬT"</h3>
-<div class="code"><div class="code-bar">c</div><pre><code>uint64_t *new_pml4 = P2V(pmm_alloc());
-for(int i=0;i&lt;512;i++) new_pml4[i] = limine_pml4[i];   // copy mapping kernel + HHDM
-asm volatile("mov %0,%%cr3"::"r"(new_pa));             // ← mov cr3 thật</code></pre></div>
-<p>Cấp 1 frame làm PML4 mới, <strong>copy 512 entry</strong> từ bảng Limine (giữ mapping kernel + HHDM), rồi <code>mov cr3</code> sang
-bảng của ta → có <strong>address space riêng</strong>, sửa bảng thoải mái.</p>
-<div class="callout quote">
-<p><strong>So với cavOS:</strong> <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> cho thấy cavOS <em>tái dùng thẳng</em> bảng Limine
-(<code>globalPagedir = P2V(cr3)</code>), không tự dựng lúc boot. Lab tự dựng để <strong>minh hoạ <code>mov cr3</code></strong> — cũng là thứ
-cavOS làm về sau khi tạo page directory mỗi task (<a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>). Khác ở thời điểm.</p>
-</div>
-<h3 id="3-vmap-lazy-4-tầng-invlpg">3. <code>vmap</code> lazy 4 tầng + <code>invlpg</code></h3>
-<p>Tầng nào chưa PRESENT → cấp frame mới từ <strong>PMM</strong> làm bảng con (đúng mắt xích Bài 5→05). Map xong gọi
-<code>invlpg</code> xoá TLB cho VA đó. <code>vresolve</code> walk ngược để xác nhận VA→PA khớp.</p>
-<h3 id="4-aliasing-2-va-1-pa-chứng-minh">4. Aliasing 2 VA → 1 PA (chứng minh)</h3>
-<p>Ghi <code>0xdeadbeefcafebabe</code> qua <strong>VA mới</strong> <code>0x600000000000</code> (map → PA <code>0x63000</code>), đọc qua <strong>VA HHDM</strong>
-<code>P2V(0x63000)</code> → cùng giá trị. Hai VA khác nhau, một frame → đúng <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> (aliasing).</p>
-<h2 id="tự-kiểm-tra">✓ Tự kiểm tra</h2>
-<ol>
-<li>Đổi cách tính <code>mmTotal</code> về "max-end" (không lọc RESERVED) → bitmap to bao nhiêu? Vì sao? (lỗ MMIO).</li>
-<li>Bỏ guard <code>if(first+i &gt;= pmm_blocks) break;</code> → đóng non-USABLE entry <code>0xfd00000000</code> sẽ ra sao? (ghi tràn).</li>
-<li>Remap 1 VA sang PA khác mà QUÊN <code>invlpg</code> → đọc ra giá trị cũ hay mới? (vai trò TLB).</li>
-<li>Bỏ copy 512 entry (PML4 mới để trắng) rồi <code>mov cr3</code> → chuyện gì xảy ra? (mất mapping kernel → sập).</li>
-</ol>
-<h2 id="liên-hệ">Liên hệ</h2>
+
+<h2 id="khac-cavos">Khác cavOS ở đâu</h2>
+<p class="lede"><em>Cùng cách tính và cùng trình tự; lab thêm một bước <code>mov cr3</code> để thấy việc đổi không gian địa chỉ.</em></p>
 <ul>
-<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>, <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> · nền <a href="../ly_thuyet/khai_niem/paging.html">Paging</a>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
-<li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+<li>Trình tự PMM như <code>pmm.c</code> của cavOS; lab thêm dòng chặn biên mà <code>MarkBlocks</code> của cavOS không có (<a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html#chan-bien">Bài 5</a>).</li>
+<li>cavOS dùng thẳng bảng của Limine lúc boot (<code>globalPagedir = P2V(cr3)</code>). Lab tự dựng PML4 mới để thấy <code>mov cr3</code> thật; cavOS làm việc này về sau, khi tạo page directory cho từng task
+(<a href="../ly_thuyet/bai/bai_12_multitasking_scheduler.html">Bài 12</a>).</li>
+<li>Lab viết <code>invlpg (%0)</code> với <code>"r"(va)</code>, tức xoá TLB đúng trang <code>va</code>. So với cách cavOS viết ở <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html#bug-invlpg">Bài 6</a>.</li>
+</ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bốn câu, mỗi câu là một cách làm hỏng lab.</em></p>
+<details class="quiz"><summary>Đổi <code>mmTotal</code> thành "địa chỉ cuối cao nhất" của memmap. Bitmap to bao nhiêu?</summary>
+<p>Vùng cuối là <code>0xfd00000000</code>–<code>0x10000000000</code>, nên "địa chỉ cuối" là 1 TiB: 2<sup>28</sup> frame, bitmap 32 MiB, thay vì 8301 byte. Lỗ MMIO bị tính như RAM.</p></details>
+<details class="quiz"><summary>Đổi <code>DivRoundUp(len, PAGE_SIZE)</code> thành <code>len / PAGE_SIZE</code>. <code>alloc #1</code> ra frame nào, và chuyện gì xảy ra sau đó?</summary>
+<p><code>0x55000</code>: frame đuôi của bitmap (8301 byte = 2 frame đủ + 109 byte). Frame đó thành PML4 mới, <code>paging_init</code> chép 512 entry vào, ghi đè 109 byte cuối của sổ. Sổ báo sai mà không có lỗi
+nào hiện ra.</p></details>
+<details class="quiz"><summary>Bỏ dòng <code>if (first + i &gt;= blocks) break;</code>. Vòng "đóng non-USABLE" làm gì với vùng <code>0xfd00000000</code>?</summary>
+<p>Chỉ số block khoảng <code>0xfd00000</code>, vượt xa 66 405, nên <code>bm_set</code> ghi vào byte rất xa sau bitmap (qua HHDM), tức ghi bậy lên RAM khác, hoặc page fault nếu chỗ đó không được map.</p></details>
+<details class="quiz"><summary>Để PML4 mới trắng (không chép 512 entry) rồi <code>mov cr3</code>. Chuyện gì xảy ra?</summary>
+<p>Lệnh kế tiếp nằm ở VA của kernel, mà bảng mới không map gì: page fault ngay lập tức. Không có gì xử lý được (cả IDT lẫn stack cũng không còn được map), CPU leo thang thành triple fault và máy reset.</p></details>
+
+<h2 id="lien-he">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết, lab trước và công cụ đi kèm.</em></p>
+<ul>
+<li>Lý thuyết: <a href="../ly_thuyet/bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>, <a href="../ly_thuyet/bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> · nền
+<a href="../ly_thuyet/khai_niem/paging.html">Paging</a>, <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
+<li>Memmap đọc lần đầu ở <a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>.</li>
+<li>Build: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Lab 0x03 - PMM &amp; VMM</footer>

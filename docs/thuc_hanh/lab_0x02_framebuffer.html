@@ -30,6 +30,7 @@ không đổi theo KASLR như <code>phys_base</code> của kernel (<a href="lab_
 <strong>Chạy:</strong> <code>make run</code> (serial headless) hoặc <strong><code>make run-gfx</code></strong> (thấy cửa sổ — cần X/WSLg).</p>
 </div>
 <h2 id="cấu-trúc-module-tách-từ-lab-0x02-trở-đi">Cấu trúc module (tách từ Lab 0x02 trở đi)</h2>
+<p class="lede"><em>Từ lab này, mỗi phần cứng một file riêng; kmain chỉ điều phối.</em></p>
 <div class="code"><div class="code-bar">text</div><pre><code>io.h        — outb/inb (inline)
 serial.{h,c}— UART 16550 (Bài 2)
 fb.{h,c}    — framebuffer: fb_init + put_pixel/fill_rect/draw_string + font 8×8
@@ -37,6 +38,7 @@ kernel.c    — kmain: orchestrate + in thông số + vẽ</code></pre></div>
 <p><code>GNUmakefile</code>: <code>SRCS := kernel.c serial.c fb.c</code> (common.mk tự build từng <code>.o</code>). String output để <strong>tiếng Anh</strong>;
 comment giải thích tiếng Việt.</p>
 <h2 id="làm-gì">Làm gì</h2>
+<p class="lede"><em>Xin framebuffer từ Limine rồi tự tô từng pixel.</em></p>
 <ol>
 <li><code>fb_init()</code> khai <code>LIMINE_FRAMEBUFFER_REQUEST</code>, lấy <code>framebuffers[0]</code> → <code>address/width/height/pitch/bpp</code>.</li>
 <li><code>put_pixel(x,y,r,g,b)</code>: ghi 4 byte <strong>BGRX</strong>, <strong>nhảy hàng bằng <code>pitch</code></strong> (không phải width*4).</li>
@@ -44,12 +46,14 @@ comment giải thích tiếng Việt.</p>
 <li>In thông số fb ra serial để đối chiếu Bài 4.</li>
 </ol>
 <h2 id="khác-với-cavos-step-03">Khác với cavOS (Bài 4)</h2>
+<p class="lede"><em>Lab chỉ vẽ tĩnh; cavOS dựng cả một console trên cùng vùng nhớ đó.</em></p>
 <ul>
 <li>cavOS dùng macro <code>drawPixel</code> theo <code>fb.width</code> + font <strong>PSF1</strong> nạp từ <code>gohufont.h</code>. Lab dùng <code>put_pixel</code>
 theo <strong><code>pitch</code></strong> (đúng hơn khi có padding) + font 8×8 <strong>nhúng thẳng</strong> (vài ký tự, khỏi cần file PSF).</li>
 <li>Lab chỉ vẽ tĩnh; cavOS có cả console (con trỏ, scroll, <code>printf</code>→<code>putchar_</code>).</li>
 </ul>
 <h2 id="kết-quả-thật-qemu--m-q35--m-256m-2026-06-01">Kết quả thật (QEMU <code>-M q35 -m 256M</code>, 2026-06-01)</h2>
+<p class="lede"><em>Output thật và ảnh màn hình QEMU.</em></p>
 <div class="code"><div class="code-bar">text</div><pre><code>=== Lab 0x02 - Framebuffer (Bài 4) ===
 [fb] address(VA, qua HHDM) = 0xffff8000fd000000
 [fb] resolution = 1280 x 800
@@ -61,6 +65,7 @@ theo <strong><code>pitch</code></strong> (đúng hơn khi có padding) + font 8�
 <p>(Độ phân giải mặc định QEMU q35 = <strong>1280×800</strong>; pitch = 5120 = width×4 → không padding.)
 Màn hình (<code>run-gfx</code>): 3 thanh đỏ/lục/lam trên đỉnh, ô vuông trắng giữa, chữ vàng <code>HELLO FB</code>.</p>
 <h2 id="quan-sát-đắt-giá-hhdm-được-chứng-minh">Quan sát đắt giá: HHDM được chứng minh</h2>
+<p class="lede"><em>Lấy địa chỉ framebuffer trừ đi HHDM offset, ra đúng con số trong memmap.</em></p>
 <div class="code"><div class="code-bar">text</div><pre><code>FB address (VA) = 0xffff8000fd000000
 HHDM offset     = 0xffff800000000000   (Lab 0x01)
                 ───────────────────────  trừ đi
@@ -68,7 +73,8 @@ FB phys (PA)    = 0x00000000fd000000</code></pre></div>
 <p>→ Đúng bằng entry <code>FRAMEBUFFER base=0xfd000000</code> trong <strong>memmap dump của <a href="lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a></strong>!
 Tức <code>framebufferRes-&gt;address</code> Limine trả về <strong>chính là <code>phys + hhdmOffset</code></strong> — ghi vào <code>fb.virt</code> = ghi VRAM
 qua HHDM (<a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> mục "dùng VA nào"). Cùng một bài học, hai lab xác nhận chéo.</p>
-<h2 id="tự-kiểm-tra">✓ Tự kiểm tra</h2>
+<h2 id="tự-kiểm-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Ba câu để tự kiểm.</em></p>
 <ol>
 <li>Đổi <code>-m 256M</code> → <code>-m 512M</code>: địa chỉ fb có đổi không? (gợi ý: fb là MMIO, thường cố định ~<code>0xfd000000</code>).</li>
 <li>Vì sao <strong>phải</strong> dùng <code>pitch</code> mà không <code>width*4</code>? Khi nào hai cái khác nhau? (xem <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html#struct-framebuffer">Bài 4 - Framebuffer &amp; Console, mục "Struct Framebuffer và macro drawPixel"</a>, đoạn "Bẫy pitch").</li>
@@ -76,6 +82,7 @@ qua HHDM (<a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a> mục "dùng VA n�
 <li>Bỏ kẹp biên trong <code>put_pixel</code> rồi vẽ <code>y ≥ height</code> → ghi tràn ngoài VRAM, chuyện gì xảy ra?</li>
 </ol>
 <h2 id="liên-hệ">Liên hệ</h2>
+<p class="lede"><em>Bài lý thuyết và công cụ đi kèm.</em></p>
 <ul>
 <li>Lý thuyết: <a href="../ly_thuyet/bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a> · nền tảng <a href="../ly_thuyet/khai_niem/hhdm.html">HHDM</a>.</li>
 <li>Build/os.img: <a href="../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>

@@ -1,6 +1,5 @@
 Lab 0x03 - PMM & VMM - full serial output (QEMU -M q35 -m 256M, 2026-09-03)
-Nguon: ~/oskernel-lab/03-pmm-vmm  ·  make run  ·  source dung lai sau khi mat may cu
-Lan chay cu (2026-06-01) van giu o lab-0x03-run.txt de doi chieu.
+Nguon: ~/oskernel-lab/03-pmm-vmm  ·  make run
 ================================================================================
 
 === Lab 0x03 - PMM + VMM (Step 04 + 05) ===

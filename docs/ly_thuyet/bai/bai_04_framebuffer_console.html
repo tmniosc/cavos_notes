@@ -32,15 +32,15 @@
 <h2 id="can-biet-truoc">Cần biết trước</h2>
 <p class="lede"><em>Ba ý mới: MMIO, cách một pixel nằm trong bộ nhớ, và font bitmap.</em></p>
 <ul>
-<li><strong>HHDM và cơ chế request/response của Limine</strong> — đã gặp ở <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>. Bài này thêm một request nữa, <code>limine_framebuffer_request</code>, khai riêng trong <code>drivers/vga.c</code>. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Limine Protocol</a>, <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
-<li><strong>MMIO (memory-mapped I/O).</strong> Có những địa chỉ vật lý không dẫn tới RAM mà dẫn tới một thiết bị. Ghi vào đó là gửi dữ liệu cho thiết bị, không phải cất dữ liệu. Framebuffer là vùng nhớ của card màn hình nằm ở một địa chỉ như vậy (trên QEMU là <code>0xfd000000</code>). Limine đã map nó vào HHDM, nên kernel ghi qua một địa chỉ ảo bình thường. Đọc sâu: <a href="../khai_niem/hhdm.html#dùng-va-nào-kernel-mapping-vs-hhdm">HHDM - dùng VA nào</a>.</li>
+<li><strong>HHDM và cơ chế request/response của Limine</strong> — đã gặp ở <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>. Bài này thêm một request nữa, <code>limine_framebuffer_request</code>, khai riêng trong <code>drivers/vga.c</code>. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a>, <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
+<li><strong>MMIO (memory-mapped I/O).</strong> Có những địa chỉ vật lý không dẫn tới RAM mà dẫn tới một thiết bị. Ghi vào đó là gửi dữ liệu cho thiết bị, không phải cất dữ liệu. Framebuffer là vùng nhớ của card màn hình nằm ở một địa chỉ như vậy (trên QEMU là <code>0xfd000000</code>). Limine đã map nó vào HHDM, nên kernel ghi qua một địa chỉ ảo bình thường. Đọc sâu: <a href="../khai_niem/hhdm.html#dung-va-nao">HHDM - dùng VA nào</a>.</li>
 <li><strong>Pixel format và pitch.</strong> Ở chế độ 32 bpp (bit per pixel), mỗi pixel chiếm 4 byte. Thứ tự byte ở đây là B, G, R, X (xanh dương, lục, đỏ, một byte bỏ trống). Các pixel trong một hàng nằm liền nhau; <em>pitch</em> là số byte từ đầu hàng này tới đầu hàng sau, có thể lớn hơn <code>width × 4</code> nếu phần cứng đệm thêm byte cuối hàng. Đọc sâu: <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a> (Limine <code>PROTOCOL.md</code>, phần framebuffer).</li>
 <li><strong>Font bitmap.</strong> Mỗi chữ cái lưu sẵn thành một lưới chấm, mỗi hàng của lưới là một byte, mỗi bit là một chấm bật/tắt. cavOS dùng định dạng PSF1 (PC Screen Font, bản 1): chữ luôn rộng 8 chấm, chiều cao ghi trong header. Phần đọc code bên dưới đi vào chi tiết.</li>
 </ul>
 
 <h2 id="doc-code">Đọc code cavOS</h2>
 <p class="lede"><em>Ba lời gọi trong <code>_start()</code>, đọc theo đúng thứ tự chạy.</em></p>
-<p>Trong <code>entry/kernel.c:_start()</code> (xem <a href="bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>), ngay sau bootloader parser:</p>
+<p>Trong <code>entry/kernel.c:_start()</code> (xem <a href="bai_00_bat_dau.html">Bắt đầu</a>), ngay sau bootloader parser:</p>
 <div class="code"><div class="code-bar">c</div><pre><code>// Framebuffer doesn't depend on paging, limine prepares it anyways
 initiateVGA();       // drivers/vga.c       — lấy framebuffer từ Limine
 initiateConsole();   // graphical/console.c — nạp font, đặt con trỏ về (0,0)
