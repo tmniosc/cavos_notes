@@ -3,40 +3,341 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 16 — Fast Syscalls (syscall/sysret) · Học cavOS</title>
+<title>Bài 16 - Fast Syscalls · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_16_fast_syscalls.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 16 — Fast Syscalls (syscall/sysret)</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, syscall, cpu</span></div>
+    <h1>Bài 16 - Fast Syscalls</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, syscall, sysret, msr, star, lstar, fmask, swapgs, int 0x80</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateSyscalls()</code> · <strong>Phụ thuộc:</strong> GDT từ <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Cho userspace (ring 3) gọi dịch vụ kernel (ring 0) nhanh.</strong> Cài MSR cho lệnh <code>syscall</code>/<code>sysret</code> (nhanh hơn
-ngắt). Khi user gọi syscall: chuyển sang stack kernel (<code>RSP0</code> từ TSS <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>), chạy handler,
-trả về. Là <strong>cầu nối</strong> giữa chương trình người dùng và kernel — bắt buộc cho <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateSyscallInst()</code> (<code>cpu/fastSyscall.c</code>), <code>syscall_entry</code> (<code>cpu/isr.asm</code>), <code>syscallHandler()</code>, <code>registerSyscall()</code>
+(<code>syscalls/syscalls.c</code>), <code>initiateSyscalls()</code> · <strong>Phụ thuộc:</strong> selector GDT và TSS từ <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>, task, stack và
+<code>schedule()</code> từ <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>, file và VFS từ <a href="bai_15_ahci_filesystems.html">Bài 15</a>.</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Cho chương trình ring 3 một cánh cửa nhanh vào kernel.</em></p>
+<p>Chương trình userspace không được chạm phần cứng hay bộ nhớ kernel. Muốn đọc file, in chữ, tạo tiến trình, nó phải nhờ kernel bằng một <strong>syscall</strong>. x86-64 có hai cửa: lệnh
+<code>int 0x80</code> (đi qua IDT như một ngắt) và lệnh <code>syscall</code> (đi thẳng tới một địa chỉ ghi sẵn trong MSR). cavOS cài cả hai, nhưng chương trình của nó (biên dịch với musl, như
+trên Linux) dùng <code>syscall</code>. Bài này đọc cách cavOS dựng cửa <code>syscall</code>, đường vào và ra, và bảng hàm syscall kiểu Linux. Bài 18 chạy chương trình thật qua cửa này.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Ngắt giống gọi tổng đài: tổng đài tra danh bạ (IDT), kiểm tra bạn có quyền gọi số đó không, ghi lại cuộc gọi lên sổ (đẩy 5 thứ lên stack), rồi mới nối máy. <code>syscall</code> giống một
+đường dây nóng: chỉ có một số, nối thẳng tới một người trực đã biết trước (LSTAR), không tra cứu, không ghi sổ. CPU chỉ nhét địa chỉ quay về vào RCX và cờ vào R11, rồi nhảy.</p>
+<p>Vì CPU không ghi sổ, người trực phải tự lo: tự đổi sang bàn làm việc của mình (stack kernel), tự chép lại mọi thứ cần nhớ. Để tìm bàn của mình khi tay đang không cầm gì, cavOS dùng một
+"ngăn kéo bí mật" mà lệnh <code>swapgs</code> mở ra: thanh ghi GS trỏ tới <code>threadInfo</code>, trong đó ghi sẵn địa chỉ stack.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba ý về lệnh <code>syscall</code>; GDT, TSS và khung ngắt đã có ở Bài 7, 9, 12.</em></p>
 <ul>
-<li>MSR: <code>IA32_EFER.SCE</code>, <code>STAR</code>, <code>LSTAR</code>, <code>FMASK</code>.</li>
-<li>Entry <code>syscall</code> → lưu user context, đổi sang kernel stack (TSS RSP0).</li>
-<li>Quy ước ABI: số syscall ở RAX, tham số RDI/RSI/RDX/R10/R8/R9.</li>
+<li><strong>MSR.</strong> Model Specific Register: thanh ghi đặc biệt đọc/ghi bằng <code>rdmsr</code>/<code>wrmsr</code> với số trong ECX. Bốn cái cho <code>syscall</code>: <code>EFER</code> (bit SCE bật lệnh),
+<code>STAR</code> (selector), <code>LSTAR</code> (địa chỉ vào), <code>FMASK</code> (bit RFLAGS cần xoá).</li>
+<li><strong><code>syscall</code> làm gì, và không làm gì.</strong> Làm: RCX ← RIP kế tiếp, R11 ← RFLAGS, RFLAGS &amp;= ~FMASK, CS/SS ← từ STAR, RIP ← LSTAR, CPL = 0. Không làm: không đổi RSP, không đẩy gì
+lên stack, không đọc TSS. <code>sysret</code> làm ngược lại: RIP ← RCX, RFLAGS ← R11, CS/SS user từ STAR.</li>
+<li><strong>GS base và <code>swapgs</code>.</strong> Trong long mode, GS chỉ còn là một địa chỉ nền (MSR <code>GS_BASE</code>). <code>swapgs</code> tráo <code>GS_BASE</code> với <code>KERNEL_GS_BASE</code>. Kernel dùng nó để có ngay
+một con trỏ tới dữ liệu riêng của CPU mà không cần thanh ghi nào.</li>
+<li><strong>ABI syscall của Linux</strong> (cavOS theo đúng): số syscall trong RAX, tham số RDI, RSI, RDX, <em>R10</em>, R8, R9 (R10 thay RCX vì <code>syscall</code> đè RCX), kết quả trả về trong RAX, lỗi là số
+âm <code>-errno</code>.</li>
+<li><strong>Đã gặp:</strong> selector <code>0x28</code>/<code>0x30</code>/<code>0x48</code>/<code>0x50</code> và lý do data user đứng trước code user ở <a href="bai_07_gdt_tss.html">Bài 7</a>; khung
+<code>AsmPassedInterrupt</code> ở <a href="bai_09_idt_interrupts.html#stub">Bài 9</a>; <code>whileTssRsp</code>, <code>schedule()</code> ở <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Ghi bốn MSR, viết đường vào bằng asm, tra bảng hàm theo số trong RAX, và cho scheduler cập nhật stack syscall mỗi lần đổi task.</em></p>
+<p>File: <code>entry/kernel.c</code>, <code>cpu/fastSyscall.c</code>, <code>cpu/isr.asm</code>, <code>cpu/isr.c</code>, <code>syscalls/syscalls.c</code>, <code>syscalls/linux/*.c</code>, <code>include/system.h</code>,
+<code>multitasking/schedule.c</code>, <code>multitasking/task.c</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  fsMount("/proc/", CONNECTOR_PROC, 0, 0);
+  psfLoadFromFile(DEFAULT_FONT_PATH);
+
+  initiateSyscallInst();
+  initiateSyscalls();
+
+  initiateSSE();</code></pre></div>
+<p>Syscall được dựng sau filesystem (nhiều syscall là thao tác file) và trước khi chạy chương trình đầu tiên. Log cavOS: <code>[syscalls] System calls are ready to fire: 99/450</code>, tức 99 số
+syscall có hàm xử lý trong bảng 450 ô.</p>
+
+<h3 id="msr">2. <code>initiateSyscallInst()</code>: bốn MSR</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool checkSyscallInst() {
+  uint32_t eax = 0x80000001, ebx = 0, ecx = 0, edx = 0;
+  cpuid(&amp;eax, &amp;ebx, &amp;ecx, &amp;edx);
+  return (edx &gt;&gt; 11) &amp; 1;
+}
+
+void initiateSyscallInst() {
+  if (!checkSyscallInst()) { ... panic(); }
+
+  // setup this core's thread info structure
+  threadInfo.syscall_stack = 0;
+  threadInfo.lapic_id = bootloader.smp[bootloader.smpBspIndex].bsp_lapic_id;
+  wrmsr(MSRID_KERNEL_GSBASE, (size_t)&amp;threadInfo);
+
+  uint64_t star_reg = rdmsr(MSRID_STAR);
+  star_reg &amp;= 0x00000000ffffffff;
+  star_reg |= ((uint64_t)GDT_USER_CODE - 16) &lt;&lt; 48;
+  star_reg |= ((uint64_t)GDT_KERNEL_CODE) &lt;&lt; 32;
+  wrmsr(MSRID_STAR, star_reg);
+
+  // entry defined in isr.asm
+  wrmsr(MSRID_LSTAR, (uint64_t)syscall_entry);
+
+  uint64_t efer_reg = rdmsr(MSRID_EFER);
+  efer_reg |= 1 &lt;&lt; 0;                    // SCE
+  wrmsr(MSRID_EFER, efer_reg);
+
+  wrmsr(MSRID_FMASK, RFLAGS_IF | RFLAGS_DF);
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-syscallregs" role="img" aria-label="What the CPU does on syscall and sysret. On syscall: RCX gets the user RIP, R11 gets RFLAGS, RFLAGS is masked by FMASK, CS is STAR bits 47 to 32 and SS that plus 8, RIP comes from LSTAR, RSP is unchanged. On sysret: RIP comes from RCX, RFLAGS from R11, CS is STAR bits 63 to 48 plus 16 and SS plus 8, both with RPL 3, RSP unchanged" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-syscallregs-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-syscallregs .lbl{fill:#c2c0b6;} #svg-syscallregs .mono{font-family:'SF Mono',Consolas,monospace;} #svg-syscallregs .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="180" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">syscall (ring 3 -&gt; ring 0)</text>
+<text x="540" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">sysret (ring 0 -&gt; ring 3)</text>
+<rect x="30" y="40" width="300" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="180" y="59" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">RCX = user RIP,  R11 = RFLAGS</text>
+<rect x="30" y="78" width="300" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="180" y="97" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">RFLAGS &amp;= ~FMASK  (IF = 0, DF = 0)</text>
+<rect x="30" y="116" width="300" height="30" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="180" y="135" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">CS = STAR[47:32] = 0x28, SS = 0x30</text>
+<rect x="30" y="154" width="300" height="30" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="180" y="173" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">RIP = LSTAR (syscall_entry)</text>
+<rect x="30" y="192" width="300" height="30" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="180" y="211" text-anchor="middle" fill="#F0C9C9" font-size="10">RSP unchanged: still the user stack</text>
+<rect x="390" y="40" width="300" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="540" y="59" text-anchor="middle" fill="#B5D4F4" font-size="10" class="mono">RIP = RCX,  RFLAGS = R11</text>
+<rect x="390" y="78" width="300" height="30" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="540" y="97" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">CS = STAR[63:48] + 16 | 3 = 0x53</text>
+<rect x="390" y="116" width="300" height="30" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="540" y="135" text-anchor="middle" fill="#CECBF6" font-size="10" class="mono">SS = STAR[63:48] + 8 | 3 = 0x4b</text>
+<rect x="390" y="154" width="300" height="30" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="540" y="173" text-anchor="middle" fill="#F0C9C9" font-size="10">RSP unchanged: kernel must restore it</text>
+<rect x="390" y="192" width="300" height="30" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="540" y="211" text-anchor="middle" fill="#F0C9C9" font-size="10">RCX must be canonical (Intel: #GP in ring 0)</text>
+<text x="360" y="258" text-anchor="middle" class="lbl" font-size="9.5">no stack switch, no frame pushed, no TSS or IDT read: that is why it is fast</text>
+<text x="360" y="276" text-anchor="middle" class="lbl" font-size="9.5">STAR = 0x0040002800000000 in cavOS (GDT_USER_CODE - 16 = 0x40, GDT_KERNEL_CODE = 0x28)</text>
+</svg>
+<figcaption>Việc CPU làm cho <code>syscall</code> và <code>sysret</code>. Mọi thứ còn lại kernel phải tự làm.</figcaption>
+</figure>
 <ul>
-<li>[ ] swapgs để lấy kernel GS base?</li>
-<li>[ ] Bảng dispatch syscall đặt ở đâu?</li>
+<li><code>KERNEL_GS_BASE = &amp;threadInfo</code>: chỗ <code>syscall_entry</code> sẽ đọc stack kernel. <code>threadInfo</code> chỉ có hai trường: <code>syscall_stack</code> (ở <code>gs:0</code>) và <code>lapic_id</code>.</li>
+<li><code>FMASK = IF | DF</code>: kernel vào với ngắt tắt, nên không ngắt nào rơi vào lúc RSP còn là stack user.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="entry">3. <code>syscall_entry</code>: tự đổi stack, tự dựng khung</h3>
+<div class="code"><div class="code-bar">asm</div><pre><code>; cpu/isr.asm (NASM)
+syscall_entry:
+  swapgs
+  mov cr2, rax ; use cr2 as an extra register
+  mov rax, qword [gs:0] ; thread pointer
+  xchg rsp, rax ; switch stack ptrs
+  push rax                 ; the user's RSP
+  mov rax, cr2
+
+  ; mimic: interrupt stuff
+  push qword 0  ; x5: ss, rsp, rflags, cs, rip
+  ...
+  push qword 0 ; error
+  push qword 0 ; interrupt
+
+  push rax
+  push rbx
+  push rcx                 ; user RIP
+  ...
+  push r11                 ; user RFLAGS
+  ...
+  mov rbp, ds
+  push rbp
+
+  mov rdi, rsp
+  call syscallHandler
+  cli ; important to avoid race conditions
+
+  pop rbp
+  mov ds, ebp
+  mov es, ebp
+  pop r15
+  ...
+  pop rax
+  add rsp, 16      ; pop error code and interrupt number
+  add rsp, 40      ; pop other interrupt stuff
+  pop rsp ; reset rsp
+  o64 sysret</code></pre></div>
 <ul>
-<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3 — SYSCALL/SYSRET, MSR STAR/LSTAR/FMASK.</li>
+<li><code>swapgs</code> trước tiên: lúc này mọi thanh ghi đa dụng đều là của user, chỉ có <code>%gs:0</code> là đọc được mà không phá gì.</li>
+<li>Cần một thanh ghi tạm để đổi stack mà RAX đang giữ số syscall, nên cavOS cất RAX vào <code>CR2</code> (thanh ghi địa chỉ page fault) trong ba lệnh. Hợp lệ ở ring 0 vì ngắt đang tắt; cách thường
+gặp hơn là cất RSP user vào một ô trong <code>threadInfo</code>.</li>
+<li>Khung dựng có cùng hình <code>AsmPassedInterrupt</code> với khung ngắt (5 ô CPU đẩy, nhưng để 0), nên <code>syscallHandler</code> và code signal dùng chung struct. RSP của user nằm ngay sau khung.</li>
+<li>Đường ra <strong>không</strong> có <code>swapgs</code>. Mục 6 và Đọc thêm nói hệ quả.</li>
 </ul>
+
+<h3 id="handler">4. <code>syscallHandler()</code> và bảng syscall</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>size_t   syscalls[MAX_SYSCALLS] = {0};        // MAX_SYSCALLS = 450
+
+void registerSyscall(uint32_t id, void *handler) {
+  if (id &gt; MAX_SYSCALLS) { ... panic(); }
+  if (syscalls[id]) { ... panic(); }          // duplicate
+  syscalls[id] = (size_t)handler;
+  syscallCnt++;
+}
+
+void syscallHandler(AsmPassedInterrupt *regs) {
+  wrmsr(MSRID_KERNEL_GSBASE, (size_t)&amp;threadInfo);
+  uint64_t *rspPtr = (uint64_t *)((size_t)regs + sizeof(AsmPassedInterrupt));
+  uint64_t  rsp = *rspPtr;
+  currentTask-&gt;systemCallInProgress = true;
+  currentTask-&gt;syscallRegs = regs;
+  currentTask-&gt;syscallRsp = rsp;
+
+  asm volatile("sti"); // do other task stuff while we're here!
+
+  uint64_t id = regs-&gt;rax;
+  if (id &gt; MAX_SYSCALLS) { regs-&gt;rax = -1; goto cleanup; }
+  size_t handler = syscalls[id];
+  if (!handler) { regs-&gt;rax = ERR(ENOSYS); ... goto cleanup; }
+
+  long int ret = ((SyscallHandler)(handler))(regs-&gt;rdi, regs-&gt;rsi, regs-&gt;rdx,
+                                             regs-&gt;r10, regs-&gt;r8, regs-&gt;r9);
+  ...
+  regs-&gt;rax = ret;
+cleanup:
+  currentTask-&gt;systemCallInProgress = false;
+  // now safely handle whatever signal is left
+  signalsPendingHandleSys(currentTask, rspPtr, regs);
+}
+
+// syscalls/linux/syscalls_fs.c (one of many files)
+#define SYSCALL_WRITE 1
+...
+  registerSyscall(SYSCALL_WRITE, syscallWrite);</code></pre></div>
+<ul>
+<li>Số syscall giống Linux x86-64 (1 <code>write</code>, 39 <code>getpid</code>, 60 <code>exit</code>...), để chương trình biên dịch cho Linux với musl chạy được. Số chưa có hàm trả <code>-ENOSYS</code>; vài số được
+"giả vờ thành công" (trả 0) cho chương trình khỏi dừng.</li>
+<li><code>sti</code> ngay đầu handler: syscall có thể chạy lâu (đọc đĩa, chờ phím), và timer vẫn đổi task trong lúc đó. Task đang trong syscall bị cắt ở ring 0, trên stack syscall của nó.</li>
+<li>Kết quả ghi đè <code>regs-&gt;rax</code> trong khung; đường ra pop khung, nên RAX của user nhận kết quả.</li>
+</ul>
+
+<h3 id="stack">5. Stack syscall riêng cho mỗi task</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// multitasking/task.c (taskCreate)
+  target-&gt;whileSyscallRsp = (uint64_t)syscalltssRsp + syscalltssRspSize;
+
+// multitasking/schedule.c
+  // Change TSS rsp0 (software multitasking)
+  tssPtr-&gt;rsp0 = next-&gt;whileTssRsp;
+  threadInfo.syscall_stack = next-&gt;whileSyscallRsp;
+
+  // Apply new MSRIDs
+  wrmsr(MSRID_FSBASE, next-&gt;fsbase);
+  wrmsr(MSRID_GSBASE, next-&gt;gsbase);
+  wrmsr(MSRID_KERNEL_GSBASE, (size_t)&amp;threadInfo);</code></pre></div>
+<p>Mỗi task có hai stack kernel: stack TSS (<code>whileTssRsp</code>, CPU dùng khi có <em>ngắt</em> từ ring 3) và stack syscall (<code>whileSyscallRsp</code>, <code>syscall_entry</code> dùng). Mỗi lần đổi task,
+scheduler ghi đỉnh stack syscall của task mới vào <code>threadInfo</code>, nên <code>%gs:0</code> luôn là stack của task đang chạy. Scheduler cũng nạp FS/GS base của task mới (musl dùng FS cho
+thread-local storage).</p>
+
+<h3 id="int80">6. Cửa cũ: <code>int 0x80</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/isr.c (initiateISR)
+  set_idt_gate(0x80, (uint64_t)isr128, 0xEE);   // DPL 3: ring 3 may use "int 0x80"
+
+// cpu/isr.c (handle_interrupt)
+  } else if (cpu-&gt;interrupt == 0x80) {
+    syscallHandler(cpu);
+  }</code></pre></div>
+<p><code>int 0x80</code> đi qua IDT như mọi ngắt: CPU đổi sang RSP0 của TSS, đẩy 5 qword, stub dựng khung. cavOS gọi cùng <code>syscallHandler</code>. Cổng có DPL 3 để ring 3 được phép dùng lệnh
+<code>int</code> với số này; các cổng khác DPL 0, ring 3 gọi sẽ bị #GP.</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x0a chép nguyên đường vào/ra của cavOS, rồi cho vài chương trình ring 3 kể lại những gì chúng thấy.</em></p>
+<p><a href="../../thuc_hanh/lab_0x0a_fast_syscalls.html">Lab 0x0a - Fast Syscalls</a>: <code>syscall.c</code> theo <code>fastSyscall.c</code> + <code>isr.asm</code> + <code>syscalls.c</code>; task ring 3 từ vài chục byte asm;
+3 bản build.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0a-fast-syscalls
+make image &amp;&amp; make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35</code>, TCG; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[syscalls] MSRs after initiateSyscallInst(): EFER 0xd01 (SCE=1) STAR 0x40002800000000 (SYSCALL CS=0x28 SS=0x30; SYSRET CS=0x53 SS=0x4b)
+[syscalls]      LSTAR 0xffffffff8000d0e0 (syscall_entry = 0xffffffff8000d0e0) FMASK 0x600 (IF|DF) GS_BASE 0x0 KERNEL_GS_BASE 0xffffffff8006d210 (&amp;threadInfo = 0xffffffff8006d210)
+[t=  326] [3 main   ] write(1): hello from ring 3 (CPL 3) via SYSCALL
+[t=  329] [3 main   ] in the kernel: CS=0x28 SS=0x30 RSP=0xfffffe8001012ed0 (syscall stack top 0xfffffe8001013000)
+[t=  331] [3 main   ]   RCX=0x8000000032 = return address | R11=0x202 vs user RFLAGS 0x202 | saved user RSP=0x800000000000 (match)
+[t=  334] [3 main   ] back in ring 3 after sysret: CS=0x53 SS=0x4b RCX=0x8000000032 R11=0x202; GS_BASE seen by this syscall's entry 0xffffffff8006d210 (= GS in ring 3 just before it)
+[t=  369] [3 main   ] benchmark, 10000 x getpid: SYSCALL 21616848 TSC ticks (2161 per call), int 0x80 46681846 (4668 per call)
+[kernel] task 5 (gs1): 18 bytes of code at VA 0x8000000000, CS=0x53 SS=0x4b RSP=0x800000000000, syscall stack top 0xfffffe800101d000
+[isr] vector 0xe #PF Page Fault  err=0x5
+      RIP=0x0000008000000007 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+      CR2=0xffffffff8006d210  err bits: P=1 W=0 U=1 RSVD=0 I=0  (protection violation)</code></pre></div>
+<ul>
+<li>STAR, LSTAR, FMASK đúng như mục 2 tính. RCX trong kernel là địa chỉ ngay sau lệnh <code>syscall</code>; R11 là RFLAGS của user.</li>
+<li>Trong QEMU TCG, <code>int 0x80</code> tốn khoảng 2–4 lần <code>syscall</code> cho cùng một <code>getpid</code>.</li>
+<li>Chương trình <code>gs1</code> làm một <code>getpid</code> rồi đọc <code>%gs:0</code>: page fault ở CR2 = <code>&amp;threadInfo</code>. GS của ring 3 trỏ vào kernel, vì đường ra không <code>swapgs</code> lại.</li>
+</ul>
+<p>Hai bản build cố ý: <code>DEMO=-DINT80_STI</code> (đường <code>int 0x80</code> bật ngắt như cavOS: khung của user bị đè, chương trình không về được ring 3) và <code>DEMO=-DBAD_SYSRET</code>
+(RCX không canonical trước <code>sysret</code>).</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu.</em></p>
+<details class="quiz"><summary>GDT_USER_CODE = 0x50, GDT_KERNEL_CODE = 0x28. Tính STAR và CS/SS mà <code>syscall</code>, <code>sysret</code> nạp.</summary>
+<p>STAR[63:48] = <code>0x50 - 16 = 0x40</code>, STAR[47:32] = <code>0x28</code>: STAR = <code>0x0040002800000000</code>. <code>syscall</code>: CS = <code>0x28</code>, SS = <code>0x30</code>. <code>sysret</code>: CS =
+<code>(0x40 + 16) | 3 = 0x53</code>, SS = <code>(0x40 + 8) | 3 = 0x4b</code>.</p></details>
+<details class="quiz"><summary>Vì sao tham số thứ tư của syscall nằm ở R10 chứ không ở RCX như hàm C thường?</summary>
+<p><code>syscall</code> ghi đè RCX bằng địa chỉ quay về (và R11 bằng RFLAGS). Giá trị chương trình để trong RCX bị mất trước khi kernel kịp đọc, nên ABI chuyển tham số thứ tư sang R10.</p></details>
+<details class="quiz"><summary>Vì sao mỗi task cần stack syscall riêng, thay vì một stack syscall chung cho cả kernel?</summary>
+<p>Handler <code>sti</code> và có thể bị cắt giữa chừng; task khác chạy và cũng gọi syscall. Nếu dùng chung một stack, syscall của task thứ hai đè lên khung và biến cục bộ của syscall đang dở của task
+thứ nhất.</p></details>
+<details class="quiz"><summary><code>syscall_entry</code> đọc <code>%gs:0</code>. Nếu chương trình user tự đặt GS base của nó (ví dụ qua <code>arch_prctl</code>), lần syscall sau còn đúng không?</summary>
+<p>Vẫn đúng: <code>swapgs</code> tráo GS của user (giá trị mới) với <code>KERNEL_GS_BASE</code> (= <code>&amp;threadInfo</code>), nên kernel vẫn có <code>threadInfo</code>. Cái mất là GS của user: sau syscall nó thành
+<code>&amp;threadInfo</code> (không swap lại), tới lần đổi task kế tiếp scheduler mới nạp lại <code>gsbase</code> của task.</p></details>
+<details class="quiz"><summary>Trong <code>syscall_entry</code>, bỏ lệnh <code>cli</code> trước đoạn pop. Chuyện gì có thể xảy ra?</summary>
+<p>Một ngắt có thể tới giữa lúc đang pop hoặc ngay sau <code>pop rsp</code>, khi RSP đã là stack user mà CPU còn ở ring 0: khung ngắt bị đẩy lên stack user. <code>sysret</code> tự bật lại IF từ R11 khi đã ở
+ring 3.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, những chỗ nguy hiểm trong đường syscall của cavOS (có lab chạy thật làm bằng chứng), và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>SYSCALL hay SYSENTER?</strong> <code>syscall</code>/<code>sysret</code> (chuẩn của AMD64, CPU Intel 64-bit đều có). <code>sysenter</code> là lệnh 32-bit của Intel; cavOS không dùng.</li>
+<li><strong>Có còn <code>int 0x80</code>?</strong> Có, cổng DPL 3 gọi cùng <code>syscallHandler</code>.</li>
+<li><strong>Bảng syscall theo số nào?</strong> Theo số của Linux x86-64; 99 trên 450 số có hàm.</li>
+</ul>
+
+<h3 id="diem-yeu">Những chỗ nguy hiểm</h3>
+<ul>
+<li><strong>GS không được trả lại.</strong> Đường ra thiếu <code>swapgs</code>, và handler ghi <code>KERNEL_GS_BASE = &amp;threadInfo</code>. Sau syscall đầu tiên, GS base của chương trình user là địa chỉ của
+<code>threadInfo</code> (Lab 0x0a đo được: CR2 = <code>&amp;threadInfo</code>). User không đọc được nội dung (trang kernel), nhưng biết được địa chỉ kernel, điều KASLR muốn giấu, và mất GS của mình.</li>
+<li><strong><code>int 0x80</code> với <code>sti</code>.</strong> Đường <code>int 0x80</code> chạy trên stack TSS; khi handler <code>sti</code> và bị cắt, lần chạy lại <code>schedule()</code> chép khung đã lưu lên đỉnh stack TSS, đè
+khung <code>int 0x80</code> của user. Lab 0x0a bản <code>INT80_STI</code> treo đúng ở đó. Chương trình musl không dùng <code>int 0x80</code> nên cavOS ít khi gặp.</li>
+<li><strong>Kiểm số syscall lệch một.</strong> <code>id &gt; MAX_SYSCALLS</code> cho qua <code>id == 450</code>, rồi đọc <code>syscalls[450]</code>, ô nằm ngay sau bảng 450 phần tử, và gọi giá trị đó như một hàm.</li>
+<li><strong>RCX từ <code>sigreturn</code> không được kiểm.</strong> <code>syscalls/signals.c</code> chép RCX từ khung trên stack user (<code>passed-&gt;rcx = ucontext-&gt;rcx</code>) rồi về bằng <code>sysret</code>. Trên CPU
+Intel, RCX không canonical làm <code>sysret</code> gây #GP khi còn ở ring 0 nhưng RSP đã là của user (CVE-2012-0217). Lab 0x0a bản <code>BAD_SYSRET</code>: QEMU TCG báo #GP ở ring 3, nên trên QEMU
+không thấy được.</li>
+<li>Với <code>int 0x80</code>, <code>syscallHandler</code> vẫn đọc "RSP user" ở ngay sau khung, nơi không có RSP nào cả (khung ngắt đã chứa RSP thật ở <code>usermode_rsp</code>).</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Selector, TSS: <a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a> · khung ngắt: <a href="bai_09_idt_interrupts.html">Bài 9</a> · stack task, <code>schedule()</code>:
+<a href="bai_12_multitasking_scheduler.html">Bài 12</a> · syscall file: <a href="bai_15_ahci_filesystems.html">Bài 15</a> · socket: <a href="bai_13_networking.html">Bài 13</a> · FPU khi đổi task:
+<a href="bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a> · chương trình ring 3 thật: <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x0a_fast_syscalls.html">Lab 0x0a - Fast Syscalls</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.2B: <strong>SYSCALL</strong>, <strong>SYSRET</strong> (pseudo-code, điều kiện #GP khi RCX không canonical), <strong>SWAPGS</strong>; Vol.2A: <strong>CPUID</strong> leaf
+<code>80000001h</code> EDX bit 11.</li>
+<li>Intel SDM Vol.3A §5.8.8 "Fast System Calls in 64-Bit Mode": STAR, LSTAR, FMASK, EFER.SCE; Vol.4: số MSR (<code>C0000080h</code>–<code>C0000084h</code>, <code>C0000100h</code>–<code>C0000102h</code>).</li>
+<li>System V AMD64 ABI, phụ lục A "Linux Conventions": thanh ghi của syscall (RAX, RDI, RSI, RDX, R10, R8, R9), kết quả âm <code>-errno</code>.</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 16 - Fast Syscalls</footer>
 </main>

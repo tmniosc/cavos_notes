@@ -3,40 +3,255 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 17 — SSE &amp; FPU · Học cavOS</title>
+<title>Bài 17 - SSE &amp; FPU · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_17_sse_fpu.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 17 — SSE &amp; FPU</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, cpu, fpu</span></div>
+    <h1>Bài 17 - SSE &amp; FPU</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, x87, sse, avx, cr0, cr4, xcr0, fxsave, xsave, context switch</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateSSE()</code> · <strong>Spec:</strong> <a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1/Vol.3</p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Bật đơn vị tính dấu phẩy động / vector (SSE/FPU)</strong> để code dùng float/SIMD chạy được mà không fault. Mặc
-định long mode chưa bật; phải set CR0/CR4. Và phải lưu/khôi phục trạng thái FPU khi đổi task
-(<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>) — bắt buộc trước khi chạy userspace dùng float (<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateSSE()</code> (<code>cpu/system.c</code>), đoạn "Save &amp; load appropriate FPU state" trong <code>schedule()</code> (<code>multitasking/schedule.c</code>), khởi tạo
+<code>fpuenv</code> trong <code>taskCreate()</code> (<code>multitasking/task.c</code>) · <strong>Phụ thuộc:</strong> đổi task từ <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>, task
+ring 3 từ <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>.</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Cho chương trình dùng phép tính số thực và lệnh SIMD, và giữ đúng các thanh ghi đó khi đổi task.</em></p>
+<p>Chương trình biên dịch cho x86-64 dùng SSE cho mọi phép tính <code>float</code>/<code>double</code>, và <code>memcpy</code>/<code>strlen</code> của libc thường dùng SSE hoặc AVX. Các lệnh đó gây #UD cho tới khi
+kernel bật chúng trong CR0, CR4 và XCR0. Bật xong lại thêm một trách nhiệm: thanh ghi FPU/SSE/AVX là một bộ duy nhất của CPU, nên mỗi lần đổi task kernel phải cất bộ của task cũ và nạp bộ
+của task mới. Bài này đọc cả hai phần trong cavOS.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>CPU có một bàn tính lớn (thanh ghi x87, XMM, YMM). Lúc mới bật máy, bàn tính bị khoá: ai đụng vào là báo lỗi. <code>initiateSSE()</code> mở khoá. Bàn tính chỉ có một cái, mà nhiều người
+(task) thay nhau dùng. Mỗi lần đổi người, phải chụp lại các con số đang nằm trên bàn của người cũ, và bày lại số của người mới. Nếu tấm ảnh chụp thiếu một góc (cavOS chụp bằng
+<code>fxsave</code>, không thấy nửa trên của YMM), thì người quay lại sẽ thấy góc đó mang số của người khác.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba lớp thanh ghi, bốn chỗ bật, hai lệnh lưu.</em></p>
 <ul>
-<li>Bật SSE: CR0 (clear EM, set MP), CR4 (OSFXSR, OSXMMEXCPT).</li>
-<li>(Tùy) AVX qua XCR0/XSAVE.</li>
-<li>Lưu/khôi phục trạng thái FPU/SSE khi context switch (<code>fxsave</code>/<code>fxrstor</code>).</li>
+<li><strong>Ba lớp thanh ghi.</strong> x87: 8 thanh ghi 80 bit dạng stack (<code>ST(0)</code>–<code>ST(7)</code>) và từ điều khiển FCW. SSE: 16 thanh ghi <code>XMM0</code>–<code>XMM15</code> 128 bit và thanh ghi trạng
+thái <code>MXCSR</code>. AVX: mở rộng thành <code>YMM0</code>–<code>YMM15</code> 256 bit; nửa thấp của <code>YMMn</code> chính là <code>XMMn</code>.</li>
+<li><strong>Chỗ bật.</strong> <code>CR0.EM</code> = 0 (không giả lập FPU), <code>CR0.MP</code> = 1, <code>CR0.NE</code> = 1 (lỗi x87 báo bằng #MF thay vì chân IRQ cũ); <code>CR4.OSFXSR</code> (OS biết lưu bằng
+<code>fxsave</code>, cho phép lệnh SSE) và <code>CR4.OSXMMEXCPT</code> (OS xử lý #XM); <code>CR4.OSXSAVE</code> (cho phép <code>xsave</code>/<code>xgetbv</code>/<code>xsetbv</code>); <code>XCR0</code> chọn thành phần nào
+được dùng: bit 0 x87, bit 1 SSE, bit 2 AVX.</li>
+<li><strong>Hai lệnh lưu.</strong> <code>fxsave</code>/<code>fxrstor</code>: vùng 512 byte căn 16, chứa x87, XMM0–15 và MXCSR. <code>xsave</code>/<code>xrstor</code>: vùng căn 64, cỡ do CPUID leaf <code>0xD</code> báo, lưu mọi thành
+phần trong mặt nạ <code>EDX:EAX</code> AND <code>XCR0</code>, kể cả nửa cao YMM.</li>
+<li><strong>Đã gặp:</strong> <code>schedule()</code> cất khung thanh ghi đa dụng của task cũ và dựng khung của task mới ở <a href="bai_12_multitasking_scheduler.html#context-switch">Bài 12</a>. Thanh ghi FPU
+nằm ngoài khung đó, nên cần một bước riêng.</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Bật trong <code>initiateSSE()</code>, cấp vùng lưu trong <code>taskCreate()</code>, lưu/nạp trong <code>schedule()</code>.</em></p>
+<p>File: <code>entry/kernel.c</code>, <code>cpu/system.c</code>, <code>cpu/sse.asm</code>, <code>include/task.h</code>, <code>multitasking/task.c</code>, <code>multitasking/schedule.c</code>, <code>syscalls/signals.c</code>,
+<code>src/kernel/Makefile</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initiateSyscallInst();
+  initiateSyscalls();
+
+  initiateSSE();
+  // initiateTasks();
+
+  testingInit();
+  ...
+  while (1)
+    run("/bin/bash", true, 0, 0);</code></pre></div>
+<p>SSE được bật ngay trước khi chạy chương trình user đầu tiên. Trước đó chỉ có kernel thread, mà kernel không bao giờ dùng FPU (mục 3).</p>
+
+<h3 id="initiate-sse">2. <code>initiateSSE()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiateSSE() {
+  if (!checkSSE()) { ... panic(); }      // CPUID.1 EDX bit 25
+  if (!checkFXSR()) { ... panic(); }     // CPUID.1 EDX bit 24
+
+  // enable SSE
+  asm volatile("mov %%cr0, %%rax;"
+               "and $0xFFFB, %%ax;"          // CR0.EM = 0
+               "or  $2, %%eax;"              // CR0.MP = 1
+               "mov %%rax, %%cr0;"
+               "mov %%cr4, %%rax;"
+               "or  $0b11000000000, %%rax;"  // CR4.OSFXSR (bit 9) | CR4.OSXMMEXCPT (bit 10)
+               "mov %%rax, %%cr4;"
+               : : : "rax");
+
+  // set NE in cr0 and reset x87 fpu
+  asm volatile("fninit;"
+               "mov %%cr0, %%rax;"
+               "or $0b100000, %%rax;"        // CR0.NE (bit 5)
+               "mov %%rax, %%cr0;"
+               : : : "rax");
+
+  // Do AVX stuff under certain conditions (qemu and prolly other stuff fake
+  // not having support but all AVX instructions succeed)
+  uint32_t eax = 1, ebx = 0, ecx = 0, edx = 0;
+  cpuid(&amp;eax, &amp;ebx, &amp;ecx, &amp;edx);
+  if (ecx &amp; (1 &lt;&lt; 26)) {                    // XSAVE
+    uint64_t cr4;
+    asm volatile("mov %%cr4, %0" : "=r"(cr4));
+    cr4 |= (uint32_t)1 &lt;&lt; 18;                // CR4.OSXSAVE
+    asm volatile("mov %0, %%cr4" : : "r"(cr4));
+    if (ecx &amp; (1 &lt;&lt; 28)) {                  // AVX
+      uint32_t xcr0_lo = 0x7; // x87 (bit 0), SSE (bit 1), AVX (bit 2)
+      uint32_t xcr0_hi = 0;
+      asm volatile("xsetbv" ::"c"(0), "a"(xcr0_lo), "d"(xcr0_hi));
+    }
+  }
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-ssebits" role="img" aria-label="Control bits set by initiateSSE: CR0 bit 1 MP set, bit 2 EM cleared, bit 5 NE set; CR4 bit 9 OSFXSR, bit 10 OSXMMEXCPT, bit 18 OSXSAVE; XCR0 bits 0, 1, 2 for x87, SSE and AVX state. Measured in the lab: CR0 0x80010011 to 0x80010033, CR4 0x20 to 0x40620, XCR0 0x7" width="100%" viewBox="0 0 720 230" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-ssebits .lbl{fill:#c2c0b6;} #svg-ssebits .mono{font-family:'SF Mono',Consolas,monospace;}</style>
+</defs>
+<text x="30" y="34" class="lbl" font-size="11" font-weight="600">CR0</text>
+<rect x="80" y="18" width="140" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="150" y="37" text-anchor="middle" fill="#C6E7CC" font-size="9.5" class="mono">bit 1 MP = 1</text>
+<rect x="230" y="18" width="140" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="300" y="37" text-anchor="middle" fill="#C6E7CC" font-size="9.5" class="mono">bit 2 EM = 0</text>
+<rect x="380" y="18" width="140" height="28" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="450" y="37" text-anchor="middle" fill="#C6E7CC" font-size="9.5" class="mono">bit 5 NE = 1</text>
+<text x="540" y="37" class="lbl" font-size="9.5">0x80010011 -&gt; 0x80010033</text>
+<text x="30" y="88" class="lbl" font-size="11" font-weight="600">CR4</text>
+<rect x="80" y="72" width="140" height="28" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="150" y="91" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">bit 9 OSFXSR</text>
+<rect x="230" y="72" width="140" height="28" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="300" y="91" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">bit 10 OSXMMEXCPT</text>
+<rect x="380" y="72" width="140" height="28" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="450" y="91" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">bit 18 OSXSAVE</text>
+<text x="540" y="91" class="lbl" font-size="9.5">0x20 -&gt; 0x40620</text>
+<text x="30" y="142" class="lbl" font-size="11" font-weight="600">XCR0</text>
+<rect x="80" y="126" width="140" height="28" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="150" y="145" text-anchor="middle" fill="#CECBF6" font-size="9.5" class="mono">bit 0 x87</text>
+<rect x="230" y="126" width="140" height="28" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="300" y="145" text-anchor="middle" fill="#CECBF6" font-size="9.5" class="mono">bit 1 SSE</text>
+<rect x="380" y="126" width="140" height="28" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="450" y="145" text-anchor="middle" fill="#CECBF6" font-size="9.5" class="mono">bit 2 AVX</text>
+<text x="540" y="145" class="lbl" font-size="9.5">= 0x7</text>
+<text x="360" y="190" text-anchor="middle" class="lbl" font-size="9.5">OSFXSR = 0: every SSE instruction is #UD; OSXSAVE = 0 or XCR0.AVX = 0: every AVX instruction is #UD</text>
+<text x="360" y="208" text-anchor="middle" class="lbl" font-size="9.5">values measured in Lab 0x0b (QEMU TCG, -cpu max)</text>
+</svg>
+<figcaption>Những bit <code>initiateSSE()</code> đặt, với giá trị đo được trong Lab 0x0b.</figcaption>
+</figure>
+<p><code>cpu/sse.asm</code> có một bản asm cũ (<code>asm_enable_SSE</code>) làm phần CR0/CR4; nay lời gọi tới nó bị comment, phần đó chuyển thành inline asm như trên.</p>
+
+<h3 id="kernel-no-sse">3. Kernel không bao giờ dùng FPU</h3>
+<div class="code"><div class="code-bar">make</div><pre><code># src/kernel/Makefile
+CFLAGS = -m64 -g -c -ffreestanding -Wall -Werror -fcommon -Iinclude/ ... -fPIE -mno-80387 \
+    -mno-mmx \
+    -mno-sse \
+    ...
+    -mno-sse2 \
+    -mno-red-zone -fno-stack-protector \</code></pre></div>
+<p>Compiler bị cấm sinh lệnh x87/MMX/SSE trong code kernel. Nhờ vậy, khi một ngắt hay syscall đưa CPU vào kernel, thanh ghi FPU vẫn nguyên là của task user vừa chạy, và kernel không phải
+lưu chúng ở mỗi lần vào. Chỉ lúc đổi task mới phải lưu.</p>
+
+<h3 id="task">4. Vùng lưu trong mỗi task</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// include/task.h
+  __attribute__((aligned(16))) uint8_t fpuenv[512];
+  uint32_t                             mxcsr;
+
+// multitasking/task.c (taskCreate)
+  memset(target-&gt;fpuenv, 0, 512);
+  ((uint16_t *)target-&gt;fpuenv)[0] = 0x37f;     // x87 FCW: all exceptions masked, 64-bit precision
+  target-&gt;mxcsr = 0x1f80;                      // MXCSR: all SSE exceptions masked, round to nearest</code></pre></div>
+<p>512 byte căn 16 đúng là định dạng của <code>fxsave</code>. FCW <code>0x37f</code> và MXCSR <code>0x1f80</code> là giá trị mặc định sau <code>fninit</code> và sau reset: task mới bắt đầu với FPU "sạch".</p>
+
+<h3 id="schedule">5. Lưu và nạp khi đổi task</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// multitasking/schedule.c
+  // Save &amp; load appropriate FPU state
+  if (!old-&gt;kernel_task) {
+    asm volatile(" fxsave %0 " ::"m"(old-&gt;fpuenv));
+    asm("stmxcsr (%%rax)" : : "a"(&amp;old-&gt;mxcsr));
+  }
+
+  if (!next-&gt;kernel_task) {
+    asm volatile(" fxrstor %0 " ::"m"(next-&gt;fpuenv));
+    asm("ldmxcsr (%%rax)" : : "a"(&amp;next-&gt;mxcsr));
+  }</code></pre></div>
 <ul>
-<li>[ ] Lazy FP save hay eager?</li>
-<li>[ ] XSAVE area kích thước (CPUID)?</li>
+<li>Chỉ task user mới lưu/nạp: kernel thread không dùng FPU (mục 3).</li>
+<li>Lưu <em>mỗi lần</em> đổi task (eager), không đợi task chạm FPU (lazy, dùng <code>CR0.TS</code> để bắt lần chạm đầu). Đơn giản và an toàn, đổi lại tốn một <code>fxsave</code>/<code>fxrstor</code> mỗi tick.</li>
+<li><code>fork</code> chép <code>fpuenv</code> sang task con (sau khi <code>fxsave</code> trạng thái hiện tại); xử lý signal lưu và nạp lại vùng này quanh handler signal (<code>syscalls/signals.c</code>).</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x0b bật FPU như cavOS, rồi để hai task ring 3 tranh nhau một bộ thanh ghi.</em></p>
+<p><a href="../../thuc_hanh/lab_0x0b_sse_fpu.html">Lab 0x0b - SSE &amp; FPU</a>: <code>sse.c</code> theo <code>initiateSSE()</code>, lưu FPU trong <code>schedule()</code> như cavOS; hai chương trình giữ mẫu riêng
+trong <code>YMM0</code> và <code>ST(0)</code>; ba cách lưu để so.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0b-sse-fpu
+make image &amp;&amp; make run           # QEMU -cpu max (AVX)</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1 TCG <code>-cpu max</code>; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[sse] left by Limine: CR0 0x80010011 (EM=0 MP=0 TS=0 NE=0), CR4 0x20 (OSFXSR=0 OSXMMEXCPT=0 OSXSAVE=0)
+[isr] vector 0x6 #UD Invalid Opcode  err=0x0
+      RIP=0x0000008000000000 CS=0x53 RFLAGS=0x10202 RSP=0x0000800000000000 SS=0x4b
+[sse] CPUID.0xD: XSAVE area for the bits now in XCR0 = 832 bytes (fxsave: 512)
+[sse] after initiateSSE(): CR0 0x80010033 (EM=0 MP=1 TS=0 NE=1), CR4 0x40620 (OSFXSR=1 OSXMMEXCPT=1 OSXSAVE=1), XCR0 0x7
+
+########## Run 1: make run (fxsave/fxrstor, like cavOS)
+[t=  411] [6 fpu_B  ] pattern 0x55: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 32 times
+[t=  417] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 40, x87 ST(0) wrong 0, switched in 35 times
+########## Run 2: DEMO=-DXSAVE
+[t=  438] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 0, YMM0 high 128 bits wrong 0, x87 ST(0) wrong 0, switched in 36 times
+########## Run 3: DEMO=-DNO_FPU_SAVE
+[t=  423] [5 fpu_A  ] pattern 0xaa: 40 checks after being switched out and back in: XMM0 (low 128 bits) wrong 40, YMM0 high 128 bits wrong 40, x87 ST(0) wrong 40, switched in 32 times</code></pre></div>
 <ul>
-<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1 — SSE/AVX; Vol.3 — control register, XSAVE.</li>
+<li>Limine để <code>OSFXSR = 0</code>: một lệnh SSE trong ring 3 lúc đó là #UD.</li>
+<li>Với <code>fxsave</code> như cavOS: XMM0 và x87 đúng, nhưng nửa cao YMM0 của <code>fpu_A</code> sai cả 40 lần: nó mang giá trị của <code>fpu_B</code>.</li>
+<li>Với <code>xsave</code>: 0 lỗi. Không lưu gì: sai mọi thứ.</li>
 </ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bốn câu.</em></p>
+<details class="quiz"><summary>Kernel quên đặt <code>CR4.OSFXSR</code>. Một chương trình C chỉ làm phép cộng <code>double</code> chạy được không?</summary>
+<p>Không. x86-64 tính <code>double</code> bằng SSE (<code>addsd</code>), và mọi lệnh SSE là #UD khi <code>OSFXSR = 0</code>. Chỉ có x87 chạy được.</p></details>
+<details class="quiz"><summary>Vì sao vùng <code>fxsave</code> phải căn 16 byte, còn <code>xsave</code> căn 64?</summary>
+<p>Đặc tả lệnh yêu cầu vậy: địa chỉ không căn đúng gây #GP. Vùng <code>fxsave</code> là định dạng cố định 512 byte; vùng <code>xsave</code> có header ở offset 512 và các thành phần mở rộng, cỡ tuỳ XCR0.</p></details>
+<details class="quiz"><summary>XCR0 = 7 nhưng scheduler dùng <code>fxsave</code>. Chương trình nào bị ảnh hưởng?</summary>
+<p>Chương trình dùng thanh ghi YMM (lệnh AVX 256 bit), khi có task khác cũng dùng YMM chạy xen giữa. Nửa cao YMM không được lưu, nên mang giá trị của task chạy sau cùng. Chương trình chỉ
+dùng SSE 128 bit không bị.</p></details>
+<details class="quiz"><summary>Lưu FPU kiểu eager (mỗi lần đổi task) tốn gì, và lazy (dùng <code>CR0.TS</code>) tiết kiệm gì?</summary>
+<p>Eager: một <code>fxsave</code> + <code>fxrstor</code> (vài trăm byte) mỗi lần đổi task user, kể cả khi task không dùng FPU. Lazy: đặt <code>CR0.TS</code> khi đổi task; lần đầu task chạm FPU gây #NM,
+handler mới lưu của người cũ và nạp của người mới. Tiết kiệm khi ít task dùng FPU, nhưng phức tạp hơn và có lỗ hổng rò rỉ thông tin trên CPU có thực thi suy đoán (LazyFP, 2018).</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, chỗ lệch giữa phần bật và phần lưu, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Lưu FPU kiểu eager hay lazy?</strong> Eager, mỗi lần đổi giữa các task user.</li>
+<li><strong>Có bật AVX không?</strong> Có, nếu CPUID báo XSAVE và AVX: <code>CR4.OSXSAVE</code> và <code>XCR0 = 7</code>.</li>
+<li><strong>Kernel có dùng SSE?</strong> Không, biên dịch với <code>-mno-sse -mno-sse2 -mno-80387 -mno-mmx</code>.</li>
+</ul>
+
+<h3 id="avx-khong-luu">Bật AVX nhưng không lưu nửa cao YMM</h3>
+<p><code>initiateSSE()</code> bật AVX (<code>XCR0 = 7</code>), nhưng <code>schedule()</code> lưu bằng <code>fxsave</code>, lệnh chỉ biết x87 và XMM. Nửa cao 128 bit của YMM0–15 không được lưu khi đổi task. Lab 0x0b
+đo được: hai task cùng dùng <code>YMM0</code>, task bị đổi ra thấy nửa cao mang giá trị của task kia ở 40/40 lần kiểm. Sửa: lưu bằng <code>xsave</code>/<code>xrstor</code> với vùng đủ cỡ (CPUID leaf
+<code>0xD</code>, 832 byte với XCR0 = 7) căn 64 byte, như bản <code>DEMO=-DXSAVE</code> của lab (0 lỗi). Code tạo task và <code>fork</code> cũng phải chép đủ vùng mới.</p>
+
+<h3 id="mxcsr">MXCSR được lưu hai lần</h3>
+<p>Vùng <code>fxsave</code> đã chứa MXCSR ở offset 24, và <code>fxrstor</code> nạp lại nó. <code>stmxcsr</code>/<code>ldmxcsr</code> riêng với trường <code>mxcsr</code> là thừa (vô hại). Task mới có MXCSR = 0 ở offset 24
+của vùng lưu (chỉ đặt <code>mxcsr = 0x1f80</code>), nên <code>fxrstor</code> nạp MXCSR = 0 (mọi ngoại lệ SSE được mở) rồi <code>ldmxcsr</code> sửa lại ngay sau đó.</p>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Đổi task: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a> · task ring 3: <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a> · chương trình user thật
+(musl dùng SSE trong <code>memcpy</code>): <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x0b_sse_fpu.html">Lab 0x0b - SSE &amp; FPU</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.1 ch.8 (x87), ch.10–11 (SSE, MXCSR), ch.13 "Managing State Using the XSAVE Feature Set" (XCR0, vùng XSAVE, CPUID leaf 0Dh), ch.14 (AVX).</li>
+<li>Vol.3A §2.5 (CR0: MP, EM, TS, NE; CR4: OSFXSR, OSXMMEXCPT, OSXSAVE) và chương "System Programming for Instruction Set Extensions and Processor Extended States" (bật SSE/AVX, lưu
+trạng thái khi đổi task).</li>
+<li>Vol.2: <strong>FXSAVE</strong>/<strong>FXRSTOR</strong> (bố cục 512 byte, MXCSR ở offset 24), <strong>XSAVE</strong>/<strong>XRSTOR</strong>, <strong>XSETBV</strong>/<strong>XGETBV</strong>, <strong>LDMXCSR</strong>/<strong>STMXCSR</strong>.</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 17 - SSE &amp; FPU</footer>
 </main>

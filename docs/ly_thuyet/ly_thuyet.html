@@ -18,16 +18,16 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p><em>Đường chính của site: 18 bài theo đúng thứ tự <code>_start()</code> của cavOS khởi tạo máy. Đọc từ Bài 0, mỗi bài dùng
+<p><em>Đường chính của site: 18 bài theo đúng thứ tự <code>_start()</code> của cavOS khởi tạo máy. Đọc từ trang Bắt đầu, mỗi bài dùng
 những gì bài trước đã dạy.</em> Phần tự viết lại nằm ở <a href="../thuc_hanh/thuc_hanh.html">Thực hành</a>; mỗi bài đã trỏ sẵn tới lab của nó.</p>
 </div>
 <p>Về trang chủ: <a href="../index.html">Home</a></p>
 <h2 id="bat-dau">Bắt đầu</h2>
 <p class="lede"><em>Một cửa vào duy nhất.</em></p>
-<p><a href="bai/bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>: khoá học đi đâu, mỗi bài theo khuôn nào, bản đồ 18 bài, và chuẩn bị máy.
+<p><a href="bai/bai_00_bat_dau.html">Bắt đầu</a>: khoá học đi đâu, mỗi bài theo khuôn nào, bản đồ 18 bài, và chuẩn bị máy.
 Từ đó bấm <em>Tiếp</em> cuối mỗi trang để đi Bài 1, Bài 2…</p>
 <h2 id="cac-bai">Các bài</h2>
-<p class="lede"><em>Đã viết 12/18 bài; các bài còn lại mới có dàn ý (mục tiêu, câu hỏi, spec).</em></p>
+<p class="lede"><em>Đã viết 18/18 bài.</em></p>
 <div class="table-wrap"><table>
 <thead><tr><th>Bài</th><th>Học gì</th><th>Lab</th><th>Tình trạng</th></tr></thead>
 <tbody>
@@ -43,32 +43,33 @@ Từ đó bấm <em>Tiếp</em> cuối mỗi trang để đi Bài 1, Bài 2…</
 <tr><td><a href="bai/bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a></td><td>Local APIC, I/O APIC, timer, EOI</td><td><a href="../thuc_hanh/lab_0x05_acpi_apic.html">0x05</a></td><td>đã viết</td></tr>
 <tr><td><a href="bai/bai_11_ps2_keyboard_mouse.html">Bài 11 - PS2 Keyboard &amp; Mouse</a></td><td>8042, scancode, bàn phím và chuột PS/2, đường từ IRQ tới /dev</td><td><a href="../thuc_hanh/lab_0x06_ps2.html">0x06</a></td><td>đã viết</td></tr>
 <tr><td><a href="bai/bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a></td><td>task, chuyển task bằng timer, trạng thái, kernel thread</td><td><a href="../thuc_hanh/lab_0x07_tasks.html">0x07</a></td><td>đã viết</td></tr>
-<tr><td><a href="bai/bai_13_networking.html">Bài 13 - Networking</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
-<tr><td><a href="bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
-<tr><td><a href="bai/bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
-<tr><td><a href="bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
-<tr><td><a href="bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
-<tr><td><a href="bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a></td><td>—</td><td>—</td><td>dàn ý</td></tr>
+<tr><td><a href="bai/bai_13_networking.html">Bài 13 - Networking</a></td><td>lwIP trong cavOS: netQueue, thread helper, đường gửi/nhận một frame, Ethernet/ARP/IPv4/UDP/DHCP</td><td><a href="../thuc_hanh/lab_0x08_pci_nic.html">0x08</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></td><td>quét PCI qua 0xCF8/0xCFC, BAR, card E1000: bus master, MAC, vòng descriptor RX/TX, ngắt qua _PRT</td><td><a href="../thuc_hanh/lab_0x08_pci_nic.html">0x08</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a></td><td>controller AHCI, lệnh READ DMA EXT + PRDT, MBR, fsMount và VFS, FAT32 (chuỗi cluster), ext2 (inode, block gián tiếp)</td><td><a href="../thuc_hanh/lab_0x09_ahci_fs.html">0x09</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a></td><td>lệnh syscall/sysret, 4 MSR, syscall_entry tự đổi stack bằng swapgs, bảng syscall kiểu Linux, stack syscall mỗi task, int 0x80</td><td><a href="../thuc_hanh/lab_0x0a_fast_syscalls.html">0x0a</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a></td><td>bật x87/SSE/AVX (CR0, CR4, XCR0), kernel không dùng FPU, lưu fxsave/fxrstor khi đổi task, chỗ thiếu nửa cao YMM</td><td><a href="../thuc_hanh/lab_0x0b_sse_fpu.html">0x0b</a></td><td>đã viết</td></tr>
+<tr><td><a href="bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a></td><td>nạp ELF (PT_LOAD, .bss, PT_INTERP), stack ban đầu argc/argv/envp/auxv, run("/bin/bash") chạy bash ở ring 3</td><td><a href="../thuc_hanh/lab_0x0c_elf_userspace.html">0x0c</a></td><td>đã viết</td></tr>
 </tbody>
 </table></div>
 <p>Muốn biết phần nào nằm ở spec nào: <a href="tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>.</p>
 <h2 id="khái-niệm-cốt-lõi">Khái niệm (tra cứu)</h2>
-<p class="lede"><em>Thứ dùng đi dùng lại ở nhiều bài, tách riêng để khỏi giải thích lại mỗi lần.</em></p>
+<p class="lede"><em>Thứ dùng đi dùng lại ở nhiều bài, viết chung cho mọi kernel x86-64; cuối mỗi trang có link tới chỗ cavOS dùng nó.</em></p>
 <ul>
 <li><a href="khai_niem/paging.html">Paging</a> — nền tảng nhất, đọc trước</li>
 <li><a href="khai_niem/long_mode.html">Long Mode</a> — chế độ 64-bit, nơi kernel thực sự chạy</li>
+<li><a href="khai_niem/real_mode_va_protected_mode.html">Real Mode và Protected Mode</a> — bootloader BIOS, A20, vào protected mode, kernel Multiboot, trampoline CPU phụ</li>
 <li><a href="khai_niem/higher_half_kernel.html">Higher-Half Kernel</a> — vì sao kernel nằm ở nửa cao không gian ảo</li>
 <li><a href="khai_niem/hhdm.html">HHDM</a> — cửa sổ nhìn toàn bộ RAM vật lý, và chuyện hai địa chỉ ảo trỏ một chỗ</li>
 <li><a href="khai_niem/cau_truc_os_img.html">Cấu trúc os.img</a> — ảnh đĩa boot: MBR + FAT32 + Limine, hai đường BIOS/UEFI</li>
-<li><a href="khai_niem/limine_protocol.html">Limine Protocol</a> · <a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
-<li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — vì sao địa chỉ vật lý đổi mỗi lần boot</li>
+<li><a href="khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a> · <a href="khai_niem/request_response_mechanism.html">Request-Response Mechanism</a> — cách kernel hỏi bootloader</li>
+<li><a href="khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a> — kernel chạy được ở địa chỉ nào cũng được, và đặt ngẫu nhiên mỗi lần boot</li>
 <li><a href="khai_niem/x86_segmentation.html">x86 Segmentation</a> — segment + 3 chế độ (real/protected/long)</li>
-<li><a href="khai_niem/gdt.html">GDT</a> — segment descriptor table, bổ trợ Bài 7</li>
-<li><a href="khai_niem/esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a> — ESP, BootOrder và đường dẫn dự phòng; disk.img thật là MBR, Limine đọc kernel bằng driver FAT của nó</li>
-<li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI; cavOS không gọi firmware, tắt máy qua uACPI</li>
-<li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, shim và MOK; BOOTX64.EFI của Limine không ký nên OVMF Secure Boot trả Access Denied</li>
-<li><a href="khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a> — Limine là PE32+, kernel là ELF static-pie; Microsoft x64 vs System V, vì sao -mno-red-zone</li>
-<li><a href="khai_niem/limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a> — mỗi request của cavOS thay cho việc gì nếu tự viết loader UEFI</li>
+<li><a href="khai_niem/gdt.html">GDT</a> — bảng segment descriptor, selector, TSS, CPL/DPL/RPL</li>
+<li><a href="khai_niem/esp_va_uefi_boot.html">ESP và UEFI boot</a> — GPT và ESP, BootOrder, đường dẫn dự phòng, một bootloader đọc kernel thế nào</li>
+<li><a href="khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — Boot và Runtime Services, ExitBootServices, biến UEFI, kernel có cần gọi firmware không</li>
+<li><a href="khai_niem/secure_boot.html">Secure Boot</a> — PK/KEK/db/dbx, firmware kiểm chữ ký, shim và MOK, measured boot</li>
+<li><a href="khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a> — ứng dụng UEFI là PE32+, kernel là ELF; Microsoft x64 vs System V, vì sao -mno-red-zone</li>
+<li><a href="khai_niem/limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a> — mỗi việc Limine làm hộ, nếu tự viết loader UEFI thì phải làm thế nào</li>
 </ul>
 <h2 id="tài-liệu-gốc">Tài liệu gốc</h2>
 <p class="lede"><em>x86 PC không có một cuốn TRM duy nhất như SoC ARM — nó là tổ hợp nhiều spec rời.</em></p>

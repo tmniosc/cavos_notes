@@ -3,40 +3,341 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 18 — Userspace &amp; ELF Loader · Học cavOS</title>
+<title>Bài 18 - Userspace &amp; ELF Loader · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_18_userspace_elf_loader.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 18 — Userspace &amp; ELF Loader</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, userspace, elf</span></div>
+    <h1>Bài 18 - Userspace &amp; ELF Loader</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, elf, pt_load, pt_interp, auxv, argv, ring 3, run, bash</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Files:</strong> <code>entry/*</code> (elf loader), <code>multitasking/*</code> · <strong>Spec:</strong> ELF64; x86-64 psABI; musl</p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Chạy chương trình của người dùng ở ring 3</strong> — đích đến của cả hành trình. Đọc file ELF từ đĩa
-(<a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>), map các segment vào address space user (<a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>),
-dựng stack + argv/auxv, rồi nhảy xuống ring 3. Gom mọi thứ trước đó: paging (không gian riêng), GDT user
-segment (<a href="bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>), syscall (<a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>), scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>).
-Kết quả: <code>_start</code> kết thúc bằng <code>run("/bin/bash")</code> — một shell thật chạy trên cavOS.</p>
+<p><strong>Hàm:</strong> <code>run()</code> (<code>utilities/shell/shell.c</code>), <code>elfExecute()</code>, <code>elfProcessLoad()</code>, <code>elf_check_file()</code> (<code>utilities/elf.c</code>), <code>stackGenerateUser()</code>
+(<code>multitasking/stack.c</code>) · <strong>Phụ thuộc:</strong> gần như mọi bài trước: đọc file (<a href="bai_15_ahci_filesystems.html">Bài 15</a>), PML4 riêng (<a href="bai_06_virtual_memory_paging.html">Bài 6</a>),
+selector ring 3 (<a href="bai_07_gdt_tss.html">Bài 7</a>), task và scheduler (<a href="bai_12_multitasking_scheduler.html">Bài 12</a>), syscall (<a href="bai_16_fast_syscalls.html">Bài 16</a>), FPU
+(<a href="bai_17_sse_fpu.html">Bài 17</a>).</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Đích của cả khoá học: chạy một chương trình thật của người dùng, ở ring 3.</em></p>
+<p>Dòng cuối của <code>_start()</code> là <code>while (1) run("/bin/bash", true, 0, 0);</code>. Để làm được việc đó, kernel phải đọc file <code>/bin/bash</code> từ ổ đĩa, hiểu định dạng <strong>ELF</strong>, đặt từng phần
+của nó vào đúng địa chỉ trong một không gian địa chỉ mới, dựng stack ban đầu đúng như chương trình Linux chờ đợi (argc, argv, envp, auxv), rồi để scheduler đưa nó vào ring 3. Bài này đọc
+từng bước đó trong cavOS.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>File ELF giống một bộ đồ nội thất đóng thùng, kèm tờ hướng dẫn lắp (program header): "thùng 1 đặt ở phòng khách, địa chỉ 0x400000, chỉ để xem không được sửa; thùng 2 đặt ở phòng
+làm việc, có phần ghi 'để trống, tự trải thảm' (<code>.bss</code>)". Kernel là thợ lắp: dọn một căn nhà trống (PML4 mới), đặt từng thùng đúng chỗ, trải thảm phần để trống.</p>
+<p>Rồi thợ để lại trên bàn một tờ giấy cho chủ nhà (stack ban đầu): "có 3 tham số, đây là tên từng cái; đây là biến môi trường; còn đây là vài thông tin về căn nhà" (auxv). Chủ nhà
+(chương trình) vào nhà, đọc tờ giấy đó trước tiên, rồi mới bắt đầu làm việc.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba ý về file ELF và stack ban đầu; mọi phần cơ chế đã có ở các bài trước.</em></p>
 <ul>
-<li><code>_start</code> kết thúc bằng <code>while(1) run("/bin/bash", ...)</code>.</li>
-<li>ELF loader: đọc file (<a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>), map các <strong>PT_LOAD</strong> vào không gian ảo
-(<a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>), dựng stack + <strong>auxv</strong>, nhảy vào <strong>ring 3</strong>.</li>
-<li>Dynamic linking: musl ld.so cho shared library.</li>
+<li><strong>ELF header và program header.</strong> 64 byte đầu file là ELF header: magic <code>7F 'E' 'L' 'F'</code>, lớp 64 bit, kiến trúc, loại (<code>ET_EXEC</code> = 2, <code>ET_DYN</code> = 3), điểm vào
+<code>e_entry</code>, và vị trí bảng program header. Mỗi program header loại <code>PT_LOAD</code> nói: lấy <code>p_filesz</code> byte từ offset <code>p_offset</code> của file, đặt ở địa chỉ <code>p_vaddr</code>, chiếm
+<code>p_memsz</code> byte (phần thừa xoá về 0), với quyền <code>p_flags</code> (R, W, X). <code>PT_INTERP</code> ghi đường dẫn của trình nạp động (chương trình dùng thư viện chia sẻ).</li>
+<li><strong>Stack ban đầu theo ABI x86-64.</strong> Lúc vào <code>_start</code>, RSP trỏ vào <code>argc</code>; ngay trên là <code>argv[0..argc-1]</code>, một số 0, <code>envp[...]</code>, một số 0, rồi các cặp
+<em>auxv</em> (loại, giá trị) kết thúc bằng <code>AT_NULL</code>. Chuỗi thật nằm cao hơn nữa.</li>
+<li><strong>auxv.</strong> "Auxiliary vector": kernel gửi thông tin cho libc và trình nạp động. <code>AT_PHDR</code> (bảng program header trong bộ nhớ), <code>AT_PHENT</code>/<code>AT_PHNUM</code> (cỡ, số lượng),
+<code>AT_ENTRY</code> (điểm vào của chương trình), <code>AT_BASE</code> (nơi nạp trình nạp động), <code>AT_PAGESZ</code>, <code>AT_RANDOM</code> (16 byte ngẫu nhiên cho stack canary).</li>
+<li><strong>Đã gặp:</strong> đọc file qua VFS ở <a href="bai_15_ahci_filesystems.html#vfs-open">Bài 15</a>; <code>PageDirectoryAllocate</code>, <code>VirtualMap</code> ở <a href="bai_06_virtual_memory_paging.html">Bài 6</a>;
+khung iretq đầu tiên của task ở <a href="bai_12_multitasking_scheduler.html#task-create">Bài 12</a>; selector <code>0x53</code>/<code>0x4b</code> ở <a href="bai_16_fast_syscalls.html#msr">Bài 16</a>.</li>
 </ul>
-<h2 id="câu-hỏi">✓ Câu hỏi</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em><code>run()</code> gọi <code>elfExecute()</code>; hàm này đọc file, dựng không gian địa chỉ, tạo task và stack; <code>run()</code> nối stdin/stdout/stderr rồi chờ.</em></p>
+<p>File: <code>entry/kernel.c</code>, <code>utilities/shell/shell.c</code>, <code>utilities/elf.c</code>, <code>multitasking/stack.c</code>, <code>multitasking/task.c</code>, <code>include/elf.h</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initiateSSE();
+  testingInit();
+  if (!systemDiskInit)
+    printf("[warning] System disk has not been detected!\n");
+  printf("==     Cave-Like Operating System      ==\n");
+  ...
+  while (1)
+    run("/bin/bash", true, 0, 0);</code></pre></div>
+<p>Kernel thread đầu tiên (task 0) trở thành "init": chạy bash, chờ bash thoát, rồi chạy lại. Từ đây mọi thứ người dùng thấy là chương trình ring 3 gọi syscall.</p>
+
+<h3 id="run">2. <code>run()</code>: nạp, nối IO, chờ</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool run(char *binary, bool wait, int _argc, char **_argv) {
+  char *argv[] = {binary};
+  Task *task = 0;
+  if (_argc &gt; 0)
+    task = elfExecute(binary, _argc, _argv, 0, 0, false);
+  else
+    task = elfExecute(binary, 1, argv, 0, 0, false);
+  if (!task)
+    return false;
+
+  task-&gt;parent = currentTask;
+  int stdin = fsUserOpen(task, "/dev/stdin", O_RDWR | O_APPEND, 0);
+  int stdout = fsUserOpen(task, "/dev/stdout", O_RDWR | O_APPEND, 0);
+  int stderr = fsUserOpen(task, "/dev/stderr", O_RDWR | O_APPEND, 0);
+  ...
+  fdStdin-&gt;id = 0;
+  fdStdout-&gt;id = 1;
+  fdStderr-&gt;id = 2;
+
+  taskCreateFinish(task);
+
+  if (task &amp;&amp; wait) {
+    currentTask-&gt;waitingForPid = task-&gt;id;
+    currentTask-&gt;state = TASK_STATE_WAITING_CHILD_SPECIFIC;
+    handControl();
+  }
+  return true;
+}</code></pre></div>
+<p>Task mới ở trạng thái CREATED cho tới khi fd 0, 1, 2 được mở vào <code>/dev/stdin</code>, <code>/dev/stdout</code>, <code>/dev/stderr</code>; chỉ khi đó nó mới READY. Người gọi chuyển sang chờ đúng
+con đó; khi con chết, <code>taskKill</code> đánh thức cha.</p>
+
+<h3 id="elf-execute">3. <code>elfExecute()</code>: đọc, kiểm, dựng không gian địa chỉ</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>Task *elfExecute(char *filepath, uint32_t argc, char **argv, uint32_t envc,
+                 char **envv, bool startup) {
+  // Open &amp; read executable file
+  OpenFile *dir = fsKernelOpen(filepath, O_RDONLY, 0);
+  ...
+  size_t filesize = fsGetFilesize(dir);
+  uint8_t *out = (uint8_t *)VirtualAllocate(outSize);
+  fsRead(dir, out, filesize);
+  fsKernelClose(dir);
+
+  Elf64_Ehdr *elf_ehdr = (Elf64_Ehdr *)(out);
+  if (!elf_check_file(elf_ehdr)) { ... return 0; }   // magic, ELFCLASS64, x86-64
+
+  // Create a new page directory which is later used by the process
+  uint64_t *oldpagedir = GetPageDirectory();
+  uint64_t *pagedir = PageDirectoryAllocate();
+  ChangePageDirectory(pagedir);
+
+  size_t interpreterEntry = 0;
+  size_t interpreterBase = 0x100000000000; // todo: not hardcode
+  size_t executableBase = 0;               // modified later if needed
+  for (int i = 0; i &lt; elf_ehdr-&gt;e_phnum; i++) {
+    Elf64_Phdr *elf_phdr = ...;
+    if (elf_phdr-&gt;p_type == 3) {            // PT_INTERP: e.g. musl's ld.so
+      ... read the interpreter file, load its PT_LOADs at interpreterBase ...
+      interpreterEntry = interpreterEhdr-&gt;e_entry;
+      continue;
+    }
+    if (elf_phdr-&gt;p_type != PT_LOAD)
+      continue;
+    if (elf_ehdr-&gt;e_type == 3)              // ET_DYN (PIE)
+      executableBase = 0x50000000000;
+    elfProcessLoad(elf_phdr, out, executableBase);
+  }
+
+  ChangePageDirectory(oldpagedir);
+  Task *target = taskCreate(id,
+                 interpreterEntry ? (interpreterBase + interpreterEntry)
+                                  : (executableBase + elf_ehdr-&gt;e_entry),
+                 false, pagedir, argc, argv);
+  ...
+  stackGenerateUser(target, argc, argv, envc, envv, out, filesize, elf_ehdr,
+                    interpreterEntry ? 0x100000000000 : 0, executableBase);
+  VirtualFree(out, outSize);
+  ...
+  return target;
+}</code></pre></div>
 <ul>
-<li>auxv là gì, chứa entry nào (AT_PHDR, AT_ENTRY, AT_RANDOM...)?</li>
-<li>Chuyển vào ring 3 dùng <code>iret</code>/<code>sysret</code> thế nào? Stack ban đầu layout ra sao (argc/argv/envp/auxv)?</li>
+<li>Cả file được đọc vào bộ nhớ kernel trước, rồi mới phân tích.</li>
+<li>PML4 mới chép nửa kernel từ PML4 mẫu (Bài 6). cavOS tạm <em>đổi CR3</em> sang PML4 mới để <code>memcpy</code> thẳng vào địa chỉ của chương trình, rồi đổi lại.</li>
+<li>Chương trình động (có <code>PT_INTERP</code>, như bash dùng musl động): cavOS nạp luôn trình nạp động (<code>ld.so</code>) ở <code>0x100000000000</code> và cho task bắt đầu ở điểm vào của <em>trình nạp</em>; trình
+nạp tự tìm chương trình qua auxv (<code>AT_PHDR</code>, <code>AT_ENTRY</code>, <code>AT_BASE</code>) và nạp thư viện.</li>
+<li>Chương trình PIE (<code>ET_DYN</code>) được đặt ở <code>0x50000000000</code>; chương trình thường (<code>ET_EXEC</code>) ở đúng địa chỉ link.</li>
 </ul>
-<h2 id="notes-của-tôi">Notes của tôi</h2>
-<div class="callout quote"></div>
+
+<h3 id="process-load">4. <code>elfProcessLoad()</code>: một đoạn <code>PT_LOAD</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void elfProcessLoad(Elf64_Phdr *elf_phdr, uint8_t *out, size_t base) {
+  // Map the (current) program page
+  size_t   startRounded = (elf_phdr-&gt;p_vaddr &amp; ~0xFFF);
+  uint64_t pagesRequired = DivRoundUp(
+      (elf_phdr-&gt;p_vaddr - startRounded) + elf_phdr-&gt;p_memsz, 0x1000);
+  for (int j = 0; j &lt; pagesRequired; j++) {
+    size_t vaddr = (elf_phdr-&gt;p_vaddr &amp; ~0xFFF) + j * 0x1000;
+    if (VirtualToPhysical(base + vaddr))
+      continue;
+    size_t paddr = PhysicalAllocate(1);
+    VirtualMap(base + vaddr, paddr, PF_USER | PF_RW);
+  }
+
+  // Copy the required info
+  memcpy((void *)(base + elf_phdr-&gt;p_vaddr), out + elf_phdr-&gt;p_offset,
+         elf_phdr-&gt;p_filesz);
+
+  // wtf is this? (needed)
+  if (elf_phdr-&gt;p_memsz &gt; elf_phdr-&gt;p_filesz)
+    memset((void *)(base + elf_phdr-&gt;p_vaddr + elf_phdr-&gt;p_filesz), 0,
+           elf_phdr-&gt;p_memsz - elf_phdr-&gt;p_filesz);
+}</code></pre></div>
+<ul>
+<li>Đoạn có thể bắt đầu giữa trang, nên số trang tính từ đầu trang chứa <code>p_vaddr</code>. Trang đã có (hai đoạn chung một trang) thì giữ nguyên.</li>
+<li>Câu hỏi trong comment ("wtf is this?") có câu trả lời: <code>p_memsz &gt; p_filesz</code> là <code>.bss</code>, biến toàn cục chưa khởi tạo. Chúng không chiếm chỗ trong file, và C hứa chúng bằng 0.</li>
+<li>Mọi trang được map <code>PF_USER | PF_RW</code>, bất kể <code>p_flags</code> nói gì (xem Đọc thêm).</li>
+</ul>
+
+<h3 id="stack">5. <code>stackGenerateUser()</code>: tờ giấy để lại cho chương trình</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void stackGenerateUser(Task *target, uint32_t argc, char **argv, uint32_t envc,
+                       char **envv, uint8_t *out, size_t filesize,
+                       void *elf_ehdr_ptr, size_t at_base, size_t executableBase) {
+  ...
+  ChangePageDirectory(target-&gt;infoPd-&gt;pagedir);   // write through the task's own mapping
+  stackGenerateMutual(target);            // map USER_STACK_PAGES (2048) pages below 0x800000000000
+  // 16 random bytes in the task's heap (AT_RANDOM)
+  ...
+  // aux: AT_NULL
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, size_t, (size_t)0);
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, size_t, (size_t)0);
+  // aux: AT_RANDOM
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, size_t, (size_t)randomByteStart);
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, uint64_t, 25);
+  // aux: AT_PAGESZ, AT_SECURE, AT_PHNUM, AT_PHENT, AT_ENTRY, AT_BASE, AT_FLAGS, AT_HWCAP ...
+  // aux: AT_PHDR
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, size_t,
+                executableBase + phdrThing + elf_ehdr-&gt;e_phoff);
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, uint64_t, 3);
+
+  // store arguments &amp; environment variables in heap
+  StackStorePtrStyle arguments = stackStorePtrStyle(target, argc, argv);
+  ...
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, uint64_t, 0);   // end of environ
+  ... envp pointers ...
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, uint64_t, 0);   // end of argv
+  ... argv pointers ...
+  PUSH_TO_STACK(target-&gt;registers.usermode_rsp, uint64_t, argc);
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-userstack" role="img" aria-label="Initial user stack, from high to low addresses: the top of the stack at 0x800000000000, strings and random bytes (in cavOS they live in the heap), then the auxv pairs ending with AT_NULL, a zero, the envp pointers, a zero, the argv pointers, and argc at the lowest address where RSP points on entry to _start" width="100%" viewBox="0 0 720 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-userstack-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-userstack .lbl{fill:#c2c0b6;} #svg-userstack .mono{font-family:'SF Mono',Consolas,monospace;} #svg-userstack .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="420" y="22" class="lbl mono" font-size="9.5">0x800000000000 (USER_STACK_BOTTOM)</text>
+<rect x="150" y="30" width="260" height="34" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="280" y="51" text-anchor="middle" fill="#D3D1C7" font-size="10">strings, AT_RANDOM bytes (cavOS: heap)</text>
+<rect x="150" y="70" width="260" height="70" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="280" y="92" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">auxv pairs (type, value)</text>
+<text x="280" y="108" text-anchor="middle" fill="#AFA9EC" font-size="9" font-family="'SF Mono',Consolas,monospace">... AT_RANDOM, AT_NULL (0, 0)</text>
+<text x="280" y="122" text-anchor="middle" fill="#AFA9EC" font-size="9" font-family="'SF Mono',Consolas,monospace">AT_PHDR first (pushed last)</text>
+<rect x="150" y="146" width="260" height="26" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="280" y="163" text-anchor="middle" fill="#C6E7CC" font-size="10" font-family="'SF Mono',Consolas,monospace">0  (end of envp)</text>
+<rect x="150" y="176" width="260" height="34" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="280" y="197" text-anchor="middle" fill="#C6E7CC" font-size="10" font-family="'SF Mono',Consolas,monospace">envp[0] .. envp[envc-1]</text>
+<rect x="150" y="214" width="260" height="26" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="280" y="231" text-anchor="middle" fill="#B5D4F4" font-size="10" font-family="'SF Mono',Consolas,monospace">0  (end of argv)</text>
+<rect x="150" y="244" width="260" height="34" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="280" y="265" text-anchor="middle" fill="#B5D4F4" font-size="10" font-family="'SF Mono',Consolas,monospace">argv[0] .. argv[argc-1]</text>
+<rect x="150" y="282" width="260" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="280" y="301" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600" font-family="'SF Mono',Consolas,monospace">argc</text>
+<line x1="500" y1="297" x2="414" y2="297" class="flow" stroke-width="1.4" marker-end="url(#svg-userstack-arrow)"/>
+<text x="510" y="301" class="lbl" font-size="10">RSP at _start</text>
+<line x1="470" y1="40" x2="470" y2="280" class="flow" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#svg-userstack-arrow)"/>
+<text x="480" y="160" class="lbl" font-size="9.5">pushed in this order</text>
+<text x="40" y="51" class="lbl" font-size="9.5">high</text>
+<text x="40" y="301" class="lbl" font-size="9.5">low</text>
+</svg>
+<figcaption>Stack ban đầu của một chương trình: chương trình đọc từ dưới (argc) lên, kernel đẩy từ trên xuống.</figcaption>
+</figure>
+<p>Thứ tự đẩy ngược với thứ tự đọc: <code>AT_NULL</code> đẩy đầu tiên nên nằm cuối danh sách auxv; <code>argc</code> đẩy cuối cùng nên RSP trỏ vào nó. Khi scheduler chọn task này lần đầu, khung iretq
+dựng sẵn (CS <code>0x53</code>, SS <code>0x4b</code>, RIP = điểm vào, RSP = chỗ <code>argc</code>, IF = 1) đưa CPU xuống ring 3 ngay tại <code>_start</code>.</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x0c nạp một file ELF thật từ ext2 và để chính chương trình in ra những gì nó nhận.</em></p>
+<p><a href="../../thuc_hanh/lab_0x0c_elf_userspace.html">Lab 0x0c - Userspace &amp; ELF Loader</a>: <code>elf.c</code> theo <code>elfExecute()</code> + <code>stackGenerateUser()</code>, cùng danh sách và thứ tự auxv; chương trình
+<code>user/hello.c</code> build thành ELF tĩnh, đặt ở <code>/bin/hello</code> trên ext2.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/0c-elf-userspace
+make image &amp;&amp; make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1 TCG; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[elf] /bin/hello: 9064 bytes, type 2 (ET_EXEC), machine 0x3e, entry 0x4000b0, 2 program headers of 56 bytes at offset 0x40
+[elf]   PT_LOAD offset 0x0 vaddr 0x400000 filesz 0x1138 memsz 0x1138 flags R-X -&gt; 2 page(s), 2 new, 0 byte(s) zeroed
+[elf]   PT_LOAD offset 0x2000 vaddr 0x402000 filesz 0x4 memsz 0x1020 flags RW- -&gt; 2 page(s), 2 new, 4124 byte(s) zeroed
+[elf] stack: strings + AT_RANDOM from 0x7fffffffffc4 to 0x800000000000, RSP = 0x7ffffffffed0 (RSP % 16 = 0), 38 qwords in all
+[t=  336] [3 /bin/hello] write(1): argv[0] = "/bin/hello" at 0x7fffffffffd4
+[t=  339] [3 /bin/hello] write(1): envp[0] = "HOME=/"
+[t=  340] [3 /bin/hello] write(1): auxv: AT_PHDR (3) = 0x400040
+[t=  342] [3 /bin/hello] write(1): auxv: AT_ENTRY (9) = 0x4000b0
+[t=  344] [3 /bin/hello] write(1): auxv: AT_RANDOM (25) = 0x7fffffffffc4
+[t=  345] [3 /bin/hello] write(1): .data dataVal = 1234, .bss 4096 bytes, non-zero: 0
+[t=  346] [3 /bin/hello] write(1): double argc * 1.5 + 0.25 = 475 / 100
+[kernel] task 3 ended, exit code 3
+...
+[t=  388] [4 /bin/hello] write(1): entry RSP = 0x7ffffffffee8 (RSP % 16 = 8)</code></pre></div>
+<ul>
+<li>Hai đoạn <code>PT_LOAD</code>: code ở <code>0x400000</code> (mang theo cả ELF header, nên <code>AT_PHDR = 0x400040</code>) và data ở <code>0x402000</code> với 4124 byte <code>.bss</code> được xoá.</li>
+<li>Chương trình đọc được argv, envp, auxv đúng như loader đặt, <code>.data</code> mang giá trị từ file, <code>.bss</code> toàn 0, và tính được số thực bằng SSE.</li>
+<li>Lần chạy với argc = 2: RSP lúc vào lệch 8 so với mốc 16 byte (Đọc thêm).</li>
+</ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu.</em></p>
+<details class="quiz"><summary>Một đoạn <code>PT_LOAD</code> có <code>p_filesz = 4</code>, <code>p_memsz = 0x1020</code>. Loader phải làm gì với 0x101C byte còn lại?</summary>
+<p>Map đủ trang cho cả <code>0x1020</code> byte và xoá phần đó về 0. Đó là <code>.bss</code>: biến toàn cục chưa khởi tạo, không có trong file, nhưng C bảo đảm chúng bằng 0.</p></details>
+<details class="quiz"><summary>Vì sao <code>run()</code> mở <code>/dev/stdin</code>, <code>/dev/stdout</code>, <code>/dev/stderr</code> <em>trước</em> <code>taskCreateFinish()</code>?</summary>
+<p>Vì chương trình có thể <code>write(1, ...)</code> ngay lệnh đầu tiên. Nếu task đã READY trước khi fd 1 tồn tại, lần ghi đầu có thể trả <code>-EBADF</code>.</p></details>
+<details class="quiz"><summary>Bash của cavOS là chương trình động (có <code>PT_INTERP</code>). Lệnh đầu tiên chạy ở ring 3 thuộc về ai?</summary>
+<p>Của trình nạp động (<code>ld.so</code> của musl), nạp ở <code>0x100000000000</code>. Task bắt đầu ở <code>interpreterBase + interpreterEntry</code>; trình nạp đọc auxv để biết bash nằm đâu, nạp thư viện, rồi mới
+nhảy tới <code>AT_ENTRY</code> của bash.</p></details>
+<details class="quiz"><summary>Đổi thứ tự đẩy trong <code>stackGenerateUser</code>: đẩy <code>argc</code> trước, auxv sau. Chương trình đọc được gì?</summary>
+<p>RSP sẽ trỏ vào một cặp auxv chứ không vào <code>argc</code>. Chương trình (và libc) đọc số đầu tiên làm argc, các số kế tiếp làm con trỏ argv: rác, thường là page fault ngay trong <code>_start</code>.</p></details>
+<details class="quiz"><summary>Task 0 gọi <code>run("/bin/bash", true, ...)</code> trong <code>while (1)</code>. Điều gì xảy ra khi người dùng gõ <code>exit</code> trong bash?</summary>
+<p>Bash thoát, <code>taskKill</code> đánh thức cha (task 0 đang <code>WAITING_CHILD_SPECIFIC</code>), <code>run()</code> trả về, vòng lặp gọi <code>run()</code> lần nữa: một bash mới mở ra.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, những chỗ loader của cavOS khác với ABI và với cách làm an toàn, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>auxv là gì, chứa entry nào?</strong> Mảng cặp (loại, giá trị) ngay trên envp. cavOS đưa 10 loại: <code>AT_PHDR</code>, <code>AT_HWCAP</code>, <code>AT_FLAGS</code>, <code>AT_BASE</code>, <code>AT_ENTRY</code>,
+<code>AT_PHENT</code>, <code>AT_PHNUM</code>, <code>AT_SECURE</code>, <code>AT_PAGESZ</code>, <code>AT_RANDOM</code>, rồi <code>AT_NULL</code> (Lab 0x0c in đủ, đúng thứ tự đó).</li>
+<li><strong>Vào ring 3 bằng <code>iret</code> hay <code>sysret</code>?</strong> Lần đầu bằng <code>iretq</code>: task là một khung ngắt dựng sẵn với CS/SS ring 3, scheduler <code>iretq</code> vào nó như mọi lần đổi task (Bài 12).
+Các lần về sau từ syscall thì bằng <code>sysret</code> (Bài 16).</li>
+<li><strong>Stack ban đầu layout ra sao?</strong> argc, argv[], 0, envp[], 0, auxv, AT_NULL (sơ đồ ở mục 5).</li>
+<li><strong>Dynamic linking?</strong> Có: <code>PT_INTERP</code> → nạp <code>ld.so</code> của musl ở <code>0x100000000000</code>, <code>AT_BASE</code> = địa chỉ đó; PIE ở <code>0x50000000000</code>.</li>
+</ul>
+
+<h3 id="quyen-trang">Mọi đoạn đều ghi được, và không kiểm vị trí</h3>
+<ul>
+<li><code>elfProcessLoad</code> map mọi trang <code>PF_USER | PF_RW</code>, bỏ qua <code>p_flags</code>: đoạn code cũng ghi được, và vì cavOS chưa dùng NX (Bài 6), đoạn data cũng chạy được. Cách an toàn: map theo
+<code>p_flags</code> (R-X cho code, RW- + NX cho data), sau khi đã chép xong.</li>
+<li>Loader không kiểm <code>p_vaddr</code>/<code>p_memsz</code> có nằm trọn trong nửa user hay không. Loader cẩn thận từ chối mọi <code>PT_LOAD</code> ra ngoài vùng user, như lab 0x0c làm.</li>
+</ul>
+
+<h3 id="at-phdr">AT_PHDR được tính, không được tìm</h3>
+<p><code>AT_PHDR</code> phải là địa chỉ của bảng program header <em>trong bộ nhớ</em>. cavOS tính bằng <code>vaddr thấp nhất của các PT_LOAD + e_phoff</code> (PIE: <code>executableBase + e_phoff</code>). Công thức
+chỉ đúng khi đoạn <code>PT_LOAD</code> đầu tiên chứa cả phần đầu file (offset 0), như mọi chương trình do linker mặc định tạo ra. Linux dùng <code>PT_PHDR</code> nếu có. Lab 0x0c đặt
+<code>FILEHDR PHDRS</code> vào đoạn code để công thức này cho <code>0x400000 + 0x40 = 0x400040</code>.</p>
+
+<h3 id="env-rong">Bash nhận envp rỗng</h3>
+<p><code>run()</code> gọi <code>elfExecute(binary, ..., 0, 0, false)</code>: envc = 0. Bash do task 0 khởi động không nhận biến môi trường nào từ kernel: ngay sau argv là hai số 0 liền nhau. Các
+chương trình bash chạy tiếp (qua <code>execve</code>) thì nhận envp do bash truyền.</p>
+
+<h3 id="canh-hang">RSP lúc vào không luôn căn 16 byte</h3>
+<p>ABI x86-64 yêu cầu RSP chia hết cho 16 lúc vào <code>_start</code>. cavOS bắt đầu từ đỉnh stack (đã căn) và đẩy 25 + argc + envc qword, không thêm qword đệm. Khi argc + envc chẵn, RSP lệch 8:
+Lab 0x0c đo được <code>RSP % 16 = 8</code> với argc = 2, envc = 2. Chương trình musl không bị ảnh hưởng vì <code>_start</code> của musl tự căn lại trước khi gọi C; chương trình tự viết <code>_start</code> mà
+không căn có thể hỏng ở lệnh SSE đòi địa chỉ căn 16.</p>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Đọc file: <a href="bai_15_ahci_filesystems.html">Bài 15</a> · PML4 mới: <a href="bai_06_virtual_memory_paging.html">Bài 6</a> · khung task đầu tiên, <code>taskCreate</code>:
+<a href="bai_12_multitasking_scheduler.html">Bài 12</a> · syscall của chương trình: <a href="bai_16_fast_syscalls.html">Bài 16</a> · FPU của chương trình: <a href="bai_17_sse_fpu.html">Bài 17</a> · bắt đầu khoá:
+<a href="bai_00_bat_dau.html">Bắt đầu</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x0c_elf_userspace.html">Lab 0x0c - Userspace &amp; ELF Loader</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><strong>System V ABI, ELF gABI</strong>: ELF header, program header, <code>PT_LOAD</code>, <code>PT_INTERP</code>, <code>ET_EXEC</code>/<code>ET_DYN</code>.</li>
+<li><strong>System V AMD64 psABI</strong> §3.4 "Process Initialization": stack ban đầu (argc, argv, envp, auxv), căn 16 byte, các loại <code>AT_*</code>.</li>
+<li><strong>musl</strong>: <code>crt/x86_64/crt1.c</code> và <code>arch/x86_64/crt_arch.h</code> (<code>_start</code> căn RSP), <code>ldso/dynlink.c</code> (trình nạp động đọc auxv).</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 18 - Userspace &amp; ELF Loader</footer>
 </main>

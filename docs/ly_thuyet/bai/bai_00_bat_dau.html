@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 0 - Bắt đầu ở đây · Học cavOS</title>
+<title>Bắt đầu · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_00_bat_dau.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 0 - Bắt đầu ở đây</h1>
+    <h1>Bắt đầu</h1>
     <div class="facts"><span class="fact"><b>Tags</b> start, roadmap, boot</span></div>
   </div>
 </header>
@@ -44,9 +44,9 @@
   <strong>Tài liệu gốc</strong> cho biết spec nào nói về phần nào.</p>
 
 <h2 id="ban-do">Bản đồ khoá học</h2>
-<p class="lede"><em>18 bài, theo đúng thứ tự <code>_start()</code> gọi. Đã viết 12/18 bài; các bài còn lại mới có dàn ý.</em></p>
+<p class="lede"><em>18 bài, theo đúng thứ tự <code>_start()</code> gọi. Đã viết 18/18 bài.</em></p>
 <figure class="diagram">
-<svg id="svg-course-map" role="img" aria-label="course map: five stages, lessons 1 to 7 written, 8 to 18 outlined" width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg id="svg-course-map" role="img" aria-label="course map: five stages, all lessons 1 to 18 written" width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
   <marker id="svg-course-map-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
     <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -85,12 +85,12 @@
 <rect x="310" y="162" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="318" y="180" fill="#C6E7CC">10 APIC &amp; timer</text>
 <rect x="460" y="66" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="468" y="84" fill="#C6E7CC">11 PS/2 kbd, mouse</text>
 <rect x="460" y="98" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="468" y="116" fill="#C6E7CC">12 Multitasking</text>
-<rect x="460" y="130" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="148" fill="#D3D1C7">13 Networking</text>
-<rect x="460" y="162" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="180" fill="#D3D1C7">14 PCI &amp; NIC</text>
-<rect x="460" y="194" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="468" y="212" fill="#D3D1C7">15 AHCI &amp; files</text>
-<rect x="610" y="66" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="618" y="84" fill="#D3D1C7">16 Fast syscalls</text>
-<rect x="610" y="98" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="618" y="116" fill="#D3D1C7">17 SSE &amp; FPU</text>
-<rect x="610" y="130" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-dasharray="4 3"/><text x="618" y="148" fill="#D3D1C7">18 Userspace, ELF</text>
+<rect x="460" y="130" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="468" y="148" fill="#C6E7CC">13 Networking</text>
+<rect x="460" y="162" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="468" y="180" fill="#C6E7CC">14 PCI &amp; NIC</text>
+<rect x="460" y="194" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="468" y="212" fill="#C6E7CC">15 AHCI &amp; files</text>
+<rect x="610" y="66" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="618" y="84" fill="#C6E7CC">16 Fast syscalls</text>
+<rect x="610" y="98" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="618" y="116" fill="#C6E7CC">17 SSE &amp; FPU</text>
+<rect x="610" y="130" width="140" height="28" fill="#2C4E33" stroke="#8FC79A"/><text x="618" y="148" fill="#C6E7CC">18 Userspace, ELF</text>
 </g>
 <rect x="10" y="262" width="14" height="14" fill="#2C4E33" stroke="#8FC79A"/>
 <text x="32" y="273" class="lbl" font-size="10">written: full lesson + lab or hands-on task</text>
@@ -104,9 +104,9 @@
 <div class="table-wrap"><table>
 <thead><tr><th>Bài</th><th>Dòng trong <code>_start()</code></th><th>File code</th><th>Spec</th><th>Lab</th></tr></thead>
 <tbody>
-<tr><td><a href="bai_01_boot_limine.html">1 - Boot &amp; Limine</a></td><td><code>_start</code>, <code>LIMINE_BASE_REVISION(2)</code></td><td><code>entry/kernel.c</code>, <code>link.ld</code></td><td><a href="../khai_niem/limine_protocol.html">Limine Protocol</a></td><td><a href="../../thuc_hanh/lab_0x00_hello_serial.html">0x00</a></td></tr>
+<tr><td><a href="bai_01_boot_limine.html">1 - Boot &amp; Limine</a></td><td><code>_start</code>, <code>LIMINE_BASE_REVISION(2)</code></td><td><code>entry/kernel.c</code>, <code>link.ld</code></td><td><a href="../khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a></td><td><a href="../../thuc_hanh/lab_0x00_hello_serial.html">0x00</a></td></tr>
 <tr><td><a href="bai_02_serial_uart.html">2 - Serial UART</a></td><td><code>initiateSerial()</code></td><td><code>drivers/serial.c</code></td><td><a href="../tai_lieu_goc/uart_16550.html">UART 16550</a></td><td><a href="../../thuc_hanh/lab_0x00_hello_serial.html">0x00</a></td></tr>
-<tr><td><a href="bai_03_bootloader_parser.html">3 - Bootloader Parser</a></td><td><code>initialiseBootloaderParser()</code></td><td><code>entry/bootloader.c</code></td><td><a href="../khai_niem/limine_protocol.html">Limine Protocol</a></td><td><a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">0x01</a></td></tr>
+<tr><td><a href="bai_03_bootloader_parser.html">3 - Bootloader Parser</a></td><td><code>initialiseBootloaderParser()</code></td><td><code>entry/bootloader.c</code></td><td><a href="../khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a></td><td><a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">0x01</a></td></tr>
 <tr><td><a href="bai_04_framebuffer_console.html">4 - Framebuffer &amp; Console</a></td><td><code>initiateVGA()</code>, <code>initiateConsole()</code></td><td><code>graphical/</code></td><td>Limine FB, PSF</td><td><a href="../../thuc_hanh/lab_0x02_framebuffer.html">0x02</a></td></tr>
 <tr><td><a href="bai_05_physical_memory_manager.html">5 - Physical Memory Manager</a></td><td><code>initiatePMM()</code></td><td><code>memory/pmm.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> §4</td><td><a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td></tr>
 <tr><td><a href="bai_06_virtual_memory_paging.html">6 - Virtual Memory &amp; Paging</a></td><td><code>initiateVMM()</code>; <code>initiatePaging()</code> chạy sau, ngay sau <code>initiateISR()</code></td><td><code>memory/vmm.c</code>, <code>paging.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §4</td><td><a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">0x03</a></td></tr>
@@ -116,12 +116,12 @@
 <tr><td><a href="bai_10_apic_timer.html">10 - APIC &amp; Timer</a></td><td><code>initiateApicTimer()</code></td><td><code>cpu/apic.c</code>, <code>timer.c</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §11</td><td><a href="../../thuc_hanh/lab_0x05_acpi_apic.html">0x05</a></td></tr>
 <tr><td><a href="bai_11_ps2_keyboard_mouse.html">11 - PS2 Keyboard &amp; Mouse</a></td><td><code>fsMount("/dev/")</code>, <code>initiateKb()</code>, <code>initiateMouse()</code></td><td><code>drivers/</code></td><td>8042 datasheet</td><td><a href="../../thuc_hanh/lab_0x06_ps2.html">0x06</a></td></tr>
 <tr><td><a href="bai_12_multitasking_scheduler.html">12 - Multitasking &amp; Scheduler</a></td><td><code>initiateTasks()</code>, <code>initiateKernelThreads()</code></td><td><code>multitasking/</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol3 §8</td><td><a href="../../thuc_hanh/lab_0x07_tasks.html">0x07</a></td></tr>
-<tr><td><a href="bai_13_networking.html">13 - Networking</a></td><td><code>initiateNetworking()</code></td><td><code>networking/</code></td><td>lwIP, RFC</td><td>dàn ý</td></tr>
-<tr><td><a href="bai_14_pci_nic.html">14 - PCI &amp; NIC</a></td><td><code>initiatePCI()</code></td><td><code>drivers/</code></td><td>PCI Spec</td><td>dàn ý</td></tr>
-<tr><td><a href="bai_15_ahci_filesystems.html">15 - AHCI &amp; Filesystems</a></td><td><code>fsMount("/")</code>, <code>"/boot/"</code>, <code>"/sys/"</code>, <code>"/proc/"</code></td><td><code>filesystems/</code>, <code>drivers/</code></td><td>AHCI Spec</td><td>dàn ý</td></tr>
-<tr><td><a href="bai_16_fast_syscalls.html">16 - Fast Syscalls</a></td><td><code>initiateSyscallInst()</code>, <code>initiateSyscalls()</code></td><td><code>cpu/fastSyscall.c</code>, <code>syscalls/</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol2</td><td>dàn ý</td></tr>
-<tr><td><a href="bai_17_sse_fpu.html">17 - SSE &amp; FPU</a></td><td><code>initiateSSE()</code></td><td><code>cpu/sse.asm</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol1</td><td>dàn ý</td></tr>
-<tr><td><a href="bai_18_userspace_elf_loader.html">18 - Userspace &amp; ELF Loader</a></td><td><code>run("/bin/bash", ...)</code></td><td><code>entry/</code>, <code>multitasking/</code></td><td>ELF64 ABI</td><td>dàn ý</td></tr>
+<tr><td><a href="bai_13_networking.html">13 - Networking</a></td><td><code>initiateNetworking()</code></td><td><code>networking/</code></td><td>lwIP, RFC</td><td>đã viết</td></tr>
+<tr><td><a href="bai_14_pci_nic.html">14 - PCI &amp; NIC</a></td><td><code>initiatePCI()</code></td><td><code>drivers/</code></td><td>PCI Spec</td><td>đã viết</td></tr>
+<tr><td><a href="bai_15_ahci_filesystems.html">15 - AHCI &amp; Filesystems</a></td><td><code>fsMount("/")</code>, <code>"/boot/"</code>, <code>"/sys/"</code>, <code>"/proc/"</code></td><td><code>filesystems/</code>, <code>drivers/</code></td><td>AHCI Spec</td><td>đã viết</td></tr>
+<tr><td><a href="bai_16_fast_syscalls.html">16 - Fast Syscalls</a></td><td><code>initiateSyscallInst()</code>, <code>initiateSyscalls()</code></td><td><code>cpu/fastSyscall.c</code>, <code>syscalls/</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol2</td><td>đã viết</td></tr>
+<tr><td><a href="bai_17_sse_fpu.html">17 - SSE &amp; FPU</a></td><td><code>initiateSSE()</code></td><td><code>cpu/sse.asm</code></td><td><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol1</td><td>đã viết</td></tr>
+<tr><td><a href="bai_18_userspace_elf_loader.html">18 - Userspace &amp; ELF Loader</a></td><td><code>run("/bin/bash", ...)</code></td><td><code>entry/</code>, <code>multitasking/</code></td><td>ELF64 ABI</td><td>đã viết</td></tr>
 </tbody>
 </table></div>
 
@@ -148,7 +148,7 @@
 <p><a href="bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>: kernel được nạp vào đâu, và dòng đầu tiên của nó trông thế nào.</p>
 
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Bài 0 - Bắt đầu ở đây</footer>
+<footer>Học cavOS · Bắt đầu</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

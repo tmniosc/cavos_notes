@@ -3,38 +3,405 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 13 — Networking · Học cavOS</title>
+<title>Bài 13 - Networking · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_13_networking.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 13 — Networking</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, network</span></div>
+    <h1>Bài 13 - Networking</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, network, lwip, ethernet, arp, ipv4, udp, dhcp</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateNetworking()</code> · <strong>Phụ thuộc:</strong> NIC từ <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Giao tiếp mạng</strong>: dựng stack tối thiểu Ethernet→ARP→IPv4→ICMP/UDP để máy gửi/nhận gói. Xây trên NIC do
-<a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> tìm và điều khiển. Cho phép ping/trao đổi dữ liệu với thế giới bên ngoài.</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateNetworking()</code>, <code>initiateNIC()</code>, <code>lwipInitInThread()</code> (<code>drivers/nics/nic_controller.c</code>), <code>helperNet()</code>
+(<code>entry/kernel_helper.c</code>) · <strong>Phụ thuộc:</strong> thread kernel và thread helper từ <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>, card mạng
+do <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> tìm thấy.</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Cho kernel gửi và nhận gói tin, và để một thư viện lo phần "nói đúng ngôn ngữ mạng".</em></p>
+<p>cavOS không tự viết TCP/IP. Nó dùng <strong>lwIP</strong> (lightweight IP), một thư viện TCP/IP nhỏ viết cho hệ nhúng, và viết phần "keo" nối lwIP với kernel: thread, semaphore,
+đồng hồ, và hai đường đi của frame (card → lwIP khi nhận, lwIP → card khi gửi). Bài này đọc phần keo đó và các lớp giao thức mà nó chở. Phần phần cứng (PCI, card E1000) là
+<a href="bai_14_pci_nic.html">Bài 14</a>; trong <code>_start()</code>, <code>initiateNetworking()</code> chạy ngay trước <code>initiatePCI()</code>.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Gửi một gói tin giống gửi một lá thư bỏ trong nhiều lớp phong bì. Phong bì trong cùng ghi "giao cho chương trình số 67" (UDP). Phong bì ngoài hơn ghi "gửi tới máy 10.0.2.2" (IP).
+Phong bì ngoài cùng ghi "đưa cho cái card mạng có số hiệu 52:55:0a:00:02:02" (Ethernet). Mỗi trạm chỉ đọc lớp phong bì của mình.</p>
+<p>Máy mới bật thì chưa có địa chỉ nhà. Nó hét lên cả xóm "ai cấp địa chỉ cho tôi với" (DHCP), rồi hỏi "ai là 10.0.2.2, số card của bạn là gì" (ARP). cavOS giao hết việc viết và đọc
+phong bì cho lwIP. Phần cavOS tự làm là bưu tá: nhận thư từ card, xếp vào hàng (<code>netQueue</code>), và một người giúp việc (thread helper) mang từng lá cho lwIP đọc.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Ba ý mạng cơ bản; thread và handler ngắt đã có ở các bài trước.</em></p>
 <ul>
-<li>Stack tối thiểu: Ethernet → ARP → IPv4 → ICMP/UDP.</li>
-<li>Buffer gói, hàng đợi TX/RX.</li>
+<li><strong>Các lớp và frame.</strong> Trên dây Ethernet đi các <em>frame</em>: 6 byte MAC đích, 6 byte MAC nguồn, 2 byte <em>ethertype</em> (<code>0x0800</code> IPv4, <code>0x0806</code> ARP), rồi dữ
+liệu. Gói IPv4 có header 20 byte (IP nguồn, IP đích, số giao thức: 17 = UDP, 1 = ICMP). UDP thêm 8 byte (cổng nguồn, cổng đích). Mỗi lớp bọc lớp trong.</li>
+<li><strong>Byte order mạng.</strong> Mọi số nhiều byte trên dây là <em>big-endian</em> (byte cao trước). x86 là little-endian, nên mỗi trường 16/32 bit phải đảo byte khi ghi và khi đọc. cavOS
+có <code>switch_endian_16</code>; lwIP có <code>htons</code>/<code>ntohs</code>.</li>
+<li><strong>DHCP và ARP.</strong> DHCP (UDP cổng 68 → 67) xin IP: DISCOVER → OFFER → REQUEST → ACK. ARP đổi IP thành MAC: "ai có 10.0.2.2?" gửi broadcast, máy đó trả lời MAC của nó.
+Có MAC rồi mới gửi được frame IP tới máy đó.</li>
+<li><strong>Đã gặp:</strong> thread kernel, <code>handControl()</code>, thread helper <code>kernelHelpEntry</code> ở <a href="bai_12_multitasking_scheduler.html#chet-don">Bài 12</a>; handler ngắt chạy với
+IF tắt ở <a href="bai_09_idt_interrupts.html">Bài 9</a>.</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Một biến toàn cục, một struct bọc lwIP, hai hàm khởi tạo, và hai đường đi của frame.</em></p>
+<p>File: <code>entry/kernel.c</code>, <code>include/nic_controller.h</code>, <code>drivers/nics/nic_controller.c</code>, <code>entry/kernel_helper.c</code>, <code>networking/lwip/sys_arch.c</code>,
+<code>networking/socket.c</code>, <code>include/lwipopts.h</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  initiateTasks();
+  initiateKernelThreads();
+  initiateNetworking();
+  initiatePCI();
+  fsMount("/", CONNECTOR_AHCI, 0, 1);</code></pre></div>
+<div class="code"><div class="code-bar">c</div><pre><code>// drivers/nics/nic_controller.c
+void initiateNetworking() {
+  // start off with no first NIC and no selected one
+  // rest on device-specific initialization
+  selectedNIC = 0;
+  debugf("[networking] Ready to scan for NICs..\n");
+}</code></pre></div>
+<p><code>initiateNetworking()</code> không chạm phần cứng: nó chỉ đặt <code>selectedNIC = 0</code>. Thứ tự vẫn quan trọng. Trong lúc <code>initiatePCI()</code> quét bus, driver gọi
+<code>createNewNIC()</code>, và hàm này mới là chỗ gán <code>selectedNIC</code>. Gọi <code>initiateNetworking()</code> sau PCI thì nó xoá NIC vừa tìm thấy về 0. Cả hai cũng phải sau
+<code>initiateTasks()</code> và <code>initiateKernelThreads()</code>, vì lwIP tạo thread riêng và frame nhận được xử lý trong thread helper.</p>
+
+<h3 id="struct-nic">2. <code>struct NIC</code>: một card, bọc quanh một <code>netif</code> của lwIP</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// include/nic_controller.h
+typedef enum NIC_TYPE { NE2000, RTL8139, RTL8169, E1000 } NIC_TYPE;
+
+struct NIC {
+  struct netif lwip;     // lwIP's view of this card
+
+  NIC_TYPE type;
+  uint16_t mtu;
+  uint8_t  mintu;
+  void    *infoLocation; // driver-private state (E1000_interface for e1000)
+  uint8_t  MAC[6];
+  uint8_t  ip[4];
+  uint8_t  serverIp[4];
+  uint8_t  dnsIp[4];
+  uint8_t  subnetMask[4];
+  uint8_t  irq;
+
+  arpStore arp;
+  UdpStore udp;
+};
+
+NIC *selectedNIC;</code></pre></div>
 <ul>
-<li>[ ] Thứ tự init: networking trước hay NIC trước? (xem <a href="bai_00_bat_dau.html">Bài 0 - Bắt đầu ở đây</a>)</li>
-<li>[ ] Endianness mạng (big-endian) vs host.</li>
+<li><code>lwip</code> đứng đầu struct: con trỏ tới <code>netif</code> mà lwIP đưa lại cho cavOS cũng là con trỏ tới <code>NIC</code>.</li>
+<li><code>type</code> chọn hàm gửi; <code>infoLocation</code> giữ trạng thái riêng của driver (Bài 14).</li>
+<li><code>ip</code>, <code>arp</code>, <code>udp</code> là của một stack tự viết cũ trong <code>networking/stack/</code> (<code>arp.c</code>, <code>ipv4.c</code>, <code>udp.c</code>...). Các file đó vẫn được build, nhưng
+không còn chỗ nào ngoài thư mục đó gọi tới: mọi frame giờ đi qua lwIP.</li>
+<li>Chỉ có <strong>một</strong> <code>selectedNIC</code>: card tìm thấy sau cùng thắng.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="initiate-nic">3. <code>initiateNIC()</code>: thử từng driver, rồi dựng lwIP</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void initiateNIC(PCIdevice *device) {
+  if (initiateNe2000(device) || initiateRTL8139(device) ||
+      initiateRTL8169(device) || initiateE1000(device)) {
+    // selectedNIC = newly created NIC structure
+    tcpip_init(lwipInitInThread, selectedNIC);
+  }
+}
+
+// returns UNINITIALIZED!! NIC struct
+NIC *createNewNIC(PCI *pci) {
+  NIC *nic = malloc(sizeof(NIC));
+  memset(nic, 0, sizeof(NIC));
+  nic-&gt;mtu = 1500;
+  pci-&gt;extra = nic;
+  selectedNIC = nic;
+  return nic;
+}</code></pre></div>
+<p><code>initiatePCI()</code> gọi <code>initiateNIC()</code> cho mọi thiết bị class <code>0x02</code> (mạng). Mỗi <code>initiateXxx</code> tự kiểm vendor/device ID, không phải thì trả <code>false</code>. Driver nào
+nhận card thì gọi <code>createNewNIC()</code> và điền MAC, ring, IRQ. Sau đó <code>tcpip_init()</code> của lwIP tạo thread <code>tcpip</code> (qua <code>sys_thread_new</code>, xem mục 7) và hẹn chạy
+<code>lwipInitInThread</code> <em>trong</em> thread đó.</p>
+
+<h3 id="lwip-init">4. <code>lwipInitInThread()</code>: gắn card vào lwIP và xin IP</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void lwipInitInThread(void *nicPre) {
+  NIC *nic = (NIC *)nicPre;
+  struct ip4_addr netmask;
+  struct netif *this_netif = &amp;nic-&gt;lwip;
+  ...
+  IP4_ADDR(&amp;netmask, 255, 255, 255, 0);
+  netif_add(this_netif, NULL, &amp;netmask, NULL, NULL, lwipDummyInit,
+            tcpip_input); // ethernetif_init_low
+
+  this_netif-&gt;output = etharp_output;
+  this_netif-&gt;linkoutput = lwipOutput;
+  netif_set_default(this_netif);
+  this_netif-&gt;hwaddr_len = ETHARP_HWADDR_LEN;
+  this_netif-&gt;hwaddr[0] = nic-&gt;MAC[0]; // or whatever u like
+  ...
+  this_netif-&gt;mtu = nic-&gt;mtu;
+  this_netif-&gt;flags = NETIF_FLAG_BROADCAST | NETIF_FLAG_ETHARP |
+                      NETIF_FLAG_ETHERNET | NETIF_FLAG_LINK_UP;
+  netif_set_up(this_netif);
+  err_t out = dhcp_start(this_netif);
+  ...
+}</code></pre></div>
 <ul>
-<li>RFC 791 (IP), 826 (ARP), 792 (ICMP).</li>
+<li><code>netif_add(..., tcpip_input)</code>: frame nhận được đưa vào lwIP bằng <code>tcpip_input</code>, hàm này gửi frame sang thread <code>tcpip</code> qua mailbox. Không gọi thẳng giao thức từ
+thread khác.</li>
+<li><code>output = etharp_output</code>: gửi gói IP thì lwIP tự tra bảng ARP (hỏi ARP nếu chưa có MAC) rồi ghép header Ethernet.</li>
+<li><code>linkoutput = lwipOutput</code>: chỗ lwIP giao một frame hoàn chỉnh cho cavOS (mục 5).</li>
+<li><code>dhcp_start</code>: bắt đầu DHCP; từ đây lwIP tự gửi DISCOVER, chờ OFFER, gửi REQUEST, chờ ACK, rồi tự đặt IP, mask, router cho <code>netif</code>.</li>
 </ul>
+
+<h3 id="gui">5. Đường gửi: lwIP → <code>lwipOutput</code> → driver</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>err_t lwipOutput(struct netif *netif, struct pbuf *p) {
+  uint8_t     *complete = malloc(p-&gt;tot_len);
+  struct pbuf *browse = p;
+  uint32_t     cnt = 0;
+
+  while (browse) {
+    memcpy(&amp;complete[cnt], browse-&gt;payload, browse-&gt;len);
+    cnt += browse-&gt;len;
+    browse = browse-&gt;next;
+  }
+  ...
+  PCI *pci = LinkedListSearch(&amp;dsPCI, lwipOutputCb, netif);
+  NIC *nic = (NIC *)pci-&gt;extra;
+  sendPacketRaw(nic, complete, p-&gt;tot_len);
+  free(complete);
+  return ERR_OK;
+}</code></pre></div>
+<p>lwIP giữ một gói thành chuỗi <code>pbuf</code> (header ở một mảnh, dữ liệu ở mảnh khác) để khỏi chép khi thêm header. Card ở đây nhận một buffer liền, nên cavOS gom chuỗi lại vào một
+vùng <code>malloc</code>, tìm <code>NIC</code> của <code>netif</code> trong danh sách PCI, rồi <code>sendPacketRaw</code> chọn hàm gửi theo <code>nic-&gt;type</code> (<code>sendE1000</code>...). Hàm gửi của
+E1000 chờ card báo xong (Bài 14), nên khi <code>lwipOutput</code> trả về thì frame đã lên dây và <code>complete</code> trả lại được.</p>
+
+<h3 id="nhan">6. Đường nhận: ngắt → <code>netQueue</code> → thread helper → lwIP</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// include/nic_controller.h
+#define PACKET_MAX 1600
+#define QUEUE_MAX 128
+typedef struct QueuePacket {
+  bool exists;
+  NIC *nic;
+  uint8_t  buff[PACKET_MAX];
+  uint16_t packetLength;
+} QueuePacket;
+
+// drivers/nics/nic_controller.c -- called by the card's IRQ handler
+void netQueueAdd(NIC *nic, uint8_t *packet, uint16_t packetLength) {
+  if ((netQueueWrite + 1) % QUEUE_MAX == netQueueRead) {
+    debugf("[netqueue] New %d length packet dropped!\n", packetLength);
+    return;
+  }
+  QueuePacket *item = &amp;netQueue[netQueueWrite];
+  item-&gt;nic = nic;
+  memcpy(item-&gt;buff, packet, packetLength);
+  item-&gt;packetLength = packetLength;
+  netQueueWrite = (netQueueWrite + 1) % QUEUE_MAX;
+}
+
+// entry/kernel_helper.c -- runs in the helper thread
+void helperNet() {
+  while (true) {
+    if (netQueueRead == netQueueWrite)
+      return;
+    handlePacket(netQueue[netQueueRead].nic, netQueue[netQueueRead].buff,
+                 netQueue[netQueueRead].packetLength);
+    netQueueRead = (netQueueRead + 1) % QUEUE_MAX;
+  }
+}
+
+void handlePacket(NIC *nic, void *packet, uint32_t size) {
+  struct pbuf *p = pbuf_alloc(PBUF_RAW, size, PBUF_RAM);
+  uint8_t     *targ = (uint8_t *)p-&gt;payload;
+  for (int i = 0; i &lt; size; i++)
+    targ[i] = ((uint8_t *)packet)[i];
+  nic-&gt;lwip.input(p, &amp;nic-&gt;lwip);
+}</code></pre></div>
+<ul>
+<li><strong>Hàng đợi vòng</strong> 128 ô, mỗi ô 1600 byte (đủ một frame Ethernet 1514 byte). Một người ghi (handler ngắt), một người đọc (thread helper): chỉ người ghi dời
+<code>netQueueWrite</code>, chỉ người đọc dời <code>netQueueRead</code>, nên không cần khoá. Hàng đầy thì frame mới bị bỏ.</li>
+<li><strong>Vì sao không gọi lwIP ngay trong ngắt</strong>: handler chạy với IF tắt, không được chờ khoá hay cấp bộ nhớ lâu. lwIP thì cần cả hai. Nên handler chỉ chép, việc nặng để thread
+helper làm sau.</li>
+<li>Thread helper (<code>kernelHelpEntry</code>, Bài 12) lặp: <code>helperNet</code>, <code>helperReaper</code>, <code>helperVolatilePoll</code>, <code>handControl</code>. Frame vì vậy được xử lý ở lần helper
+chạy kế tiếp, cỡ vài ms sau ngắt.</li>
+<li><code>nic-&gt;lwip.input</code> là <code>tcpip_input</code> (mục 4): frame lại được gửi tiếp sang thread <code>tcpip</code>, nơi lwIP đọc Ethernet → ARP hoặc IP → UDP/TCP.</li>
+</ul>
+
+<figure class="diagram">
+<svg id="svg-netpath" role="img" aria-label="cavOS network data path. Receive: card IRQ handler copies the frame into netQueue; the helper thread runs helperNet and handlePacket, which calls tcpip_input; the lwIP tcpip thread parses Ethernet, ARP, IP, UDP, TCP. Send: the tcpip thread calls etharp_output, then linkoutput lwipOutput, which flattens the pbuf chain and calls sendPacketRaw and the driver" width="100%" viewBox="0 0 720 290" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-netpath-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-netpath .lbl{fill:#c2c0b6;} #svg-netpath .mono{font-family:'SF Mono',Consolas,monospace;} #svg-netpath .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="115" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">IRQ (IF = 0)</text>
+<text x="335" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">helper thread</text>
+<text x="590" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">lwIP tcpip thread</text>
+<rect x="30" y="40" width="170" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="115" y="61" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600">card IRQ handler</text>
+<text x="115" y="78" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">netQueueAdd (copy)</text>
+<rect x="250" y="40" width="170" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="335" y="61" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600" class="mono">helperNet</text>
+<text x="335" y="78" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">handlePacket -&gt; pbuf</text>
+<rect x="480" y="40" width="220" height="56" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="590" y="61" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600" class="mono">tcpip_input</text>
+<text x="590" y="78" text-anchor="middle" fill="#85B7EB" font-size="9">Ethernet -&gt; ARP / IPv4 -&gt; UDP / TCP</text>
+<line x1="200" y1="68" x2="248" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-netpath-arrow)"/>
+<line x1="420" y1="68" x2="478" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-netpath-arrow)"/>
+<text x="225" y="116" text-anchor="middle" class="lbl" font-size="9">netQueue</text>
+<text x="450" y="116" text-anchor="middle" class="lbl" font-size="9">mailbox</text>
+<text x="30" y="156" class="lbl" font-size="11" font-weight="600">send</text>
+<rect x="480" y="170" width="220" height="56" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="590" y="191" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600" class="mono">etharp_output</text>
+<text x="590" y="208" text-anchor="middle" fill="#85B7EB" font-size="9">ARP lookup, add Ethernet header</text>
+<rect x="250" y="170" width="170" height="56" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="335" y="191" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600" class="mono">lwipOutput</text>
+<text x="335" y="208" text-anchor="middle" fill="#AFA9EC" font-size="9">flatten pbuf chain</text>
+<rect x="30" y="170" width="170" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="115" y="191" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600" class="mono">sendPacketRaw</text>
+<text x="115" y="208" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">sendE1000 ...</text>
+<line x1="480" y1="198" x2="422" y2="198" class="flow" stroke-width="1.4" marker-end="url(#svg-netpath-arrow)"/>
+<line x1="250" y1="198" x2="202" y2="198" class="flow" stroke-width="1.4" marker-end="url(#svg-netpath-arrow)"/>
+<text x="360" y="262" text-anchor="middle" class="lbl" font-size="9.5">linkoutput runs in the tcpip thread: the driver may wait there for the card</text>
+</svg>
+<figcaption>Hai chiều của một frame trong cavOS, và thread nào làm phần nào.</figcaption>
+</figure>
+
+<h3 id="sys-arch">7. <code>sys_arch.c</code>: lwIP chạy trên task của cavOS</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// networking/lwip/sys_arch.c
+sys_thread_t sys_thread_new(const char *pcName,
+                            void (*pxThread)(void *pvParameters), void *pvArg,
+                            int iStackSize, int iPriority) {
+  Task *task = taskCreateKernel((uint64_t)pxThread, (uint64_t)pvArg);
+  taskNameKernel(task, lwipCmdline, sizeof(lwipCmdline));
+  return task-&gt;id;
+}
+
+uint32_t sys_arch_sem_wait(sys_sem_t *sem, uint32_t timeout) {
+  if (timeout) {
+    debugf("[lwip::glue] todo: Timeout\n");
+    panic();
+  }
+  bool ret = semaphoreWait(sem, timeout);
+  return ret ? 0 : SYS_ARCH_TIMEOUT;
+}
+
+uint32_t sys_now(void) { return timerBootUnix * 1000 + timerTicks; }</code></pre></div>
+<p>lwIP không biết gì về hệ điều hành bên dưới; nó gọi một bộ hàm <code>sys_*</code> mà mỗi OS tự viết. Ở cavOS: thread = <code>taskCreateKernel</code> (Bài 12), semaphore và mailbox chờ bằng
+<code>handControl()</code>, đồng hồ = giờ lúc boot cộng tick 1 ms. <code>lwipopts.h</code> chọn <code>LWIP_DHCP 1</code> và mailbox 32 ô (<code>TCPIP_MBOX_SIZE</code>).</p>
+
+<h3 id="socket">8. Phía userspace: socket là một file</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// networking/socket.c
+size_t socketRecv(OpenFile *fd, uint8_t *in, size_t limit, int flags) {
+  UserSocket *userSocket = (UserSocket *)fd-&gt;dir;
+  int lwipOut = -1;
+  while (true) {
+    if (!(fd-&gt;handlers-&gt;internalPoll(fd, EPOLLIN) &amp; EPOLLIN)) {
+      if (fd-&gt;flags &amp; O_NONBLOCK || flags &amp; MSG_DONTWAIT) { lwipOut = -1; errno = EAGAIN; break; }
+      if (signalsPendingQuick(currentTask)) { lwipOut = -1; errno = EINTR; break; }
+      continue;
+    }
+    lwipOut = lwip_recv(userSocket-&gt;lwipFd, in, limit, flags);
+    if (lwipOut &gt;= 0 || errno != EAGAIN)
+      break;
+  }
+  ...
+}</code></pre></div>
+<p>Chương trình ring 3 gọi <code>socket()</code>, <code>connect()</code>, <code>recv()</code> như trên Linux. Syscall (Bài 16) tạo một <code>OpenFile</code> mà handler trỏ vào <code>socket.c</code>, và
+<code>socket.c</code> gọi API socket của lwIP (<code>lwip_send</code>, <code>lwip_recv</code>...). Chờ dữ liệu bằng vòng hỏi lại <code>internalPoll</code>, thoát khi có tín hiệu (<code>EINTR</code>). Phần
+userspace là Bài 18.</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x08 làm đúng bước đầu tiên lwIP làm sau <code>dhcp_start</code>, nhưng bằng frame dựng tay để nhìn thấy từng byte.</em></p>
+<p><a href="../../thuc_hanh/lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a>: <code>initiateNetworking</code>, <code>initiateNIC</code>, <code>createNewNIC</code>, <code>netQueueAdd</code>, <code>helperNet</code>,
+<code>handlePacket</code> chép theo cavOS; chỗ lwIP thay bằng <code>net.c</code> dựng và đọc frame DHCP, ARP, ICMP. QEMU ghi mọi frame ra pcap để so.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/08-pci-nic
+make image &amp;&amp; make run
+python3 scripts/pcap_summary.py lab08.pcap</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35</code>, TCG; trích). Frame DHCP DISCOVER đúng như card lấy bằng DMA:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[t=  262] [3 net    ] tx DHCP DISCOVER (342 B): 52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff IPv4 0.0.0.0 &gt; 255.255.255.255 UDP 68 &gt; 67 DHCP DISCOVER
+   TX buffer bytes (the card fetches these by DMA from PA addr):
+      ff ff ff ff ff ff 52 54 00 12 34 56 08 00 45 00
+      01 48 00 01 00 00 40 11 79 a5 00 00 00 00 ff ff
+      ff ff 00 44 00 43 01 34 00 00 01 01 06 00 4c 41
+      42 38 00 00 80 00 00 00 00 00 00 00 00 00 00 00
+      ...
+      00 00 00 00 00 00 63 82 53 63 35 01 01 37 03 01
+      03 06 ff 00 00 00 00 00 00 00 00 00 00 00 00 00
+[t= 1310] [2 helper ] rx (590 B, IRQ at t=1307): 52:55:0a:00:02:02 &gt; ff:ff:ff:ff:ff:ff IPv4 10.0.2.2 &gt; 255.255.255.255 UDP 67 &gt; 68 DHCP OFFER yiaddr=10.0.2.15
+   DHCP OFFER: your IP 10.0.2.15, server 10.0.2.2, mask 255.255.255.0, router 10.0.2.2, DNS 10.0.2.3, lease 86400 s
+[t= 1312] [3 net    ] configured: ip 10.0.2.15 mask 255.255.255.0 router 10.0.2.2 dns 10.0.2.3
+[t= 1312] [3 net    ] tx ARP request (42 B): 52:54:00:12:34:56 &gt; ff:ff:ff:ff:ff:ff ARP request who-has 10.0.2.2 tell 10.0.2.15
+[t= 1316] [2 helper ] rx (64 B, IRQ at t=1312): 52:55:0a:00:02:02 &gt; 52:54:00:12:34:56 ARP reply 10.0.2.2 is-at 52:55:0a:00:02:02
+   frame bytes as the card wrote them by DMA (copied to netQueue by the IRQ):
+      52 54 00 12 34 56 52 55 0a 00 02 02 08 06 00 01
+      08 00 06 04 00 02 52 55 0a 00 02 02 0a 00 02 02
+      52 54 00 12 34 56 0a 00 02 0f 00 00 00 00 00 00
+[t= 1321] [2 helper ] rx (74 B, IRQ at t=1316): ... ICMP echo reply seq=1
+[kernel] DHCP + ARP + 2 pings OK, cli; hlt</code></pre></div>
+<p>Đọc DISCOVER từng lớp:</p>
+<ul>
+<li><strong>Ethernet</strong> (14 byte): đích <code>ff:ff:ff:ff:ff:ff</code> (broadcast, chưa biết ai cấp IP), nguồn <code>52:54:00:12:34:56</code> (MAC của card), ethertype <code>08 00</code> = IPv4.</li>
+<li><strong>IPv4</strong> (20 byte): <code>45</code> = version 4, header 5 từ 32 bit; tổng dài <code>01 48</code> = 328; TTL <code>40</code> = 64; giao thức <code>11</code> = 17 = UDP; checksum <code>79 a5</code>; nguồn
+<code>0.0.0.0</code> (chưa có IP), đích <code>255.255.255.255</code>. Mọi số đều big-endian.</li>
+<li><strong>UDP</strong> (8 byte): cổng nguồn <code>00 44</code> = 68, đích <code>00 43</code> = 67, dài <code>01 34</code> = 308.</li>
+<li><strong>DHCP</strong>: <code>01</code> = request, <code>01 06</code> = Ethernet, MAC dài 6; mã giao dịch <code>4c 41 42 38</code> ("LAB8"); cờ <code>80 00</code> = xin trả lời bằng broadcast; MAC lặp lại ở
+<code>chaddr</code>. Sau 236 byte cố định là "magic cookie" <code>63 82 53 63</code> rồi các option: <code>35 01 01</code> = loại tin 1 (DISCOVER), <code>37 03 01 03 06</code> = xin mask, router, DNS,
+<code>ff</code> = hết.</li>
+<li><strong>ARP reply</strong> nhận về: ethertype <code>08 06</code>; <code>00 01</code> Ethernet, <code>08 00</code> IPv4, <code>06 04</code> = MAC 6 byte, IP 4 byte; <code>00 02</code> = reply; "10.0.2.2 là
+<code>52:55:0a:00:02:02</code>". Frame dài 64 byte vì router của QEMU đệm cho đủ cỡ tối thiểu của Ethernet.</li>
+<li>Frame nhận đi đúng đường cavOS: IRQ ở <code>t=1312</code>, thread helper xử lý ở <code>t=1316</code>.</li>
+</ul>
+<p>Lab còn chạy chính cavOS với cùng card và ghi pcap: lwIP gửi DISCOVER/REQUEST giống lab, rồi ba ARP probe "có ai dùng 10.0.2.15 không?" (RFC 5227) trước khi nhận địa chỉ.</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bốn câu, trả lời bằng đọc code ở trên.</em></p>
+<details class="quiz"><summary>Đổi thứ tự trong <code>_start()</code>: <code>initiatePCI()</code> trước, <code>initiateNetworking()</code> sau. Mạng còn chạy không?</summary>
+<p>Thread lwIP vẫn được tạo (nó được tạo trong <code>initiatePCI</code>) và nhận con trỏ NIC đúng. Nhưng <code>selectedNIC</code> bị đặt về 0, mà handler ngắt của E1000 đọc
+<code>selectedNIC-&gt;infoLocation</code>: ngắt đầu tiên của card đọc con trỏ NULL và kernel hỏng.</p></details>
+<details class="quiz"><summary>Vì sao <code>netQueue</code> không cần spinlock dù cả ngắt lẫn thread helper đều chạm vào nó?</summary>
+<p>Chỉ có một bên ghi (handler, dời <code>netQueueWrite</code>) và một bên đọc (helper, dời <code>netQueueRead</code>), trên một CPU. Mỗi bên chỉ sửa chỉ số của mình và đọc chỉ số của bên kia.
+Hàng đợi một người ghi, một người đọc như vậy đúng mà không cần khoá, miễn là ghi dữ liệu xong mới dời chỉ số.</p></details>
+<details class="quiz"><summary>Trong DISCOVER, IP nguồn là <code>0.0.0.0</code> và MAC đích là broadcast. Vì sao?</summary>
+<p>Máy chưa có IP, nên không có gì để điền nguồn. Nó cũng chưa biết máy chủ DHCP là ai, nên gửi cho mọi máy trong mạng (MAC <code>ff:ff:ff:ff:ff:ff</code>, IP <code>255.255.255.255</code>).</p></details>
+<details class="quiz"><summary>Đọc trường "tổng dài" của gói IPv4 bằng <code>*(uint16_t *)</code> trên x86 với byte <code>01 48</code>. Ra số mấy?</summary>
+<p><code>0x4801</code> = 18433, vì x86 đọc byte thấp trước. Phải đảo byte (<code>ntohs</code>) để ra <code>0x0148</code> = 328.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, vài điểm đáng để ý trong phần keo, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Thứ tự init: networking trước hay NIC trước?</strong> Networking trước (<code>initiateNetworking</code> chỉ đặt <code>selectedNIC = 0</code>), PCI sau. lwIP được dựng <em>bên trong</em>
+<code>initiatePCI</code>, ngay khi một driver nhận card (<code>tcpip_init</code>).</li>
+<li><strong>Endianness mạng và host?</strong> Mạng big-endian, x86 little-endian. Header Ethernet của <code>sendPacket</code> dùng <code>switch_endian_16</code>; mọi thứ khác do lwIP đảo.</li>
+<li><strong>Stack tối thiểu Ethernet → ARP → IPv4 → ICMP/UDP?</strong> cavOS có hai: stack tự viết cũ trong <code>networking/stack/</code> (không còn được gọi), và lwIP (đang dùng) có đủ cả TCP,
+DHCP, DNS.</li>
+</ul>
+
+<h3 id="diem-yeu">Vài điểm yếu trong phần keo</h3>
+<ul>
+<li><code>sys_arch_sem_wait</code> panic nếu lwIP xin chờ có thời hạn (<code>timeout != 0</code>). lwIP hiện không gọi kiểu đó với cấu hình này, nhưng bật thêm tính năng có thể làm kernel dừng.</li>
+<li><code>lwipOutput</code> <code>malloc</code> mỗi lần gửi rồi tìm NIC bằng duyệt danh sách PCI; với một card thì không sao, nhưng mỗi frame tốn một lần cấp và trả bộ nhớ.</li>
+<li><code>socketRecv</code> chờ bằng vòng <code>continue</code> không nhường CPU: task userspace đang chờ dữ liệu quay cho tới khi bị timer cắt.</li>
+<li>Kiểm tra MTU trong <code>sendPacketRaw</code> so cả frame (đã có 14 byte header) với <code>mtu = 1500</code>, nên frame 1501–1514 byte (gói IP đủ 1500 byte) bị bỏ.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Card và driver: <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> · thread, helper, <code>handControl</code>: <a href="bai_12_multitasking_scheduler.html">Bài 12 - Multitasking &amp; Scheduler</a>
+· syscall <code>socket</code>/<code>recv</code>: <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a> · chương trình dùng mạng: <a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li>IEEE 802.3 (Ethernet): header 14 byte, cỡ frame tối thiểu 60 byte + 4 byte CRC, tối đa 1514 + 4.</li>
+<li>RFC 826 (ARP), RFC 791 (IPv4: header, checksum, TTL), RFC 768 (UDP), RFC 792 (ICMP echo), RFC 2131 + RFC 2132 (DHCP và các option 53, 55, 1, 3, 6, 51), RFC 5227 (ARP probe).</li>
+<li>lwIP: tài liệu "sys_arch" (các hàm OS phải viết) và <code>tcpip_init</code>/<code>tcpip_input</code> (chế độ có thread, khác chế độ <code>NO_SYS</code>).</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 13 - Networking</footer>
 </main>

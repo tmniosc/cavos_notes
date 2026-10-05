@@ -7,7 +7,7 @@ window.SITE = {
    "t": "Lý thuyết",
    "c": [
     {
-     "t": "Bài 0 - Bắt đầu ở đây",
+     "t": "Bắt đầu",
      "h": "ly_thuyet/bai/bai_00_bat_dau.html"
     },
     {
@@ -60,12 +60,7 @@ window.SITE = {
       {
        "t": "Bài 12 - Multitasking & Scheduler",
        "h": "ly_thuyet/bai/bai_12_multitasking_scheduler.html"
-      }
-     ]
-    },
-    {
-     "t": "Sắp tới (mới có dàn ý)",
-     "c": [
+      },
       {
        "t": "Bài 13 - Networking",
        "h": "ly_thuyet/bai/bai_13_networking.html"
@@ -116,12 +111,16 @@ window.SITE = {
        "h": "ly_thuyet/khai_niem/kaslr_pie_kernel.html"
       },
       {
-       "t": "Limine Protocol",
+       "t": "Boot Protocol & Limine",
        "h": "ly_thuyet/khai_niem/limine_protocol.html"
       },
       {
        "t": "Long Mode",
        "h": "ly_thuyet/khai_niem/long_mode.html"
+      },
+      {
+       "t": "Real Mode và Protected Mode",
+       "h": "ly_thuyet/khai_niem/real_mode_va_protected_mode.html"
       },
       {
        "t": "Paging",
@@ -136,7 +135,7 @@ window.SITE = {
        "h": "ly_thuyet/khai_niem/x86_segmentation.html"
       },
       {
-       "t": "ESP và cách UEFI tìm Limine",
+       "t": "ESP và UEFI boot",
        "h": "ly_thuyet/khai_niem/esp_va_uefi_boot.html"
       },
       {
@@ -211,6 +210,26 @@ window.SITE = {
     {
      "t": "Lab 0x07 - Multitasking & Scheduler",
      "h": "thuc_hanh/lab_0x07_tasks.html"
+    },
+    {
+     "t": "Lab 0x08 - PCI & NIC",
+     "h": "thuc_hanh/lab_0x08_pci_nic.html"
+    },
+    {
+     "t": "Lab 0x09 - AHCI & Filesystems",
+     "h": "thuc_hanh/lab_0x09_ahci_fs.html"
+    },
+    {
+     "t": "Lab 0x0a - Fast Syscalls",
+     "h": "thuc_hanh/lab_0x0a_fast_syscalls.html"
+    },
+    {
+     "t": "Lab 0x0b - SSE & FPU",
+     "h": "thuc_hanh/lab_0x0b_sse_fpu.html"
+    },
+    {
+     "t": "Lab 0x0c - Userspace & ELF Loader",
+     "h": "thuc_hanh/lab_0x0c_elf_userspace.html"
     }
    ],
    "h": "thuc_hanh/thuc_hanh.html"

@@ -3,40 +3,451 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 14 — PCI &amp; NIC · Học cavOS</title>
+<title>Bài 14 - PCI &amp; NIC · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_14_pci_nic.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 14 — PCI &amp; NIC</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, pci, network</span></div>
+    <h1>Bài 14 - PCI &amp; NIC</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, pci, config space, bar, mmio, dma, e1000, descriptor ring</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiatePCI()</code> · <strong>Liên hệ:</strong> <a href="bai_13_networking.html">Bài 13 - Networking</a>, <a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Tìm và nhận diện thiết bị cắm trên bus PCI</strong> (NIC, AHCI controller...). Enumerate config space → đọc
-vendor/device ID, class, BAR (vùng MMIO). Là "trình quản lý thiết bị" — bước bắt buộc trước khi điều khiển
-bất kỳ phần cứng PCIe nào: NIC (<a href="bai_13_networking.html">Bài 13 - Networking</a>), đĩa (<a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>).</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiatePCI()</code>, <code>ConfigReadWord()</code>, <code>GetDevice()</code>, <code>GetGeneralDevice()</code> (<code>drivers/pci.c</code>), <code>initiateE1000()</code>,
+<code>E1000InterruptHandler()</code>, <code>sendE1000()</code> (<code>drivers/nics/e1000.c</code>), <code>ioApicPciRegister()</code> (<code>cpu/apic.c</code>) · <strong>Phụ thuộc:</strong> I/O APIC và
+<code>registerIRQhandler</code> từ <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>, uACPI và DSDT từ <a href="bai_08_acpi.html">Bài 8 - ACPI</a>, <code>VirtualAllocate</code>/<code>VirtualToPhysical</code>
+từ <a href="bai_06_virtual_memory_paging.html">Bài 6</a>, <code>selectedNIC</code> và <code>netQueueAdd</code> từ <a href="bai_13_networking.html">Bài 13 - Networking</a>.</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Tìm xem máy có những thiết bị gì, rồi điều khiển một card mạng thật.</em></p>
+<p>Bàn phím, timer, cổng serial ở các bài trước nằm ở địa chỉ cố định. Card mạng, ổ SATA, card màn hình thì không: chúng cắm trên bus <strong>PCI</strong>, và kernel phải <em>hỏi</em> bus để biết có gì,
+nằm ở đâu. <code>initiatePCI()</code> quét toàn bộ bus và gọi driver theo loại thiết bị. Bài này đi theo một nhánh: card mạng Intel E1000 (card QEMU giả lập), từ lúc được tìm thấy tới lúc gửi
+và nhận frame bằng DMA. Nhánh ổ đĩa (AHCI) là <a href="bai_15_ahci_filesystems.html">Bài 15</a>.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Bus PCI giống một khu phố có 256 con đường, mỗi đường 32 căn nhà, mỗi nhà tối đa 8 phòng. Kernel đi gõ cửa từng phòng hỏi "có ai không?". Phòng có người thì treo sẵn một tấm phiếu
+(<em>config space</em>) ghi: tôi là ai (vendor/device ID), làm nghề gì (class), và cửa vào chỗ làm việc của tôi ở đâu (<em>BAR</em>).</p>
+<p>Card mạng làm việc kiểu tự phục vụ. Kernel chuẩn bị sẵn hai dãy ô kệ trong RAM, một dãy để nhận, một dãy để gửi, rồi đưa card địa chỉ của dãy kệ. Có thư tới, card tự vào RAM đặt thư lên
+ô kệ trống (<em>DMA</em>) và bấm chuông (ngắt). Muốn gửi, kernel đặt thư lên ô kệ gửi và dời cái vạch "tới đây là của card" (<em>tail</em>); card tự lấy thư, gửi đi, và đánh dấu "xong" lên ô.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Bốn ý về thiết bị PCI; I/O APIC và EOI đã có ở Bài 10.</em></p>
 <ul>
-<li>Enumerate PCI (bus/device/function), config space (port 0xCF8/0xCFC hoặc ECAM).</li>
-<li>Đọc vendor/device ID, class code, BAR.</li>
-<li>Tìm NIC, map MMIO, đọc MAC.</li>
+<li><strong>Địa chỉ PCI và config space.</strong> Mỗi chức năng của một thiết bị có địa chỉ <em>bus:slot.function</em> (8 + 5 + 3 bit) và một vùng cấu hình 256 byte. Cách cổ điển để đọc nó: ghi
+<code>0x80000000 | bus&lt;&lt;16 | slot&lt;&lt;11 | function&lt;&lt;8 | offset</code> vào cổng <code>0xCF8</code>, rồi đọc 32 bit ở <code>0xCFC</code>. Byte <code>0x00</code>: vendor ID
+(<code>0xFFFF</code> = không có ai), <code>0x0A</code>/<code>0x0B</code>: subclass/class, <code>0x10</code>–<code>0x24</code>: sáu BAR, <code>0x3C</code>: interrupt line/pin.</li>
+<li><strong>BAR và MMIO.</strong> Một BAR (Base Address Register) chứa địa chỉ vùng thanh ghi của thiết bị. Bit 0 = 1 là cổng I/O, = 0 là <em>MMIO</em>: thanh ghi của thiết bị xuất hiện như ô
+nhớ ở một địa chỉ vật lý, đọc/ghi bằng lệnh <code>mov</code> thường.</li>
+<li><strong>DMA và vòng descriptor.</strong> Card có quyền tự đọc/ghi RAM (bus master). Driver dựng một mảng <em>descriptor</em> (mỗi cái: địa chỉ vật lý của buffer, độ dài, trạng thái) và báo card
+hai chỉ số <em>head</em> (card đang ở đâu) và <em>tail</em> (card được dùng tới đâu). Vì card dùng địa chỉ vật lý, driver phải đổi VA → PA.</li>
+<li><strong>Ngắt PCI.</strong> Mỗi chức năng có tối đa một chân INTA–INTD, nối vào một GSI của I/O APIC tuỳ bo mạch; bảng nối nằm trong ACPI (<code>_PRT</code> của DSDT). Ngắt PCI là
+<em>level-triggered</em>: đường ngắt giữ mức "có ngắt" cho tới khi driver xử lý xong trên card.</li>
+<li><strong>Đã gặp:</strong> I/O APIC, <code>ioApicRedirect</code>, <code>registerIRQhandler</code> ở <a href="bai_10_apic_timer.html">Bài 10</a>; uACPI và DSDT ở <a href="bai_08_acpi.html">Bài 8</a>;
+HHDM ở <a href="bai_06_virtual_memory_paging.html">Bài 6</a> (đọc sâu: <a href="../khai_niem/hhdm.html">HHDM</a>).</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Quét bus bằng hai cổng I/O, rồi theo chân card E1000: bật bus master, đọc MAC, dựng hai vòng descriptor, nối ngắt.</em></p>
+<p>File: <code>drivers/pci.c</code>, <code>include/pci.h</code>, <code>drivers/nics/e1000.c</code>, <code>include/e1000.h</code>, <code>cpu/apic.c</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="config-read">1. Đọc config space qua <code>0xCF8</code>/<code>0xCFC</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// drivers/pci.c
+uint16_t ConfigReadWord(uint8_t bus, uint8_t slot, uint8_t func,
+                        uint8_t offset) {
+  uint32_t address;
+  uint32_t lbus = (uint32_t)bus;
+  uint32_t lslot = (uint32_t)slot;
+  uint32_t lfunc = (uint32_t)func;
+  uint16_t tmp = 0;
+
+  // Create configuration address as per Figure 1
+  address = (uint32_t)((lbus &lt;&lt; 16) | (lslot &lt;&lt; 11) | (lfunc &lt;&lt; 8) |
+                       (offset &amp; 0xFC) | ((uint32_t)0x80000000));
+
+  // Write out the address
+  outportl(PCI_CONFIG_ADDRESS, address);
+  // Read in the data
+  // (offset &amp; 2) * 8) = 0 will choose the first word of the 32-bit register
+  tmp = (uint16_t)((inportl(PCI_CONFIG_DATA) &gt;&gt; ((offset &amp; 2) * 8)) &amp; 0xFFFF);
+  return tmp;
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-pciaddr" role="img" aria-label="PCI configuration address written to port 0xCF8: bit 31 enable, bits 30 to 24 reserved, bits 23 to 16 bus, bits 15 to 11 device, bits 10 to 8 function, bits 7 to 2 register offset, bits 1 to 0 zero. Then 32 bits are read or written at port 0xCFC" width="100%" viewBox="0 0 720 150" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-pciaddr .lbl{fill:#c2c0b6;} #svg-pciaddr .mono{font-family:'SF Mono',Consolas,monospace;}</style>
+</defs>
+<text x="360" y="22" text-anchor="middle" class="lbl" font-size="11" font-weight="600">32-bit value written to port 0xCF8</text>
+<rect x="40" y="40" width="50" height="44" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="65" y="60" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">EN</text>
+<text x="65" y="75" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">31</text>
+<rect x="90" y="40" width="110" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="145" y="60" text-anchor="middle" fill="#D3D1C7" font-size="10" font-weight="600">reserved</text>
+<text x="145" y="75" text-anchor="middle" fill="#B4B2A9" font-size="9" class="mono">30..24</text>
+<rect x="200" y="40" width="150" height="44" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="275" y="60" text-anchor="middle" fill="#B5D4F4" font-size="10" font-weight="600">bus</text>
+<text x="275" y="75" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">23..16</text>
+<rect x="350" y="40" width="110" height="44" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="405" y="60" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">device (slot)</text>
+<text x="405" y="75" text-anchor="middle" fill="#AFA9EC" font-size="9" class="mono">15..11</text>
+<rect x="460" y="40" width="80" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="500" y="60" text-anchor="middle" fill="#F0DBAE" font-size="10" font-weight="600">function</text>
+<text x="500" y="75" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">10..8</text>
+<rect x="540" y="40" width="110" height="44" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="595" y="60" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">register</text>
+<text x="595" y="75" text-anchor="middle" fill="#8FC79A" font-size="9" class="mono">7..2</text>
+<rect x="650" y="40" width="30" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="665" y="66" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">00</text>
+<text x="360" y="118" text-anchor="middle" class="lbl" font-size="10">then read or write 32 bits at port 0xCFC (offset &amp; 0xFC: always a whole aligned dword)</text>
+</svg>
+<figcaption>Cơ chế cấu hình số 1 của PCI: hai cổng I/O cho cả 256 byte config space của mọi thiết bị.</figcaption>
+</figure>
+<p>Cổng <code>0xCFC</code> luôn trả 32 bit; <code>ConfigReadWord</code> lấy nửa thấp hay nửa cao tuỳ bit 1 của offset. cavOS chỉ dùng cách này. Cách mới hơn là <em>ECAM</em>: config space được map vào
+bộ nhớ (địa chỉ lấy từ bảng ACPI <code>MCFG</code>), mỗi thiết bị 4 KiB, đọc bằng <code>mov</code>; cavOS không dùng.</p>
+
+<h3 id="quet">2. <code>initiatePCI()</code>: gõ cửa 65536 địa chỉ</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>int FilterDevice(uint8_t bus, uint8_t slot, uint8_t function) {
+  uint16_t vendor_id = ConfigReadWord(bus, slot, function, 0x00);
+  return !(vendor_id == 0xffff || !vendor_id);
+}
+
+void initiatePCI() {
+  PCIdevice *device = (PCIdevice *)malloc(sizeof(PCIdevice));
+  LinkedListInit(&amp;dsPCI, sizeof(PCI));
+
+  for (uint16_t bus = 0; bus &lt; PCI_MAX_BUSES; bus++) {
+    for (uint8_t slot = 0; slot &lt; PCI_MAX_DEVICES; slot++) {
+      for (uint8_t function = 0; function &lt; PCI_MAX_FUNCTIONS; function++) {
+        if (!FilterDevice(bus, slot, function))
+          continue;
+
+        GetDevice(device, bus, slot, function);
+        if ((device-&gt;headerType &amp; ~(1 &lt;&lt; 7)) != PCI_DEVICE_GENERAL)
+          continue;
+
+        PCI *target = LinkedListAllocate(&amp;dsPCI, sizeof(PCI));
+        target-&gt;bus = bus;
+        ...
+        switch (device-&gt;class_id) {
+        case PCI_CLASS_CODE_NETWORK_CONTROLLER:
+          initiateNIC(device);
+          break;
+        case PCI_CLASS_CODE_MASS_STORAGE_CONTROLLER:
+          if (device-&gt;subclass_id == 0x6)
+            initiateAHCI(device);
+          break;
+        case PCI_CLASS_CODE_DISPLAY_CONTROLLER:
+          initiateVMWareSvga2(device);
+          break;
+        default:
+          break;
+        }
+      }
+    }
+  }
+  free(device);
+}</code></pre></div>
 <ul>
-<li>[ ] Legacy config (CF8/CFC) vs MMIO ECAM (từ ACPI MCFG)?</li>
-<li>[ ] NIC cụ thể nào (e1000/rtl8139)?</li>
+<li>Quét thô: 256 bus × 32 slot × 8 function, mỗi chỗ một lần đọc vendor ID. Không có thiết bị thì bus trả <code>0xFFFF</code>.</li>
+<li><code>GetDevice</code> đọc phần đầu config space (vendor, device, command, status, class, header type). Bit 7 của header type chỉ nói "thiết bị nhiều function"; ba bit thấp là loại header:
+0 = thiết bị thường, 1 = cầu PCI-PCI. cavOS bỏ qua cầu, vì quét thô đã đi qua mọi số bus.</li>
+<li>Class quyết định driver: <code>0x02</code> mạng → <code>initiateNIC</code> (Bài 13), <code>0x01</code>/<code>0x06</code> SATA AHCI → <code>initiateAHCI</code> (Bài 15), <code>0x03</code> màn hình → VMware SVGA.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="bar">3. <code>GetGeneralDevice()</code>: BAR và chân ngắt</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>void GetGeneralDevice(PCIdevice *device, PCIgeneralDevice *out) {
+  for (int i = 0; i &lt; 6; i++)
+    out-&gt;bar[i] =
+        COMBINE_WORD(ConfigReadWord(device-&gt;bus, device-&gt;slot, device-&gt;function,
+                                    PCI_BAR0 + 4 * i + 2),
+                     ConfigReadWord(device-&gt;bus, device-&gt;slot, device-&gt;function,
+                                    PCI_BAR0 + 4 * i));
+  ...
+  uint32_t interruptLine_interruptPIN = ConfigReadWord(
+      device-&gt;bus, device-&gt;slot, device-&gt;function, PCI_INTERRUPT_LINE);
+  out-&gt;interruptLine = EXPORT_BYTE(interruptLine_interruptPIN, true);
+  out-&gt;interruptPIN = EXPORT_BYTE(interruptLine_interruptPIN, false);
+  ...
+}</code></pre></div>
+<p>cavOS đọc giá trị BAR (địa chỉ) nhưng không đo cỡ vùng. Cách đo: ghi toàn bit 1 vào BAR, đọc lại; các bit thiết bị không cho ghi vẫn là 0, và chúng cho biết cỡ. Lab 0x08 làm thêm bước này.
+<code>interruptLine</code> (byte <code>0x3C</code>) là số IRQ của 8259 PIC do firmware ghi; với I/O APIC nó không còn đúng nghĩa, nên cavOS tìm GSI thật bằng ACPI (mục 7).</p>
+
+<h3 id="e1000-bat">4. <code>initiateE1000()</code>: nhận card, bật bus master, tìm vùng thanh ghi</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool isE1000(PCIdevice *device) {
+  return (device-&gt;vendor_id == 0x8086 &amp;&amp; device-&gt;device_id == 0x100e) || // qemu
+         (device-&gt;vendor_id == 0x8086 &amp;&amp; device-&gt;device_id == 0x100f); // vmware
+}
+
+bool initiateE1000(PCIdevice *device) {
+  if (!isE1000(device))
+    return false;
+  ...
+  // Enable PCI Bus Mastering, memory access and interrupts (if not already)
+  uint32_t command_status = COMBINE_WORD(device-&gt;status, device-&gt;command);
+  if (!(command_status &amp; (1 &lt;&lt; 2)))
+    command_status |= (1 &lt;&lt; 2); // PCI Bus Mastering
+  if (!(command_status &amp; (1 &lt;&lt; 1)))
+    command_status |= (1 &lt;&lt; 1); // PCI Memory Space
+  if (command_status &amp; (1 &lt;&lt; 10))
+    command_status &amp;= ~(1 &lt;&lt; 10); // PCI Interrupt Disable
+  ConfigWriteDword(device-&gt;bus, device-&gt;slot, device-&gt;function, PCI_COMMAND,
+                   command_status);
+  ...
+  NIC *nic = createNewNIC(pci);
+  nic-&gt;type = E1000;
+  ...
+  if (details-&gt;bar[0] &amp; (1 &lt;&lt; 0)) {
+    infoLocation-&gt;iobase = details-&gt;bar[0] &amp; ~0x3;
+  } else {
+    infoLocation-&gt;membasePhys = details-&gt;bar[0] &amp; ~15;
+    infoLocation-&gt;membase = bootloader.hhdmOffset + infoLocation-&gt;membasePhys;
+  }</code></pre></div>
 <ul>
-<li>PCI Local Bus Spec; datasheet NIC.</li>
+<li>Thanh ghi <em>command</em> (<code>0x04</code>): bit 1 cho thiết bị trả lời truy cập MMIO, bit 2 (<em>bus master</em>) cho nó tự truy cập RAM, bit 10 tắt ngắt INTx. cavOS bật 1, 2 và xoá 10.</li>
+<li>BAR0 của E1000 là MMIO (bit 0 = 0), 128 KiB. Bỏ 4 bit cờ ra địa chỉ vật lý; cavOS cộng <code>hhdmOffset</code> để có VA, như với LAPIC ở Bài 10. Mọi thanh ghi của card từ đây là
+<code>*(volatile uint32_t *)(membase + offset)</code> (<code>E1000CmdRead</code>/<code>E1000CmdWrite</code>).</li>
 </ul>
+
+<h3 id="mac">5. MAC từ EEPROM, và bật link</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>uint16_t E1000EepromRead(E1000_interface *e1000, uint8_t addr) {
+  ...
+  E1000CmdWrite(e1000, REG_EEPROM, EERD_START | calculatedAddress);
+  uint32_t out = 0;
+  do
+    out = E1000CmdRead(e1000, REG_EEPROM);
+  while (!(out &amp; successMask));
+  return EERD_DATA(out);
+}
+
+  value = E1000EepromRead(infoLocation, EEPROM_ETHERNET_ADDRESS_BYTES0);
+  nic-&gt;MAC[0] = value &amp; 0xff;
+  nic-&gt;MAC[1] = value &gt;&gt; 8;
+  ...
+  uint32_t control = E1000CmdRead(infoLocation, REG_CTRL);
+  control &amp;= ~CTRL_LINK_RESET;
+  control &amp;= ~CTRL_PHY_RESET;
+  control &amp;= ~CTRL_VLAN_MODE_ENABLE;
+  ...
+  control |= CTRL_SET_LINK_UP;
+  E1000CmdWrite(infoLocation, REG_CTRL, control);</code></pre></div>
+<p>Card có một EEPROM nhỏ; word 0, 1, 2 là 6 byte MAC (byte thấp trước). Thanh ghi <code>EERD</code> (<code>0x14</code>): ghi số word kèm bit START, chờ bit DONE, lấy 16 bit cao. Thanh ghi
+<code>CTRL</code> (<code>0x0</code>): bit SLU (<em>set link up</em>) bật đường truyền, xoá các bit reset.</p>
+
+<h3 id="rx">6. Vòng nhận (RX) và vòng gửi (TX)</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>typedef struct E1000RX {        // 16 bytes, written back by the card
+  uint64_t addr;                // physical address of the buffer
+  uint16_t length;
+  uint16_t checksum;
+  uint8_t  status;              // bit 0 DD (done), bit 1 EOP (end of packet)
+  uint8_t  errors;
+  uint16_t special;
+} E1000RX;
+
+void E1000RXConfigure(E1000_interface *e1000) {
+  ...
+  e1000-&gt;rxList = VirtualAllocate(E1000_RX_PAGE_COUNT);          // 1 page = 256 descriptors
+  size_t rxListPhys = VirtualToPhysical((size_t)e1000-&gt;rxList);
+  E1000CmdWrite(e1000, REG_RXDESCLO, SPLIT_64_LOWER(rxListPhys));
+  E1000CmdWrite(e1000, REG_RXDESCHI, SPLIT_64_HIGHER(rxListPhys));
+  E1000CmdWrite(e1000, REG_RXDESCLEN, E1000_RX_PAGE_COUNT * PAGE_SIZE);
+  E1000CmdWrite(e1000, REG_RXDESCHEAD, 0);
+  E1000CmdWrite(e1000, REG_RXDESCTAIL, E1000_RX_LIST_ENTRIES);
+  for (int i = 0; i &lt; E1000_RX_LIST_ENTRIES; i++)
+    e1000-&gt;rxList[i].addr = VirtualToPhysical((size_t)VirtualAllocate(2));
+  E1000CmdWrite(e1000, REG_RX_CONTROL, RCTL_LOOPBACK_MODE_OFF | RCTL_BROADCAST_ACCEPT_MODE | ...
+                                       | RCTL_STRIP_ETHERNET_CRC | RCTL_STORE_BAD_PACKETS | RCTL_BUFFER_SIZE_8192);
+}
+
+void sendE1000(NIC *nic, void *packet, uint32_t packetSize) {
+  E1000_interface *e1000 = nic-&gt;infoLocation;
+  uint32_t          tail = E1000CmdRead(e1000, REG_TXDESCTAIL);
+  volatile E1000TX *desc = &amp;e1000-&gt;txList[tail];
+
+  size_t pages = DivRoundUp(packetSize, PAGE_SIZE);
+  void  *virt = VirtualAllocatePhysicallyContiguous(pages);
+  desc-&gt;addr = VirtualToPhysical((size_t)virt);
+  memcpy(virt, packet, packetSize);
+  desc-&gt;length = packetSize;
+  desc-&gt;command = CMD_EOP | CMD_IFCS | CMD_RS;
+  desc-&gt;status = 0;
+
+  tail++;
+  ...
+  E1000CmdWrite(e1000, REG_TXDESCTAIL, tail);
+  while (!desc-&gt;status)
+    handControl(); // wait for it to be done
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-ring" role="img" aria-label="A descriptor ring of 8 slots shown in a row. Slots from head up to tail minus one belong to the card; the rest belong to the driver. The card advances head after it fills or sends a descriptor and writes DD into it; the driver advances tail to hand descriptors over" width="100%" viewBox="0 0 720 200" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-ring-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-ring .lbl{fill:#c2c0b6;} #svg-ring .mono{font-family:'SF Mono',Consolas,monospace;} #svg-ring .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="360" y="22" text-anchor="middle" class="lbl" font-size="11" font-weight="600">descriptor ring (wraps around after the last slot)</text>
+<rect x="60" y="60" width="75" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="97" y="87" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">0  DD</text>
+<rect x="135" y="60" width="75" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="172" y="87" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">1  DD</text>
+<rect x="210" y="60" width="75" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="247" y="87" text-anchor="middle" fill="#F0DBAE" font-size="9" class="mono">2</text>
+<rect x="285" y="60" width="75" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="322" y="87" text-anchor="middle" fill="#F0DBAE" font-size="9" class="mono">3</text>
+<rect x="360" y="60" width="75" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="397" y="87" text-anchor="middle" fill="#F0DBAE" font-size="9" class="mono">4</text>
+<rect x="435" y="60" width="75" height="44" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="472" y="87" text-anchor="middle" fill="#F0DBAE" font-size="9" class="mono">5</text>
+<rect x="510" y="60" width="75" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="547" y="87" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">6</text>
+<rect x="585" y="60" width="75" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="622" y="87" text-anchor="middle" fill="#D3D1C7" font-size="9" class="mono">7</text>
+<line x1="210" y1="138" x2="210" y2="108" class="flow" stroke-width="1.4" marker-end="url(#svg-ring-arrow)"/>
+<text x="210" y="152" text-anchor="middle" class="lbl" font-size="10">head (card)</text>
+<line x1="510" y1="138" x2="510" y2="108" class="flow" stroke-width="1.4" marker-end="url(#svg-ring-arrow)"/>
+<text x="510" y="152" text-anchor="middle" class="lbl" font-size="10">tail (driver)</text>
+<text x="360" y="48" text-anchor="middle" fill="#D8A54A" font-size="9.5">owned by the card: head .. tail-1</text>
+<text x="135" y="48" text-anchor="middle" class="lbl" font-size="9.5">done: driver reads, frees</text>
+<text x="360" y="186" text-anchor="middle" class="lbl" font-size="9.5">head == tail: the card owns nothing (RX: frames are dropped; TX: nothing to send)</text>
+</svg>
+<figcaption>Một vòng descriptor: card đi theo <em>head</em>, driver trao việc bằng cách dời <em>tail</em>.</figcaption>
+</figure>
+<ul>
+<li><strong>RX</strong>: 256 descriptor (16 byte mỗi cái, vừa một trang), mỗi cái trỏ tới một buffer. Card ghi frame vào buffer bằng DMA, ghi độ dài và bit <code>DD</code> vào descriptor, dời head, rồi
+gây ngắt.</li>
+<li><strong>TX</strong>: <code>sendE1000</code> chép frame vào một vùng liền về vật lý, điền descriptor ở <code>TDT</code> (cờ <code>EOP</code> = hết gói, <code>IFCS</code> = card tự thêm CRC, <code>RS</code> = báo lại
+trạng thái), dời <code>TDT</code>. Card gửi rồi ghi <code>DD</code> vào <code>status</code>; trong lúc chờ, task nhường CPU bằng <code>handControl()</code>.</li>
+<li>Card dùng địa chỉ <em>vật lý</em>: mọi buffer và chính mảng descriptor đều qua <code>VirtualToPhysical</code>.</li>
+</ul>
+
+<h3 id="irq">7. Ngắt: tìm GSI trong ACPI, rồi xử lý <code>ICR</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// cpu/apic.c
+uint8_t ioApicPciRegister(PCIdevice *device, PCIgeneralDevice *details) {
+  uacpi_find_devices("PNP0A03", uacpiBusMatch, (void *)udata);   // the PCI root bridge
+  uacpi_get_pci_routing_table(busNamespace, &amp;pciRoutingTable);   // its _PRT
+  uint8_t pin = details-&gt;interruptPIN;
+  ...
+  for (size_t i = 0; i &lt; pciRoutingTable-&gt;num_entries; i++) {
+    entry = &amp;pciRoutingTable-&gt;entries[i];
+    if (entry-&gt;pin != (pin - 1)) continue;
+    if (currSlot != slot || ...) continue;
+    if (entry-&gt;source == 0) { gsi = entry-&gt;index; break; }      // a fixed GSI
+    uacpi_get_current_resources(entry-&gt;source, &amp;resources);       // a link device: read its _CRS
+    ...
+      gsi = resource-&gt;irq.irqs[0];
+      polarity = resource-&gt;irq.polarity == UACPI_POLARITY_ACTIVE_LOW ? 1 : 0;
+      trigger = resource-&gt;irq.triggering == UACPI_TRIGGERING_EDGE ? 0 : 1;
+  }
+  ...
+}
+
+// drivers/nics/e1000.c, end of initiateE1000
+  uint8_t targIrq = ioApicPciRegister(device, details);
+  pci-&gt;irqHandler = registerIRQhandler(targIrq, &amp;E1000InterruptHandler);
+  E1000CmdWrite(infoLocation, REG_IMASK_CLEAR, 0xffffffff);
+  E1000CmdWrite(infoLocation, REG_IMASK, IMASK_RX_TIMER_INTERRUPT | IMASK_RX_OVERRUN | ... );
+  E1000CmdRead(infoLocation, REG_ICR);                       // discard pending causes
+  E1000CmdWrite(infoLocation, REG_RX_CONTROL, E1000CmdRead(infoLocation, REG_RX_CONTROL) | RCTL_ENABLE);
+  E1000CmdWrite(infoLocation, REG_TCTL, E1000CmdRead(infoLocation, REG_TCTL) | TCTL_EN);</code></pre></div>
+<ul>
+<li><code>_PRT</code> là một hàm AML trong DSDT, trả bảng "slot S, chân P → GSI G" hoặc "→ thiết bị link L". Với link, đọc <code>_CRS</code> của L để có GSI, polarity, trigger. Phải chạy AML, nên
+cần uACPI (Bài 8).</li>
+<li><code>IMS</code> (<code>0xD0</code>) chọn nguyên nhân nào được gây ngắt. <code>ICR</code> (<code>0xC0</code>) cho biết nguyên nhân nào vừa xảy ra, và <em>đọc là xoá</em>: đọc xong thì card nhả đường ngắt.</li>
+<li>Handler (<code>E1000InterruptHandler</code>) đọc <code>ICR</code>; có bit nhận (<code>RXT0</code>, <code>RXO</code>) thì quét vòng RX, descriptor nào có <code>DD</code> và <code>EOP</code> thì chép frame vào
+<code>netQueue</code> (Bài 13) và xoá status.</li>
+</ul>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x08 chép <code>initiatePCI</code> và <code>initiateE1000</code> của cavOS, in mọi giá trị đọc được, và đo cỡ từng BAR.</em></p>
+<p><a href="../../thuc_hanh/lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a>: <code>pci.c</code>, <code>e1000.c</code> theo đúng file cavOS; card mạng nhận và gửi frame thật qua mạng "user" của QEMU.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/08-pci-nic
+make image &amp;&amp; make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35</code>, TCG; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pci] B:S.F      ven:dev    class/sub/if hdr       cmd       IRQ
+[pci] 00:00.0  8086:29c0  class 06/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  Host bridge
+[pci] 00:01.0  1234:1111  class 03/00/00  hdr 00  cmd 0103  IRQ line 0 pin -  VGA-compatible display
+[pci] 00:02.0  8086:100e  class 02/00/00  hdr 00  cmd 0103  IRQ line 11 pin A  Ethernet controller
+[pci]          BAR0 MMIO32  0xfeb80000  size 128 KiB   (read 0xfeb80000, after writing 0xffffffff read 0xfffe0000)
+[pci]          BAR1 I/O     0xc000  size 64 B   (read 0xc001, after writing 0xffffffff read 0xffffffc1)
+[pci]          -&gt; class 0x02: initiateNIC()
+[pci::e1000] Intel E1000 NIC detected! dev{0x100e}
+[pci::e1000] PCI command 0x103 -&gt; 0x107 (bit 2 bus master=1, bit 1 memory space=1, bit 10 INTx disable=0)
+[pci::e1000] EECD=0x188 (bit 8 EEPROM present) -&gt; EERD words 0,1,2 = 0x5452 0x1200 0x5634 -&gt; MAC 52:54:00:12:34:56 (little-endian words)
+[pci::e1000] RX ring: 256 descriptors x 16 B = 1 page at PA 0x6d000, buffers 2048 B (2 per 4 KiB frame), RDH=0 RDT=255
+[pci::e1000] GSI 22 -&gt; vector 0x2a, handler E1000InterruptHandler; I/O APIC entry:
+[ioapic]   pin 22: 0x000000000000802a  vector=0x2a ACTIVE level high dest=0
+[pci::e1000] RCTL.EN + TCTL.EN set at t=250; STATUS=0x80080783 -&gt; link up, 1000 Mb/s, full duplex
+[pci] 00:1f.0  8086:2918  class 06/01/00  hdr 80  cmd 0103  IRQ line 0 pin -  ISA bridge (LPC)
+[pci] 00:1f.2  8086:2922  class 01/06/01  hdr 80  cmd 0107  IRQ line 10 pin A  SATA controller (AHCI)
+[pci] 00:1f.3  8086:2930  class 0c/05/00  hdr 80  cmd 0103  IRQ line 10 pin A  SMBus controller
+[pci] done: 65536 (bus,slot,function) addresses probed, 6 functions answered, 6 with header type 0; 65829 config reads, 47 ms (scan + initiateE1000)
+...
+[t= 1326] [3 net    ] rings after:  RDH=5 RDT=4 rxHead(driver)=5  TDH=5 TDT=5
+[kernel] E1000 interrupt handler ran 14 times (7 with ICR = 0). ICR causes seen: RXT0 5, RXDMT0 0, RXO 0, TXDW 5, TXQE 6, LSC 0</code></pre></div>
+<ul>
+<li>Máy q35 có đúng 6 function PCI. Card mạng ở <code>00:02.0</code>, ổ SATA ở <code>00:1f.2</code> (Bài 15 dùng tiếp).</li>
+<li>BAR0 đọc lại <code>0xfffe0000</code> sau khi ghi toàn 1: bỏ 4 bit cờ, đảo, cộng 1 được <code>0x20000</code> = 128 KiB.</li>
+<li>Command <code>0x103 → 0x107</code>: chỉ thêm bit 2 (bus master); firmware đã bật sẵn bit 0, 1.</li>
+<li>MAC <code>52:54:00:12:34:56</code> là MAC mặc định QEMU gán cho card đầu tiên.</li>
+<li>Thanh ghi <code>0x3C</code> nói IRQ 11, nhưng ngắt thật tới qua GSI 22 của I/O APIC. Lab tìm GSI bằng cách cho card tự gây ngắt (ghi <code>ICS</code>) và xem chân nào kêu, vì lab không chạy AML.</li>
+<li>Handler chạy 14 lần cho 10 lần có việc (5 nhận, 5 gửi): 7 lần đọc được <code>ICR = 0</code>. Đó là ngắt level gửi lại vì EOI được gửi trước khi handler đọc <code>ICR</code>; bản
+<code>DEMO=-DEOI_LATE</code> của lab chỉ còn 7 lần, 0 lần rỗng.</li>
+</ul>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Bốn câu, có câu cần đọc lại mục 6–7.</em></p>
+<details class="quiz"><summary>BAR của một thiết bị đọc lại <code>0xfffff000</code> sau khi ghi <code>0xffffffff</code>. Vùng MMIO lớn bao nhiêu?</summary>
+<p>Bỏ 4 bit cờ: <code>0xfffff000</code>. Đảo bit: <code>0x00000fff</code>, cộng 1: <code>0x1000</code> = 4 KiB (như BAR2 của card màn hình và BAR5 của AHCI trong log).</p></details>
+<details class="quiz"><summary>Vì sao driver phải ghi địa chỉ <em>vật lý</em> của buffer vào descriptor, không phải VA?</summary>
+<p>Card truy cập RAM qua bus, không đi qua MMU của CPU và không biết page table nào. Nó chỉ hiểu địa chỉ vật lý (trên máy có IOMMU thì là địa chỉ IOMMU dịch, cavOS không dùng).</p></details>
+<details class="quiz"><summary>Ghi <code>RDT = 0</code> (bằng <code>RDH</code>) rồi bật RCTL.EN. Card có nhận frame không?</summary>
+<p>Không. Khi head bằng tail, card không sở hữu descriptor nào, nên frame tới bị bỏ. Driver phải dời <code>RDT</code> để trao descriptor cho card.</p></details>
+<details class="quiz"><summary>Handler E1000 quên đọc <code>ICR</code>. Chuyện gì xảy ra với ngắt level-triggered?</summary>
+<p>Card không biết driver đã xử lý, nên giữ đường ngắt ở mức "có ngắt". Sau EOI, I/O APIC thấy mức vẫn cao và gửi lại ngay: handler bị gọi liên tục, CPU không làm được gì khác (bão ngắt).</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, những chỗ driver E1000 của cavOS lệch khỏi datasheet, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>Legacy config (CF8/CFC) hay MMIO ECAM (từ ACPI MCFG)?</strong> cavOS chỉ dùng CF8/CFC. Cách này chỉ với tới 256 byte đầu của config space (ECAM có 4 KiB) và mỗi lần đọc là hai lệnh
+I/O; đủ cho các thiết bị cavOS hỗ trợ.</li>
+<li><strong>NIC cụ thể nào?</strong> Bốn driver: NE2000, RTL8139, RTL8169, Intel E1000 (<code>8086:100e</code> của QEMU, <code>8086:100f</code> của VMware). <code>make qemu</code> của cavOS dùng
+<code>-net nic,model=e1000</code>.</li>
+<li><strong>Đọc MAC thế nào?</strong> Từ EEPROM của card qua thanh ghi <code>EERD</code>, word 0..2. Không có EEPROM thì cavOS panic ("Todo: MAC parsing without EEPROM").</li>
+</ul>
+
+<h3 id="lech-datasheet">Chỗ driver E1000 lệch khỏi datasheet</h3>
+<ul>
+<li><code>RCTL_BUFFER_SIZE_8192</code> được định nghĩa là <code>((0b10 &lt;&lt; 16) &amp; (1 &lt;&lt; 25))</code>, tức 0. Card vì vậy dùng buffer 2048 byte, dù cavOS cấp 8 KiB mỗi buffer. Muốn 8192 phải
+đặt <code>BSIZE = 10b</code> <em>và</em> bit <code>BSEX</code> (bit 25): toán tử đúng là <code>|</code>.</li>
+<li><code>RDT</code> được ghi bằng 256, bằng số descriptor, tức ngoài vòng (hợp lệ là 0..255). Handler không bao giờ dời <code>RDT</code> mà quét lại cả 256 descriptor từ đầu mỗi lần ngắt, nên
+khi vòng quay hết một lượt, frame có thể được đưa lên theo thứ tự sai.</li>
+<li><code>sendE1000</code> cấp vùng nhớ mới cho mỗi frame gửi và không trả lại: mỗi frame tốn ít nhất một trang.</li>
+<li>Không reset card trước khi cấu hình, và vòng chờ <code>EERD</code> DONE không có giới hạn.</li>
+<li>EOI gửi trước khi handler đọc <code>ICR</code>: với ngắt level, mỗi lần có việc handler chạy thêm một lần rỗng (Lab 0x08 đo được 7/14).</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>Lớp mạng phía trên: <a href="bai_13_networking.html">Bài 13 - Networking</a> · I/O APIC, EOI: <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a> · AML, <code>_PRT</code>:
+<a href="bai_08_acpi.html">Bài 8 - ACPI</a> · nhánh AHCI của cùng vòng quét: <a href="bai_15_ahci_filesystems.html">Bài 15 - AHCI &amp; Filesystems</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x08_pci_nic.html">Lab 0x08 - PCI &amp; NIC</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><strong>PCI Local Bus Specification 3.0</strong>: §3.2.2.3.2 (cơ chế cấu hình số 1, cổng <code>0xCF8</code>/<code>0xCFC</code>), §6.1 (bố cục config space header type 0), §6.2.2 (thanh ghi command), §6.2.5
+(BAR và cách đo cỡ), §2.2.6 (INTx: active-low, level).</li>
+<li><strong>PCI Express Base Spec</strong>: ECAM (config space map vào bộ nhớ), địa chỉ lấy từ bảng ACPI <code>MCFG</code>.</li>
+<li><strong>Intel PCI/PCI-X Family of Gigabit Ethernet Controllers Software Developer's Manual</strong> (8254x): chương 3 (descriptor RX/TX, DD/EOP), chương 13 (thanh ghi CTRL, EERD, ICR, IMS,
+RCTL, TCTL, RDBAL/RDLEN/RDH/RDT), chương 14 (trình tự khởi tạo).</li>
+<li><strong>ACPI 6.x</strong> §6.2.13 (<code>_PRT</code>: bảng định tuyến ngắt PCI), §6.4 (<code>_CRS</code>, mô tả IRQ có polarity và trigger).</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 14 - PCI &amp; NIC</footer>
 </main>

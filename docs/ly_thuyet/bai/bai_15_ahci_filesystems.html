@@ -3,40 +3,538 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Bài 15 — AHCI &amp; Filesystems · Học cavOS</title>
+<title>Bài 15 - AHCI &amp; Filesystems · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/bai/bai_15_ahci_filesystems.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Bài học</div>
-    <h1>Bài 15 — AHCI &amp; Filesystems</h1>
-    <div class="facts"><span class="fact"><b>Status</b> todo</span><span class="fact"><b>Tags</b> step, storage, fs</span></div>
+    <h1>Bài 15 - AHCI &amp; Filesystems</h1>
+    <div class="facts"><span class="fact done"><b>Status</b> done</span><span class="fact"><b>Tags</b> step, ahci, sata, prdt, mbr, vfs, mount, fat32, ext2, inode</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
-<p><strong>Hàm:</strong> <code>initiateAHCI()</code> · <strong>Phụ thuộc:</strong> PCI từ <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a></p>
-<h2 id="mục-đích">Mục đích</h2>
-<p><strong>Đọc/ghi đĩa thật (SATA qua AHCI) và hiểu dữ liệu trên đĩa thành file.</strong> AHCI controller (tìm qua
-<a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>) cho phép DMA sector; filesystem biến sector thô thành cây thư mục/file. Nền để nạp
-chương trình userspace từ đĩa (<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>).</p>
-<h2 id="mục-tiêu-học">Mục tiêu học</h2>
+<p><strong>Hàm:</strong> <code>initiateAHCI()</code>, <code>ahciPortRebase()</code>, <code>ahciRead()</code> (<code>drivers/ahci.c</code>), <code>openDisk()</code>, <code>getDiskBytes()</code> (<code>drivers/disk.c</code>),
+<code>fsMount()</code>, <code>fsDetermineMountPoint()</code> (<code>filesystems/vfs/vfs_mnt.c</code>), <code>fsOpenGeneric()</code>, <code>fsRead()</code> (<code>filesystems/vfs/vfs_controller.c</code>),
+<code>fat32Mount()</code>, <code>ext2Mount()</code> · <strong>Phụ thuộc:</strong> vòng quét PCI, BAR, bus master, DMA từ <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>; <code>VirtualAllocate</code>,
+<code>VirtualToPhysical</code> từ <a href="bai_06_virtual_memory_paging.html">Bài 6</a>; task và <code>currentTask</code> từ <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</p>
+
+<h2 id="muc-dich">Mục đích</h2>
+<p class="lede"><em>Đọc được file trên ổ cứng: tìm controller, nói chuyện với ổ đĩa, hiểu cách file được xếp trên đĩa.</em></p>
+<p>Tới đây mọi thứ kernel biết đều do Limine đưa vào RAM. Từ bài này cavOS tự đọc ổ đĩa. Có ba tầng: <strong>driver AHCI</strong> nói chuyện với controller SATA để đọc/ghi từng sector,
+<strong>filesystem</strong> (FAT32, ext2) biết sector nào thuộc file nào, và <strong>VFS</strong> ghép các filesystem thành một cây thư mục duy nhất. <code>_start()</code> mount ổ hai lần:
+phân vùng ext2 ở <code>/</code> (hệ thống, có <code>/bin/bash</code>), phân vùng FAT32 ở <code>/boot/</code> (Limine và kernel). Bài 18 nạp chương trình từ chính cây này.</p>
+
+<h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
+<p>Ổ cứng là một dãy ô 512 byte đánh số 0, 1, 2… (sector). Controller AHCI là người thủ kho: kernel viết phiếu "lấy cho tôi 2 ô bắt đầu từ ô 84800, đặt vào chỗ này trong RAM", bỏ phiếu vào
+một trong 32 khay (command slot), rồi gõ chuông. Thủ kho tự mang hàng vào RAM (DMA) và gạt khay về "trống" khi xong.</p>
+<p>Ô đầu tiên của ổ là mục lục (MBR): ổ chia làm mấy phần, mỗi phần bắt đầu ở ô nào. Mỗi phần có cách xếp đồ riêng. FAT32 giống sổ ghi "cluster này xong thì sang cluster kia". ext2 giống
+thư viện có thẻ mượn (inode): mỗi file một thẻ ghi cỡ file và các số ô chứa nó; thư mục chỉ là danh sách "tên → số thẻ". VFS là cái bảng chỉ đường: đường dẫn bắt đầu bằng
+<code>/boot/</code> thì sang kho FAT32, còn lại thì sang kho ext2.</p>
+
+<h2 id="can-biet-truoc">Cần biết trước</h2>
+<p class="lede"><em>Bốn ý về lưu trữ; BAR, bus master và DMA đã có ở Bài 14.</em></p>
 <ul>
-<li>AHCI controller (ABAR), port, command list, FIS, PRDT.</li>
-<li>Đọc/ghi sector (SATA identify, DMA).</li>
-<li>Filesystem trên đĩa (FAT? ext2? — xác định khi đọc code).</li>
+<li><strong>Sector và LBA.</strong> Ổ đĩa được đánh địa chỉ theo sector 512 byte, số thứ tự gọi là LBA (Logical Block Address). Lệnh <code>READ DMA EXT</code> của ATA nhận LBA 48 bit và số sector.</li>
+<li><strong>AHCI.</strong> Controller SATA chuẩn (Advanced Host Controller Interface). Thanh ghi nằm trong BAR5 (gọi là ABAR): phần chung, rồi 32 khối 128 byte cho 32 cổng. Mỗi cổng có một
+<em>command list</em> 32 slot; mỗi slot trỏ tới một <em>command table</em> chứa lệnh ATA (gói 20 byte gọi là FIS) và bảng <em>PRDT</em> (các vùng RAM nhận dữ liệu, bằng địa chỉ vật lý).</li>
+<li><strong>MBR.</strong> Sector 0: 446 byte code, rồi 4 mục phân vùng 16 byte ở offset <code>0x1BE</code> (loại, LBA đầu, số sector), kết thúc bằng <code>55 AA</code>.</li>
+<li><strong>FAT32 và ext2.</strong> FAT32 chia vùng dữ liệu thành cluster; bảng FAT ghi cluster kế tiếp của mỗi cluster, thành chuỗi. ext2 chia thành block và nhóm block; mỗi file có một
+<em>inode</em> giữ cỡ, quyền, và 15 số block (12 trực tiếp, 1 gián tiếp 1 cấp, 1 gián tiếp 2 cấp, 1 gián tiếp 3 cấp).</li>
+<li><strong>Đã gặp:</strong> BAR, command register, DMA, vòng descriptor ở <a href="bai_14_pci_nic.html">Bài 14</a>; VA → PA ở <a href="bai_06_virtual_memory_paging.html">Bài 6</a>; mount <code>/dev/</code> cho
+bàn phím ở <a href="bai_11_ps2_keyboard_mouse.html">Bài 11</a>.</li>
 </ul>
-<h2 id="câu-hỏi-mở">Câu hỏi mở</h2>
+
+<h2 id="doc-code">Đọc code cavOS</h2>
+<p class="lede"><em>Từ controller tới cây thư mục: bật AHCI trong vòng quét PCI, rồi bốn lần <code>fsMount</code>.</em></p>
+<p>File: <code>entry/kernel.c</code>, <code>drivers/ahci.c</code>, <code>include/ahci.h</code>, <code>drivers/disk.c</code>, <code>filesystems/vfs/vfs_mnt.c</code>, <code>filesystems/vfs/vfs_controller.c</code>,
+<code>filesystems/fat32/*.c</code>, <code>filesystems/ext2/*.c</code> (cavOS <code>2ba0edb</code>).</p>
+
+<h3 id="vi-tri-start">1. Vị trí trong <code>_start()</code></h3>
+<div class="code"><div class="code-bar">c</div><pre><code>// entry/kernel.c:_start()
+  LinkedListInit(&amp;dsMountPoint, sizeof(MountPoint));
+  fsMount("/dev/", CONNECTOR_DEV, 0, 0); // mouse &amp; kb need it
+  ...
+  initiateNetworking();
+  initiatePCI();                          // SATA controller -&gt; initiateAHCI()
+  fsMount("/", CONNECTOR_AHCI, 0, 1);     // disk 0, partition 1: ext2
+  fsMount("/boot/", CONNECTOR_AHCI, 0, 0); // disk 0, partition 0: FAT32
+  fsMount("/sys/", CONNECTOR_SYS, 0, 0);
+  fsMount("/proc/", CONNECTOR_PROC, 0, 0);
+
+  // just in case there's another font preference
+  psfLoadFromFile(DEFAULT_FONT_PATH);</code></pre></div>
+<p><code>initiateAHCI()</code> chạy bên trong <code>initiatePCI()</code> (class <code>0x01</code>, subclass <code>0x06</code>, Bài 14). Ngay sau đó ổ đĩa đã đọc được, và lần đọc file đầu tiên là font PSF ở
+dòng kế tiếp. <code>/dev/</code>, <code>/sys/</code>, <code>/proc/</code> cũng là mount point, nhưng là filesystem ảo: nội dung do kernel tạo ra, không nằm trên đĩa.</p>
+
+<h3 id="initiate-ahci">2. <code>initiateAHCI()</code>: nhận controller</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool initiateAHCI(PCIdevice *device) {
+  const AHCI_DEVICE *ahciDevice = isAHCIcontroller(device);   // table of vendor:device ids
+  if (!ahciDevice)
+    return false;
+  ...
+  uint32_t base = details-&gt;bar[5] &amp; 0xFFFFFFF0;              // ABAR
+  // Enable PCI Bus Mastering, memory access and interrupts (if not already)
+  ...
+  HBA_MEM *mem = (HBA_MEM *)(bootloader.hhdmOffset + base); //!
+  ...
+  // do a full HBA reset (as per 10.4.3)
+  mem-&gt;ghc |= (1 &lt;&lt; 0);
+  while (mem-&gt;ghc &amp; (1 &lt;&lt; 0))
+    ;
+
+  if (!(mem-&gt;bohc &amp; 2) || mem-&gt;cap2 &amp; AHCI_BIOS_OWNED) {
+    debugf("[pci::ahci] Performing BIOS-&gt;OS handoff required!\n");
+    mem-&gt;bohc = (mem-&gt;bohc &amp; ~8) | 2;
+    while ((mem-&gt;bohc &amp; 1))
+      ;
+    ...
+  }
+
+  if (!(mem-&gt;ghc &amp; (1 &lt;&lt; 31)))
+    mem-&gt;ghc |= (1 &lt;&lt; 31);                                    // AE: AHCI mode
+
+  ahciPortProbe(ahciPtr, mem);
+
+  // enable interrupts
+  uint8_t targIrq = ioApicPciRegister(device, details);
+  pci-&gt;irqHandler = registerIRQhandler(targIrq, &amp;ahciInterruptHandler);
+  if (!(mem-&gt;ghc &amp; (1 &lt;&lt; 1)))
+    mem-&gt;ghc |= 1 &lt;&lt; 1;
+  return true;
+}</code></pre></div>
 <ul>
-<li>[ ] Cơ chế command slot &amp; completion?</li>
-<li>[ ] FS layout cavOS dùng?</li>
+<li>Bật bus master và memory space y như card mạng ở Bài 14: controller cần tự ghi vào RAM.</li>
+<li><code>GHC.HR</code> (bit 0) reset cả controller; nó tự xoá bit khi xong. Sau reset mọi cổng về trạng thái ban đầu.</li>
+<li><code>BOHC</code>: nếu firmware đang dùng controller, OS xin quyền (bit OOS) và chờ firmware nhả (bit BOS về 0).</li>
+<li><code>GHC.AE</code> (bit 31): chạy ở chế độ AHCI thay vì chế độ IDE cũ. <code>GHC.IE</code> (bit 1) bật ngắt cho cả controller.</li>
 </ul>
-<h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+
+<h3 id="port">3. Dò cổng và "rebase": chuẩn bị bộ nhớ cho mỗi cổng</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>int ahciPortType(HBA_PORT *port) {
+  uint32_t ssts = port-&gt;ssts;
+  uint8_t ipm = (ssts &gt;&gt; 8) &amp; 0x0F;
+  uint8_t det = ssts &amp; 0x0F;
+  if (det != HBA_PORT_DET_PRESENT) return AHCI_DEV_NULL;   // 3: device present, link up
+  if (ipm != HBA_PORT_IPM_ACTIVE)  return AHCI_DEV_NULL;   // 1: active
+  switch (port-&gt;sig) {
+  case SATA_SIG_ATAPI: return AHCI_DEV_SATAPI;
+  case SATA_SIG_SEMB:  return AHCI_DEV_SEMB;
+  case SATA_SIG_PM:    return AHCI_DEV_PM;
+  default:             return AHCI_DEV_SATA;
+  }
+}
+
+void ahciPortRebase(ahci *ahciPtr, HBA_PORT *port, int portno) {
+  ahciCmdStop(port); // Stop command engine
+  port-&gt;ie = 1;
+  // Command list: 1K-byte aligned, 32 commands, 32 bytes each = 1K per port
+  void  *clbVirt = VirtualAllocate(clbPages);
+  size_t clbPhys = VirtualToPhysical((size_t)clbVirt);
+  port-&gt;clb = SPLIT_64_LOWER(clbPhys);
+  port-&gt;clbu = SPLIT_64_HIGHER(clbPhys);
+  // FIS: 256-byte aligned, 32 commands, 256 bytes each = 8K per port
+  ...
+  port-&gt;fb = SPLIT_64_LOWER(fbPhys);
+  // Command table: 128-byte aligned, 32 commands, AHCI_MEM_TABLE * 32
+  for (int i = 0; i &lt; 32; i++) {
+    cmdheader[i].prdtl = AHCI_PRDTS;
+    size_t ctbaPhysCurr = ctbaPhys + i * AHCI_MEM_TABLE;
+    cmdheader[i].ctba = SPLIT_64_LOWER(ctbaPhysCurr);
+    cmdheader[i].ctbau = SPLIT_64_HIGHER(ctbaPhysCurr);
+  }
+  ...
+  ahciCmdStart(port); // Start command engine: FRE then ST
+  ahciPtr-&gt;sata |= (1 &lt;&lt; portno);
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-ahcicmd" role="img" aria-label="AHCI structures for one port: the port register PxCLB points to a command list of 32 headers; header n points to command table n; the command table holds the command FIS (READ DMA EXT, LBA, count) and PRDT entries, each pointing to a physical buffer region; PxCI bit n issues slot n and is cleared by the HBA when done" width="100%" viewBox="0 0 720 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-ahcicmd-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-ahcicmd .lbl{fill:#c2c0b6;} #svg-ahcicmd .mono{font-family:'SF Mono',Consolas,monospace;} #svg-ahcicmd .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="100" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">port registers</text>
+<text x="300" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">command list (1 KiB)</text>
+<text x="530" y="24" text-anchor="middle" class="lbl" font-size="11" font-weight="600">command table (slot n)</text>
+<rect x="30" y="40" width="140" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="100" y="62" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">PxCLB</text>
+<rect x="30" y="84" width="140" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="100" y="106" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">PxFB (received FIS)</text>
+<rect x="30" y="128" width="140" height="36" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="100" y="150" text-anchor="middle" fill="#F0DBAE" font-size="10" class="mono">PxCI = 1 &lt;&lt; n</text>
+<rect x="230" y="40" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="300" y="58" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">header 0</text>
+<rect x="230" y="68" width="140" height="28" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="300" y="86" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">header n: CTBA, PRDTL</text>
+<rect x="230" y="96" width="140" height="28" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="300" y="114" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">... header 31</text>
+<rect x="440" y="40" width="180" height="56" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="530" y="60" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">command FIS (20 B)</text>
+<text x="530" y="76" text-anchor="middle" fill="#AFA9EC" font-size="9" class="mono">0x27, READ DMA EXT 0x25</text>
+<text x="530" y="89" text-anchor="middle" fill="#AFA9EC" font-size="9" class="mono">LBA 48 bit, count</text>
+<rect x="440" y="104" width="180" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="530" y="124" text-anchor="middle" fill="#C6E7CC" font-size="10" font-weight="600">PRDT entries</text>
+<text x="530" y="140" text-anchor="middle" fill="#8FC79A" font-size="9">physical address + byte count</text>
+<rect x="440" y="200" width="180" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="530" y="224" text-anchor="middle" fill="#D3D1C7" font-size="10">data buffer in RAM</text>
+<line x1="170" y1="58" x2="228" y2="58" class="flow" stroke-width="1.4" marker-end="url(#svg-ahcicmd-arrow)"/>
+<line x1="370" y1="82" x2="438" y2="68" class="flow" stroke-width="1.4" marker-end="url(#svg-ahcicmd-arrow)"/>
+<line x1="530" y1="160" x2="530" y2="198" class="flow" stroke-width="1.4" marker-end="url(#svg-ahcicmd-arrow)"/>
+<text x="540" y="184" class="lbl" font-size="9">DMA</text>
+<path d="M170 146 L300 146 L300 126" fill="none" class="flow" stroke-width="1.4" stroke-dasharray="4 3" marker-end="url(#svg-ahcicmd-arrow)"/>
+<text x="360" y="268" text-anchor="middle" class="lbl" font-size="9.5">the HBA clears bit n of PxCI when slot n is done; the driver polls it</text>
+</svg>
+<figcaption>Một lệnh đọc: cổng → command list → command table → buffer. Mọi con trỏ là địa chỉ vật lý.</figcaption>
+</figure>
 <ul>
-<li>AHCI 1.3.1 spec; SATA/ATA command set.</li>
+<li><code>SSTS</code>: DET = 3 nghĩa là có thiết bị và đường SATA đã nối; IPM = 1 là đang hoạt động. <code>SIG</code> là chữ ký thiết bị gửi lên: <code>0x00000101</code> ổ ATA,
+<code>0xEB140101</code> ổ ATAPI (CD).</li>
+<li>Mỗi cổng cần 3 vùng nhớ cho HBA dùng: command list (32 header × 32 byte), vùng nhận FIS (thiết bị báo trạng thái về đây), và 32 command table. Cả ba đưa cho HBA bằng địa chỉ vật lý.</li>
+<li>Engine phải dừng (<code>ST = 0</code>, chờ <code>CR = 0</code>) trước khi đổi <code>CLB</code>/<code>FB</code>, rồi bật lại: <code>FRE</code> (nhận FIS) trước, <code>ST</code> (chạy lệnh) sau.</li>
 </ul>
+
+<h3 id="ahci-read">4. <code>ahciRead()</code>: một lệnh đọc</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool ahciRead(ahci *ahciPtr, uint32_t portId, HBA_PORT *port, uint32_t startl,
+              uint32_t starth, uint32_t count, uint8_t *buff) {
+  port-&gt;is = (uint32_t)-1; // Clear pending interrupt bits
+  int slot = ahciCmdFind(ahciPtr, port);                    // a slot not set in SACT | CI
+  HBA_CMD_TBL *cmdtbl =
+      ahciSetUpCmd(ahciPtr, portId, slot, (uint16_t *)buff, count, false);
+  FIS_REG_H2D *cmdfis = (FIS_REG_H2D *)(&amp;cmdtbl-&gt;cfis);
+  cmdfis-&gt;fis_type = FIS_TYPE_REG_H2D;
+  cmdfis-&gt;c = 1; // Command
+  cmdfis-&gt;command = ATA_CMD_READ_DMA_EX;
+  cmdfis-&gt;lba0 = (uint8_t)startl;
+  ...
+  cmdfis-&gt;device = 1 &lt;&lt; 6; // LBA mode
+  cmdfis-&gt;countl = count &amp; 0xFF;
+  cmdfis-&gt;counth = (count &gt;&gt; 8) &amp; 0xFF;
+  if (!ahciPortReady(port))                                 // wait while TFD has BSY or DRQ
+    return false;
+  return ahciCmdIssue(ahciPtr, port, slot);                 // CI = 1 &lt;&lt; slot, spin until it clears
+}
+
+// inside ahciSetUpCmd: the PRDT
+    size_t targPhys = VirtualToPhysical((size_t)buff);
+    cmdtbl-&gt;prdt_entry[i].dba = SPLIT_64_LOWER(targPhys);
+    cmdtbl-&gt;prdt_entry[i].dbc = spaceCovered - 1; // up to 4 MiB
+    cmdtbl-&gt;prdt_entry[i].i = 1;</code></pre></div>
+<p>Driver chờ bằng cách đọc <code>CI</code> liên tục cho tới khi bit của slot về 0; handler ngắt AHCI chỉ xoá các bit trạng thái (và panic nếu có lỗi task file). Mỗi entry PRDT mô tả một vùng
+RAM <em>liền về vật lý</em>, tối đa 4 MiB; với 8 entry một lệnh đọc được tối đa 32 MiB.</p>
+
+<h3 id="disk">5. <code>drivers/disk.c</code>: MBR và "ổ số 0"</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool openDisk(uint32_t disk, uint8_t partition, mbr_partition *out) {
+  uint8_t *rawArr = (uint8_t *)malloc(SECTOR_SIZE);
+  getDiskBytes(rawArr, 0x0, 1);
+  bool ret = validateMbr(rawArr);                // bytes 510, 511 == 0x55, 0xAA
+  if (!ret)
+    return false;
+  memcpy(out, (void *)((size_t)rawArr + mbr_partition_indexes[partition]),
+         sizeof(mbr_partition));                  // 0x1BE + 16 * partition
+  free(rawArr);
+  return true;
+}
+
+void diskBytes(uint8_t *target_address, uint32_t LBA, uint32_t sector_count,
+               bool write) {
+  PCI *browse = LinkedListSearch(&amp;dsPCI, diskBytesCb, 0);   // first AHCI controller with a disk
+  ...
+  ahci *target = (ahci *)browse-&gt;extra;
+  int   pos = 0;
+  while (!(target-&gt;sata &amp; (1 &lt;&lt; pos)))
+    pos++;                                                  // first SATA port
+  (write ? ahciWrite : ahciRead)(target, pos, &amp;target-&gt;mem-&gt;ports[pos], LBA, 0,
+                                 sector_count, target_address);
+}</code></pre></div>
+<p>Tham số <code>disk</code> của <code>openDisk</code> không được dùng: mọi lần đọc đi tới cổng SATA đầu tiên của controller AHCI đầu tiên. <code>diskBytesMax</code> cắt yêu cầu lớn thành các lệnh
+vừa với 8 PRDT.</p>
+
+<h3 id="fsmount">6. <code>fsMount()</code>: đoán filesystem, gắn vào cây</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool isFat(mbr_partition *mbr) {
+  uint8_t *rawArr = (uint8_t *)malloc(SECTOR_SIZE);
+  getDiskBytes(rawArr, mbr-&gt;lba_first_sector, 1);
+  bool ret = (rawArr[66] == 0x28 || rawArr[66] == 0x29);   // FAT32 extended boot signature
+  free(rawArr);
+  return ret;
+}
+
+bool isExt2(mbr_partition *mbr) { return mbr-&gt;type == 0x83; }
+
+MountPoint *fsMount(char *prefix, CONNECTOR connector, uint32_t disk,
+                    uint8_t partition) {
+  MountPoint *mount = LinkedListAllocate(&amp;dsMountPoint, sizeof(MountPoint));
+  ...
+  switch (connector) {
+  case CONNECTOR_AHCI:
+    if (!openDisk(disk, partition, &amp;mount-&gt;mbr)) { fsUnmount(mount); return 0; }
+    if (isFat(&amp;mount-&gt;mbr)) {
+      mount-&gt;filesystem = FS_FATFS;
+      ret = fat32Mount(mount);
+    } else if (isExt2(&amp;mount-&gt;mbr)) {
+      mount-&gt;filesystem = FS_EXT2;
+      ret = ext2Mount(mount);
+    }
+    break;
+  case CONNECTOR_DEV:  ... devMount(mount);  break;
+  case CONNECTOR_SYS:  ... sysMount(mount);  break;
+  case CONNECTOR_PROC: ... procMount(mount); break;
+  }
+  ...
+  if (!systemDiskInit &amp;&amp; strlength(prefix) == 1 &amp;&amp; prefix[0] == '/')
+    systemDiskInit = true;
+  return mount;
+}
+
+void fsDetermineMountPointCb(void *data, void *ctx) {
+  MountPoint       *browse = data;
+  MountPointCbArgs *p = ctx;
+  size_t len = strlength(browse-&gt;prefix) - 1; // without trailing /
+  if (len &gt;= p-&gt;largestLen &amp;&amp; memcmp(p-&gt;filename, browse-&gt;prefix, len) == 0 &amp;&amp;
+      (p-&gt;filename[len] == '/' || p-&gt;filename[len] == '\0')) {
+    p-&gt;largestAddr = browse;
+    p-&gt;largestLen = len;
+  }
+}</code></pre></div>
+<ul>
+<li>FAT32 được nhận bằng nội dung (byte 66 của boot sector), ext2 chỉ bằng loại phân vùng trong MBR. Trong <code>disk.img</code> của cavOS cả hai phân vùng đều mang loại <code>0x83</code>, và
+phân vùng đầu vẫn được nhận là FAT32 vì <code>isFat</code> được thử trước.</li>
+<li>Mỗi filesystem gắn bảng hàm của nó (<code>mount-&gt;handlers</code>: open, read, write, seek, stat...) vào mount point.</li>
+<li>Tìm mount point = prefix dài nhất khớp với đầu đường dẫn, và ký tự kế tiếp phải là <code>/</code> hoặc hết chuỗi: <code>/boot/kernel.bin</code> thuộc <code>/boot/</code>, <code>/bootstrap.txt</code> thuộc <code>/</code>.</li>
+</ul>
+
+<h3 id="ext2">7. ext2: superblock, inode, block gián tiếp</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool ext2Mount(MountPoint *mount) {
+  ...
+  ext2-&gt;offsetBase = mount-&gt;mbr.lba_first_sector;
+  ext2-&gt;offsetSuperblock = mount-&gt;mbr.lba_first_sector + 2;   // byte 1024 of the partition
+  getDiskBytes(tmp, ext2-&gt;offsetSuperblock, 2);
+  if (ext2-&gt;superblock.ext2_magic != 0xEF53) goto error;
+  if (ext2-&gt;superblock.extended.required_feature != EXT2_R_F_TYPE_FIELD) goto error;
+  ext2-&gt;blockSize = 1024 &lt;&lt; ext2-&gt;superblock.log2block_size;
+  ...
+  ext2-&gt;offsetBGDT = BLOCK_TO_LBA(ext2, 0, ext2-&gt;superblock.superblock_idx + 1);
+  getDiskBytes((void *)ext2-&gt;bgdts, ext2-&gt;offsetBGDT, DivRoundUp(ext2-&gt;blockSize, SECTOR_SIZE));
+  ...
+  root-&gt;inode = 2;                                             // the root directory
+}
+
+Ext2Inode *ext2InodeFetch(Ext2 *ext2, size_t inode) {
+  uint32_t group = INODE_TO_BLOCK_GROUP(ext2, inode);         // (inode - 1) / inodes_per_group
+  uint32_t index = INODE_TO_INDEX(ext2, inode);               // (inode - 1) % inodes_per_group
+  size_t leftovers = index * ext2-&gt;inodeSize;
+  size_t lba = BLOCK_TO_LBA(ext2, 0, ext2-&gt;bgdts[group].inode_table) + leftovers / SECTOR_SIZE;
+  ...
+}
+
+uint32_t ext2BlockFetch(Ext2 *ext2, Ext2Inode *ino, uint32_t inodeNum,
+                        Ext2LookupControl *control, size_t curr) {
+  uint32_t itemsPerBlock = ext2-&gt;blockSize / sizeof(uint32_t);
+  size_t   baseSingly = 12 + itemsPerBlock;
+  size_t   baseDoubly = baseSingly + ext2-&gt;blockSize * itemsPerBlock;
+  if (curr &lt; 12)              return ino-&gt;blocks[curr];               // direct
+  else if (curr &lt; baseSingly) { /* read block blocks[12], take entry curr - 12 */ }
+  else if (curr &lt; baseDoubly) { /* blocks[13] -&gt; a block of block numbers -&gt; another */ }
+  debugf("[ext2] TODO! Triply Indirect Block Pointer!\n");
+  panic();
+}</code></pre></div>
+<figure class="diagram">
+<svg id="svg-ext2blocks" role="img" aria-label="An ext2 inode holds 15 block numbers: entries 0 to 11 point to data blocks directly; entry 12 points to a block full of block numbers (single indirect); entry 13 points to a block of block numbers, each pointing to another block of block numbers (double indirect); entry 14 is triple indirect" width="100%" viewBox="0 0 720 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-ext2blocks-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-ext2blocks .lbl{fill:#c2c0b6;} #svg-ext2blocks .mono{font-family:'SF Mono',Consolas,monospace;} #svg-ext2blocks .flow{stroke:#7d7b73;}</style>
+</defs>
+<rect x="30" y="20" width="150" height="220" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="105" y="40" text-anchor="middle" fill="#CECBF6" font-size="10" font-weight="600">inode</text>
+<text x="105" y="58" text-anchor="middle" fill="#AFA9EC" font-size="9">mode, size, ...</text>
+<rect x="45" y="70" width="120" height="40" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="105" y="94" text-anchor="middle" fill="#B5D4F4" font-size="9.5" class="mono">block[0..11]</text>
+<rect x="45" y="118" width="120" height="30" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="105" y="137" text-anchor="middle" fill="#C6E7CC" font-size="9.5" class="mono">block[12]</text>
+<rect x="45" y="156" width="120" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="105" y="175" text-anchor="middle" fill="#F0DBAE" font-size="9.5" class="mono">block[13]</text>
+<rect x="45" y="194" width="120" height="30" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="105" y="213" text-anchor="middle" fill="#D3D1C7" font-size="9.5" class="mono">block[14]</text>
+<rect x="250" y="70" width="170" height="40" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="335" y="94" text-anchor="middle" fill="#B5D4F4" font-size="9.5">12 data blocks</text>
+<rect x="250" y="118" width="170" height="30" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="335" y="137" text-anchor="middle" fill="#C6E7CC" font-size="9.5">block of N numbers</text>
+<rect x="470" y="118" width="210" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="575" y="137" text-anchor="middle" fill="#B5D4F4" font-size="9.5">N data blocks</text>
+<rect x="250" y="156" width="170" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="335" y="175" text-anchor="middle" fill="#F0DBAE" font-size="9.5">block of N numbers</text>
+<rect x="470" y="156" width="210" height="30" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="575" y="175" text-anchor="middle" fill="#C6E7CC" font-size="9.5">N blocks of N numbers</text>
+<rect x="470" y="194" width="210" height="30" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="575" y="213" text-anchor="middle" fill="#B5D4F4" font-size="9.5">N x N data blocks</text>
+<rect x="250" y="194" width="170" height="30" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="335" y="213" text-anchor="middle" fill="#D3D1C7" font-size="9.5">triple (cavOS: panic)</text>
+<line x1="165" y1="90" x2="248" y2="90" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="165" y1="133" x2="248" y2="133" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="420" y1="133" x2="468" y2="133" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="165" y1="171" x2="248" y2="171" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="420" y1="171" x2="468" y2="171" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="575" y1="186" x2="575" y2="192" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<line x1="165" y1="209" x2="248" y2="209" class="flow" stroke-width="1.4" marker-end="url(#svg-ext2blocks-arrow)"/>
+<text x="360" y="250" text-anchor="middle" class="lbl" font-size="9.5">N = block size / 4 (256 for 1 KiB blocks, 1024 for 4 KiB blocks)</text>
+</svg>
+<figcaption>15 số block trong một inode, và số block dữ liệu mỗi nhánh với tới được.</figcaption>
+</figure>
+<ul>
+<li>Superblock luôn nằm ở byte 1024 của phân vùng; chữ ký <code>0xEF53</code>. cavOS chỉ nhận ext2 có đúng một tính năng bắt buộc là <code>FILETYPE</code> (mục thư mục có byte kiểu).</li>
+<li>Các inode được chia đều cho các nhóm block. Inode <code>n</code> thuộc nhóm <code>(n - 1) / inodes_per_group</code>; bảng inode của nhóm đó ghi trong bảng mô tả nhóm (BGDT).</li>
+<li>Thư mục là một file mà nội dung là các mục <code>(inode, độ dài mục, độ dài tên, kiểu, tên)</code>. <code>ext2TraversePath</code> đi từ inode 2, mỗi thành phần của đường dẫn một lần tìm.</li>
+</ul>
+
+<h3 id="fat32">8. FAT32: boot sector và chuỗi cluster</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>bool fat32Mount(MountPoint *mount) {
+  ...
+  fat-&gt;offsetBase = mount-&gt;mbr.lba_first_sector; // 2048 (in LBA)
+  getDiskBytes(firstSec, fat-&gt;offsetBase, 1);
+  memcpy(&amp;fat-&gt;bootsec, firstSec, sizeof(FAT32BootSector));
+  fat-&gt;offsetFats = fat-&gt;offsetBase + fat-&gt;bootsec.reserved_sector_count;
+  fat-&gt;offsetClusters =
+      fat-&gt;offsetFats +
+      fat-&gt;bootsec.table_count * fat-&gt;bootsec.extended_section.table_size_32;
+  ...
+}
+
+uint32_t fat32FATtraverse(FAT32 *fat, uint32_t offset) {
+  uint32_t offsetFAT = offset * 4; // every entry is sizeof(uint32_t) = 4
+  uint32_t offsetSector = fat-&gt;offsetFats + (offsetFAT / bytesPerCluster);
+  uint32_t offsetEntry = offsetFAT % bytesPerCluster;
+  fat32FATfetch(fat, offsetSector, bytes);          // with a small cache of FAT sectors
+  uint32_t ret = (*retLocation) &amp; 0x0FFFFFFF; // remember; we're on FAT32
+  if (ret &gt;= 0x0FFFFFF8) return 0;                  // end of cluster chain
+  if (ret == 0x0FFFFFF7) return 0;                  // bad cluster
+  return ret;
+}</code></pre></div>
+<p>Vùng dữ liệu bắt đầu sau các sector dự trữ và các bảng FAT; cluster đầu tiên mang số 2. Ô thứ <code>c</code> của bảng FAT là số cluster kế tiếp của file, nên đọc một file là đi theo chuỗi
+cluster. Mục thư mục FAT chứa luôn cỡ file và cluster đầu, không có inode. FAT không có quyền file hay symlink: <code>lstat</code> của nó trỏ về <code>fat32Stat</code>.</p>
+
+<h3 id="vfs-open">9. Mở và đọc một file qua VFS</h3>
+<div class="code"><div class="code-bar">c</div><pre><code>OpenFile *fsOpenGeneric(char *filename, Task *task, int flags, int mode) {
+  char *safeFilename = fsSanitize(task ? task-&gt;infoFs-&gt;cwd : prefix, filename);  // absolute, no "..", "."
+  size_t    id = fsIdFind(task-&gt;infoFiles);                                        // smallest free fd
+  OpenFile *target = fsRegisterNode(task, id);
+  ...
+  MountPoint *mnt = fsDetermineMountPoint(safeFilename);
+  target-&gt;mountPoint = mnt;
+  target-&gt;handlers = mnt-&gt;handlers;
+  char *strippedFilename = fsStripMountpoint(safeFilename, mnt);
+  if (target-&gt;handlers-&gt;open) {
+    char  *symlink = 0;
+    size_t ret = target-&gt;handlers-&gt;open(strippedFilename, flags, mode, target, &amp;symlink);
+    if (RET_IS_ERR(ret)) {
+      ...
+      if (symlink &amp;&amp; ret != ERR(ELOOP)) {      // a symbolic link: resolve and open again
+        char *symlinkResolved = fsResolveSymlink(mnt, symlink);
+        OpenFile *res = fsOpenGeneric(symlinkResolved, task, flags, mode);
+        ...
+      }
+    }
+  }
+  return target;
+}
+
+size_t fsRead(OpenFile *file, uint8_t *out, uint32_t limit) {
+  ...
+  ret = file-&gt;handlers-&gt;read(file, out, limit);    // ext2Read, fat32Read, a /dev device, a socket ...
+}</code></pre></div>
+<p>Một <code>OpenFile</code> là một file đang mở của một task: con trỏ vị trí, cờ, mount point và bảng hàm. Mọi <code>read</code>/<code>write</code> sau đó đi thẳng tới hàm của filesystem đó. Đây là lý do
+bàn phím (<code>/dev/</code>, Bài 11), socket (Bài 13) và file trên ext2 cùng được đọc bằng một syscall <code>read</code> (Bài 16).</p>
+
+<h2 id="tu-lam">Tự làm</h2>
+<p class="lede"><em>Lab 0x09 bật controller AHCI theo đúng cavOS, rồi đọc FAT32 và ext2 trên chính ổ nó vừa boot lên.</em></p>
+<p><a href="../../thuc_hanh/lab_0x09_ahci_fs.html">Lab 0x09 - AHCI &amp; Filesystems</a>: <code>ahci.c</code> theo <code>drivers/ahci.c</code>, <code>vfs.c</code> theo <code>disk.c</code> + <code>vfs_mnt.c</code> + FAT32 + ext2 (chỉ đọc);
+ổ đĩa dựng giống <code>disk.img</code> của cavOS (FAT32 + ext2).</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>cd ~/oskernel-lab/09-ahci-fs
+make image &amp;&amp; make run</code></pre></div>
+<p>Output thật (2026-10-03, QEMU 10.2.1, <code>-M q35</code>, TCG; trích):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>[pci::ahci] ABAR (BAR5) PA 0xfebf1000 -&gt; VA 0xfffffe8000100000; CAP 0xc0141f05 -&gt; 6 ports, 32 command slots, 64-bit DMA yes; version 1.00; PI 0x3f
+[pci::ahci] port 0: SSTS 0x113 SIG 0xffffffff -&gt; SATA disk (cavOS's classification)
+[pci::ahci]   after FRE=1: SIG 0x101 (after 0 ms) -&gt; SATA disk
+[pci::ahci]   IDENTIFY: model "QEMU HARDDISK", LBA48 yes, 196608 sectors x 512 B = 96 MiB
+[pci::ahci] port 2: SSTS 0x113 SIG 0xffffffff -&gt; SATA disk (cavOS's classification)
+[pci::ahci]   after FRE=1: SIG 0xeb140101 (after 0 ms) -&gt; SATAPI (CD/DVD)
+
+[disk]   partition 0: type 0xc (bootable)  first LBA 2048  sectors 79872 (39 MiB)
+[disk]   partition 1: type 0x83             first LBA 81920  sectors 114688 (56 MiB)
+[vfs] fsMount("/", CONNECTOR_AHCI, 0, 1)
+[ext2] superblock at LBA 81922: magic 0xef53, volume "labroot", block size 1024, 57344 blocks, 14336 inodes, 7 block groups (8192 blocks, 2048 inodes each), inode size 256, incompat features 0x2 (= FILETYPE only: cavOS accepts it)
+[vfs] fsMount("/boot/", CONNECTOR_AHCI, 0, 0)
+[fat32] boot sector at LBA 2048: label "LABBOOT    ", 2 sectors/cluster, 32 reserved, 2 FATs x 754 sectors, root cluster 2
+[vfs] fsDetermineMountPoint("/bootstrap.txt") -&gt; "/"
+
+[ext2]   /big.bin: inode 12, 307200 B = 300 blocks; block[0..11] = 754,755,756,757,758,759,760,761,762,763,764,765 block[12] (single indirect) = 766, block[13] (double) = 1023; indirect blocks read: 3
+[kernel] /big.bin: 307200 bytes, FNV-1a 0x4fa57155, 306 AHCI commands, 610 sectors, 36 ms
+[kernel] /boot/kernel.bin: 389480 bytes, FNV-1a 0x66d00670, 763 AHCI commands, 1145 sectors, 82 ms</code></pre></div>
+<ul>
+<li>Checksum FNV-1a của <code>big.bin</code> và <code>kernel.bin</code> trùng với số script tính trên máy host trước khi boot: kernel đọc đúng từng byte qua cả hai filesystem.</li>
+<li>Cổng 2 là ổ CD mặc định của QEMU. Ngay sau khi reset HBA, <code>SIG</code> còn là <code>0xffffffff</code>; cách phân loại của cavOS (đọc <code>SIG</code> trước khi bật FRE) coi nó là đĩa SATA.</li>
+<li><code>big.bin</code> 300 block 1 KiB dùng cả block gián tiếp 1 cấp (766) lẫn 2 cấp (1023).</li>
+</ul>
+<p>Lab có thêm bản <code>DEMO=-DPRDT_CAVOS</code>: đọc vào một buffer 2 trang không liền về vật lý bằng một entry PRDT như cavOS, và thấy controller ghi đè lên frame nằm giữa.</p>
+
+<h2 id="tu-kiem-tra">Tự kiểm tra</h2>
+<p class="lede"><em>Năm câu; có câu cần tính.</em></p>
+<details class="quiz"><summary>Phân vùng ext2 bắt đầu ở LBA 81920, block 1 KiB. Block 1440 nằm ở LBA nào?</summary>
+<p><code>81920 + 1440 × 1024 / 512 = 84800</code>. Đó là sector chứa <code>/etc/motd</code> trong lab.</p></details>
+<details class="quiz"><summary>Inode 20, mỗi nhóm 2048 inode, inode 256 byte. Nó nằm ở nhóm nào và byte thứ mấy trong bảng inode của nhóm?</summary>
+<p>Nhóm <code>(20 - 1) / 2048 = 0</code>, chỉ số <code>(20 - 1) % 2048 = 19</code>, nên ở byte <code>19 × 256 = 4864</code> tính từ đầu bảng inode của nhóm 0.</p></details>
+<details class="quiz"><summary>Vì sao driver phải dừng engine của cổng (<code>ST = 0</code>, chờ <code>CR = 0</code>) trước khi ghi <code>CLB</code>?</summary>
+<p>Khi engine chạy, HBA có thể đang đọc command list cũ. Đổi địa chỉ giữa chừng làm nó đọc nửa cũ nửa mới. Đặc tả AHCI chỉ cho đổi <code>CLB</code>/<code>FB</code> khi <code>CR</code> và <code>FR</code> đều bằng 0.</p></details>
+<details class="quiz"><summary><code>fsMount("/boot/", ...)</code> và <code>fsMount("/", ...)</code>: đổi thứ tự hai lời gọi thì <code>/boot/kernel.bin</code> có còn tìm đúng không?</summary>
+<p>Vẫn đúng. <code>fsDetermineMountPoint</code> duyệt mọi mount point và chọn prefix dài nhất khớp, không phụ thuộc thứ tự mount.</p></details>
+<details class="quiz"><summary>Một file FAT32 dài 381 cluster. Không có cache, đọc cả file cần bao nhiêu lần đọc bảng FAT?</summary>
+<p>381: mỗi cluster tra một lần để biết cluster kế tiếp (lần cuối ra "hết chuỗi"). Lab không cache nên tốn 763 lệnh AHCI; cavOS giữ vài sector FAT gần nhất trong cache.</p></details>
+
+<h2 id="doc-them">Đọc thêm</h2>
+<p class="lede"><em>Câu hỏi của dàn ý cũ, những chỗ driver và filesystem của cavOS lệch khỏi đặc tả, và chỗ tra trong spec.</em></p>
+
+<h3 id="cau-hoi-mo">Câu hỏi mở (đã trả lời)</h3>
+<ul>
+<li><strong>cavOS đọc đĩa bằng gì?</strong> Chỉ AHCI (SATA). Không có driver IDE cũ, NVMe hay virtio-blk. <code>make qemu</code> của cavOS gắn ổ bằng <code>-device ahci -device ide-hd</code>.</li>
+<li><strong>Filesystem nào?</strong> ext2 (đọc và ghi) cho <code>/</code>, FAT32 cho <code>/boot/</code>; cộng ba filesystem ảo <code>/dev/</code>, <code>/sys/</code>, <code>/proc/</code>.</li>
+<li><strong>MBR hay GPT?</strong> Chỉ MBR, 4 phân vùng chính; không đọc GPT.</li>
+</ul>
+
+<h3 id="lech-dac-ta">Chỗ lệch khỏi đặc tả</h3>
+<ul>
+<li><strong>Phân loại cổng quá sớm.</strong> <code>ahciPortType</code> đọc <code>SIG</code> ngay sau reset HBA, khi chưa bật FRE, nên <code>SIG</code> còn là <code>0xFFFFFFFF</code> và mọi thiết bị rơi vào nhánh
+<code>default</code> = "SATA". Lab 0x09 đo được: ổ CD của QEMU bị cavOS coi là đĩa. Vì <code>diskBytes</code> chỉ dùng cổng SATA đầu tiên, máy có ổ CD ở cổng thấp hơn ổ cứng sẽ đọc nhầm sang ổ CD.</li>
+<li><strong>PRDT giả định buffer liền về vật lý.</strong> <code>ahciSetUpCmd</code> tính một giá trị căn trang rồi ghi đè ngay bằng <code>MIN(totalBytes, AHCI_BYTES_PER_PRDT)</code>, và lấy PA của trang
+đầu cho cả entry. Buffer qua <code>VirtualAllocate</code> liền về VA nhưng không chắc liền về PA; khi đó controller ghi vào frame của người khác.</li>
+<li><strong>Handoff luôn chạy.</strong> Điều kiện <code>!(mem-&gt;bohc &amp; 2) || ...</code> đúng ngay khi OS chưa đặt OOS, nên dòng "Performing BIOS-&gt;OS handoff required!" luôn được in (có trong
+<code>lab/outputs/cavos-net-run.txt</code>), kể cả trên controller không có cơ chế handoff (<code>CAP2.BOH = 0</code>).</li>
+<li><strong>Giới hạn block gián tiếp 2 cấp sai đơn vị.</strong> <code>baseDoubly = baseSingly + blockSize * itemsPerBlock</code>; đúng phải là <code>itemsPerBlock * itemsPerBlock</code> (số block, không phải
+số byte). Với block 1 KiB, file vượt 65804 block (≈ 64 MiB) sẽ được tra như gián tiếp 2 cấp với chỉ số vượt khỏi block danh sách thay vì đi sang nhánh 3 cấp.</li>
+<li>Chờ lệnh xong (<code>ahciCmdIssue</code>) bằng vòng lặp không giới hạn thời gian; handler ngắt <code>panic()</code> khi gặp lỗi task file.</li>
+</ul>
+
+<h3 id="lien-he">Liên hệ</h3>
+<ul>
+<li>BAR, bus master, DMA, <code>_PRT</code>: <a href="bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a> · VA → PA: <a href="bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a> · <code>/dev/</code>:
+<a href="bai_11_ps2_keyboard_mouse.html">Bài 11</a> · syscall <code>open</code>/<code>read</code>: <a href="bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a> · nạp <code>/bin/bash</code> từ ext2:
+<a href="bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>.</li>
+<li>Lab: <a href="../../thuc_hanh/lab_0x09_ahci_fs.html">Lab 0x09 - AHCI &amp; Filesystems</a>.</li>
+</ul>
+
+<h3 id="anh-xa-spec">Ánh xạ spec</h3>
+<ul>
+<li><strong>Serial ATA AHCI 1.3.1</strong>: §3.1 (thanh ghi chung: CAP, GHC, PI, BOHC), §3.3 (thanh ghi cổng: CLB, FB, IS, CMD, TFD, SIG, SSTS, CI), §4.2 (command list, command table, PRDT),
+§10.1.2 (khởi tạo phần mềm), §10.4.3 (HBA reset), §10.6 (BIOS/OS handoff).</li>
+<li><strong>ATA/ATAPI Command Set (ACS)</strong>: <code>READ DMA EXT</code> (25h), <code>IDENTIFY DEVICE</code> (ECh, word 27–46 tên ổ, 100–103 số sector LBA48).</li>
+<li><strong>Microsoft FAT32 File System Specification</strong>: BPB, FAT, mục thư mục 32 byte, tên dài (LFN).</li>
+<li><strong>The Second Extended File System</strong> (tài liệu của Dave Poirier): superblock, BGDT, inode, block gián tiếp, mục thư mục.</li>
+</ul>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Bài 15 - AHCI &amp; Filesystems</footer>
 </main>
