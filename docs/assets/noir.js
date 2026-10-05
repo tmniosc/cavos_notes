@@ -194,8 +194,9 @@
   // contents of this page, from h2/h3 with an id
   var heads = document.querySelectorAll('main h2[id], main h3[id]');
   var links = {};
+  var toc = null;
   if (side && heads.length) {
-    var toc = el('nav', 'toc');
+    toc = el('nav', 'toc');
     toc.setAttribute('aria-label', 'Contents');
     toc.appendChild(el('div', 'label dim', 'On this page'));
     var ol = el('ol');
@@ -214,19 +215,22 @@
       ol.appendChild(li);
     });
     toc.appendChild(ol);
+  }
 
-    // Wide screens: an outline column on the right of the text. Narrower: back in
-    // the left sidebar, under the site map (three columns wouldn't fit).
+  // Wide screens: an outline column on the right of the text, always there (empty
+  // when the page has no headings) so every page keeps the same column widths.
+  // Narrower: the contents go back in the left sidebar (three columns wouldn't fit).
+  if (side) {
     var layout = side.parentNode;
     var outline = el('aside', 'side outline');
     var wide = window.matchMedia('(min-width: 1400px)');
     var place = function () {
       if (wide.matches) {
-        outline.appendChild(toc);
+        if (toc) outline.appendChild(toc);
         if (!outline.parentNode) layout.appendChild(outline);
         layout.classList.add('has-outline');
       } else {
-        side.appendChild(toc);
+        if (toc) side.appendChild(toc);
         if (outline.parentNode) layout.removeChild(outline);
         layout.classList.remove('has-outline');
       }
