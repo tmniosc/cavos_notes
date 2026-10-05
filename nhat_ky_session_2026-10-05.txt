@@ -1,0 +1,65 @@
+NHẬT KÝ SESSION 2026-10-05 — vault cavos_notes (Máy 2, Windows 11, WSL user thinker)
+===================================================================================
+
+TRẠNG THÁI CUỐI
+- Các commit cuối phiên (8101825 trở về sau, gồm cả commit chứa file này) có thể CHƯA lên GitHub.
+  Lý do: gh trên máy này vẫn đăng nhập tài khoản tmn281196, repo thuộc tmniosc → 403.
+  Push bằng:
+    git -c safe.directory=E:/tmniosc/system_programming_notes/cavos_notes push origin main
+- Sang máy khác: git pull, rồi nói với Claude "tiếp tục" — CLAUDE.md (mục "Phiên gần nhất") bảo nó đọc file này.
+
+
+1. ĐỒNG BỘ VỚI MÁY KHÁC
+- GitHub (origin/main) dừng ở 2026-09-30, không có gì mới để kéo về.
+- Vault máy này có sẵn 10 commit chưa push (2026-10-03) + nhiều thay đổi chưa commit
+  (công việc từ máy kia: Lab 0x08–0x0c, Bài 13–18, soát vault 2026-10-04).
+- Commit theo nhóm:
+    d7bddc3  Theme: luôn dựng cột outline bên phải ở màn hình >= 1400px
+    ed8fbdc  Lab 0x08 đến 0x0c (source, log, trang lab, thuc_hanh.html, README)
+    213a951  Bài 13 đến 18 viết xong, Sắp tới → Bài học (ly_thuyet, Bài 0, site.js, index)
+    f7cc1d2  Khái niệm viết chung cho mọi kernel + trang Real Mode và Protected Mode
+    d5235a6  Soát vault (lede, bỏ icon, Lab 0x03 viết lại, xoá log lab-0x03-run.txt)
+    e59f25e  CLAUDE.md: bảng máy sửa đường dẫn vault mới của cả 2 máy
+             (Máy 1 D:\tmniosc\system_programming_notes\cavos_notes,
+              Máy 2 E:\tmniosc\system_programming_notes\cavos_notes)
+- 16 commit này đã lên GitHub (user tự push sau khi xử lý tài khoản).
+
+
+2. SẮP XẾP KHÁI NIỆM
+- 8101825  Sidebar (docs/assets/site.js): mục "Khái niệm (tra cứu)" xếp theo chủ đề
+    Chế độ CPU:     Real Mode và Protected Mode → x86 Segmentation → GDT → Long Mode
+    Bộ nhớ:         Paging → Higher-Half Kernel → HHDM → KASLR & PIE Kernel
+    Định dạng file: PE, ELF và quy ước gọi hàm
+    Boot/firmware:  ESP và UEFI boot → Cấu trúc os.img → Secure Boot →
+                    UEFI Runtime Services → Boot Protocol & Limine →
+                    Request-Response Mechanism → Limine hay tự viết loader UEFI
+- 4fda29c  docs/ly_thuyet/ly_thuyet.html: danh sách khái niệm chia 4 nhóm có tiêu đề,
+           cùng thứ tự sidebar; dòng Limine/Request-Response tách đôi.
+
+
+3. SOÁT ẨN DỤ
+- a628cb3  cau_truc_os_img.html: bỏ ẩn dụ "lá thư / phong bì / người đưa thư"
+           (sai vì Limine nằm TRONG os.img, và thiếu vai firmware).
+           Thay bằng "thùng hàng kèm robot lắp ráp":
+             nhà xưởng = máy, chỗ đặt máy = RAM, người nhận hàng = firmware,
+             thùng = os.img, robot = Limine, tờ hướng dẫn = limine.conf,
+             cỗ máy = kernel.bin, nhãn = 0x55AA; robot có 2 nút bật (BIOS / UEFI).
+- ea82168  Các trang khái niệm khác:
+    gdt.html               "toà nhà" là vùng địa chỉ, KHÔNG phải RAM (khớp mục 0);
+                           selector = "số thẻ" (bỏ "số ghế"; id §8 giữ nguyên để link Bài 7 chạy)
+    x86_segmentation.html  selector = "số thẻ" (bỏ "tấm vé", "số ghế")
+    limine_protocol.html   bootloader = "người chuyển lời"; chỉnh CPU nhưng không cấu hình thiết bị
+    real_mode_va_...html   A20: cổng có từ máy AT (286), bắt chước quay vòng của 8086
+    secure_boot.html       db gồm cả "người bảo lãnh" (chứng chỉ); bảo vệ cổng = firmware
+- Giữ nguyên (đã ổn): phong bì có nhãn (Request-Response), đặt hàng/giao hàng,
+  cửa sổ nhìn vào RAM (HHDM), ngón tay trỏ khúc, thẻ ra vào công ty, red zone, UEFI Runtime.
+
+
+VIỆC CÒN LẠI
+- Push 4 commit cuối (cần gh đăng nhập tmniosc: gh auth login, rồi gh auth switch -u tmniosc).
+- Không có bài/lab nào đang viết dở.
+
+
+4. BÀN GIAO
+- CLAUDE.md: thêm mục "Phiên gần nhất" (đầu phiên đọc nhat_ky_session_*.txt mới nhất), cho phép file
+  nhật ký nằm ở gốc vault, bỏ dòng "Máy đang làm" cũ (mâu thuẫn bảng máy về KVM của Máy 1).

@@ -59,6 +59,7 @@ hoặc UNC `\\wsl.localhost\Ubuntu-26.04\home\<user>\...`. Nhận máy theo CWD 
   lab/        src/oskernel-lab/ (source lab) + outputs/ (log chạy thật)
   scripts/    script tiện ích (cavos-qemu.sh)
   ```
+  Ngoại lệ: `nhat_ky_session_YYYY-MM-DD.txt` ở gốc = nhật ký bàn giao giữa các máy (xem mục "Phiên gần nhất").
 - **Mọi note là 1 trang HTML theo skill `dark-noir-docs`** (`.claude/skills/dark-noir-docs/`): noir đen/trắng/xám,
   không bo góc, sidebar + mục lục tự sinh. Theme dùng chung ở `docs/assets/noir.css` + `noir.js`; sơ đồ site
   ở `docs/assets/site.js`. Mở đúp `docs/index.html` là đọc được, không cần server. Không còn Markdown/Obsidian
@@ -167,7 +168,14 @@ Bài 0 (ô xanh) → Tiến độ học. Lab dự kiến:
       Log lần chạy cũ `lab-0x03-run.txt` đã xoá (2026-10-04).
 - [x] Soát uefi_notes (2026-10-04): bỏ chuyện vá lỗi trên trang + comment source + README (màu chữ theo tác vụ giải thích ở lab 0x16 #mau,
       CopyMem ở lab 0x04 thành "bẫy"), mục "Bẫy đã gặp" → "Bẫy", lede đủ, 57 trang qua bộ kiểm
-Máy đang làm: Windows 10, vault `D:\tmniosc\system_programming_notes\cavos_notes`, WSL user `tmniosc`, có `/dev/kvm`.
+- [x] Đồng bộ + soát khái niệm (2026-10-05, Máy 2): commit theo nhóm việc từ máy kia; sidebar + ly_thuyet.html xếp khái niệm
+      theo 4 chủ đề; soát ẩn dụ trang khái niệm (os.img = thùng hàng kèm robot lắp ráp, selector = "số thẻ"...)
+
+### Phiên gần nhất (bàn giao giữa các máy)
+**Đầu phiên, nếu user nói "tiếp tục" / "làm tiếp": đọc file `nhat_ky_session_*.txt` mới nhất ở gốc vault**
+(hiện là `nhat_ky_session_2026-10-05.txt`) để biết đã làm gì, commit nào, việc còn dở. Rồi `git fetch` + `git status`
+xem máy này có đủ commit chưa (chưa thì `git pull`). Cuối mỗi phiên dài: viết nhật ký mới cùng khuôn, commit + push.
+Việc còn dở sau phiên 2026-10-05: không có việc viết bài nào dở; chỉ cần chắc chắn các commit đã lên GitHub.
 
 > Nạp trước Bài 4: `docs/ly_thuyet/khai_niem/paging.html` — 5 ý cốt lõi để đọc link.ld/memmap/HHDM.
 
