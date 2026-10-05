@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Real Mode và Protected Mode · Học cavOS</title>
+<link rel="stylesheet" href="../../assets/noir.css">
+</head>
+<body data-root="../../" data-page="ly_thuyet/khai_niem/real_mode_va_protected_mode.html">
+<header class="top">
+  <div class="top-inner">
+    <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
+    <h1>Real Mode và Protected Mode</h1>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, cpu, x86, boot, bios, smp</span></div>
+  </div>
+</header>
+<div class="layout">
+<aside class="side"></aside>
+<main>
+<div class="callout quote">
+<p>Kernel 64-bit sống ở <a href="long_mode.html">long mode</a>, nhưng có ba lúc người viết kernel phải tự viết code ở hai chế độ cũ: <strong>bootloader cho BIOS</strong> (bắt đầu ở real
+mode), <strong>kernel được nạp bằng Multiboot</strong> (bắt đầu ở 32-bit protected mode), và <strong>trampoline đánh thức CPU phụ</strong> (mỗi CPU phụ thức dậy ở real mode). Trang này
+gom đúng những gì cần cho ba việc đó. Lịch sử segment và ba thời kỳ: <a href="x86_segmentation.html">x86 Segmentation</a>.</p>
+</div>
+
+<h2 id="real-mode">Real mode: CPU như năm 1978</h2>
+<p class="lede"><em>Lúc bật máy, CPU x86 nào cũng giả làm một con 8086: 16 bit, chỉ với tới 1 MiB, không có bảo vệ gì.</em></p>
+<ul>
+<li><strong>Địa chỉ</strong> = <code>segment × 16 + offset</code>, cả hai là số 16 bit. <code>0x07C0:0x0000</code> và <code>0x0000:0x7C00</code> là cùng một byte (<code>0x7C00</code>).</li>
+<li>Với tới khoảng <strong>1 MiB</strong>: <code>0xFFFF:0xFFFF</code> = <code>0x10FFEF</code>, tức thừa ra gần 64 KiB trên 1 MiB (High Memory Area) nếu A20 mở (xem dưới).</li>
+<li>Không có ring, không có paging, không có bảo vệ bộ nhớ: code nào cũng ghi được mọi chỗ, kể cả bảng ngắt.</li>
+<li>Thanh ghi mặc định 16 bit, nhưng vẫn dùng được <code>EAX</code>, <code>EBX</code>... (lệnh có tiền tố kích thước toán hạng); <code>FS</code>, <code>GS</code> cũng có.</li>
+<li>Bảng ngắt là <strong>IVT</strong> ở địa chỉ 0: 256 mục, mỗi mục 4 byte <code>segment:offset</code>. Firmware BIOS cài sẵn các dịch vụ vào đó.</li>
+</ul>
+
+<h3 id="ban-do-1mib">Bản đồ 1 MiB đầu (máy BIOS)</h3>
+<figure class="diagram">
+<svg id="svg-rm-lowmem" role="img" aria-label="Memory map of the first MiB on a BIOS PC: interrupt vector table at 0, BIOS data area at 0x400, free memory from 0x500, the boot sector loaded at 0x7C00, more free memory, the extended BIOS data area just below 0xA0000, video memory from 0xA0000 and BIOS and option ROMs from 0xC0000 to 0xFFFFF" style="max-width:1083px" width="100%" viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-rm-lowmem .lbl{fill:#c2c0b6;} #svg-rm-lowmem .mono{font-family:'SF Mono',Consolas,monospace;}</style>
+</defs>
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">first 1 MiB of a BIOS PC in real mode (not to scale)</text>
+<text x="190" y="50" text-anchor="end" class="lbl mono" font-size="9">0x00000</text>
+<text x="190" y="84" text-anchor="end" class="lbl mono" font-size="9">0x00400</text>
+<text x="190" y="118" text-anchor="end" class="lbl mono" font-size="9">0x00500</text>
+<text x="190" y="168" text-anchor="end" class="lbl mono" font-size="9">0x07C00</text>
+<text x="190" y="202" text-anchor="end" class="lbl mono" font-size="9">0x07E00</text>
+<text x="190" y="252" text-anchor="end" class="lbl mono" font-size="9">~0x9FC00</text>
+<text x="190" y="286" text-anchor="end" class="lbl mono" font-size="9">0xA0000</text>
+<text x="190" y="320" text-anchor="end" class="lbl mono" font-size="9">0xC0000</text>
+<text x="190" y="378" text-anchor="end" class="lbl mono" font-size="9">0xFFFFF</text>
+<rect x="200" y="40" width="420" height="34" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="216" y="61" fill="#F0C9C9" font-size="10.5" font-weight="600">IVT: 256 vectors x 4 bytes</text>
+<rect x="200" y="74" width="420" height="34" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="216" y="95" fill="#F0C9C9" font-size="10.5" font-weight="600">BIOS Data Area</text>
+<rect x="200" y="108" width="420" height="50" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="216" y="130" fill="#C6E7CC" font-size="10.5" font-weight="600">free (stack, a second stage, an AP trampoline)</text>
+<text x="216" y="147" fill="#8FC79A" font-size="9">about 30 KiB</text>
+<rect x="200" y="158" width="420" height="34" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="216" y="179" fill="#F0DBAE" font-size="10.5" font-weight="600">boot sector: 512 bytes loaded by the BIOS</text>
+<rect x="200" y="192" width="420" height="50" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="216" y="214" fill="#C6E7CC" font-size="10.5" font-weight="600">free (conventional memory, up to ~608 KiB)</text>
+<text x="216" y="231" fill="#8FC79A" font-size="9">the exact top comes from int 0x12 or E820</text>
+<rect x="200" y="242" width="420" height="34" fill="#5A2626" stroke="#D98A8A" stroke-width="1"/>
+<text x="216" y="263" fill="#F0C9C9" font-size="10.5" font-weight="600">Extended BIOS Data Area (EBDA)</text>
+<rect x="200" y="276" width="420" height="34" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="216" y="297" fill="#D3D1C7" font-size="10.5" font-weight="600">video memory (text mode at 0xB8000)</text>
+<rect x="200" y="310" width="420" height="58" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="216" y="332" fill="#D3D1C7" font-size="10.5" font-weight="600">video BIOS, option ROMs, system BIOS</text>
+<text x="216" y="350" fill="#B4B2A9" font-size="9">BIOS ROM, mirrored from the reset vector at 0xFFFFFFF0</text>
+</svg>
+<figcaption>Vùng đỏ: firmware đang dùng, đừng ghi đè. Vùng xanh lá: được dùng. Trên máy UEFI không có bản đồ cố định này; hỏi memory map của firmware.</figcaption>
+</figure>
+
+<h2 id="bios">Bootloader cho BIOS</h2>
+<p class="lede"><em>BIOS chỉ hứa một điều: chép 512 byte đầu đĩa tới 0x7C00 rồi nhảy vào đó, ở real mode.</em></p>
+<ol>
+<li>BIOS đọc sector 0 của đĩa boot, kiểm hai byte cuối là <code>0x55 0xAA</code>, chép nó tới <code>0x7C00</code>, rồi nhảy vào. <code>DL</code> chứa số ổ đĩa vừa boot (vd <code>0x80</code>): cất ngay,
+vì các lời gọi BIOS sau cần nó.</li>
+<li>Có BIOS nhảy tới <code>0x0000:0x7C00</code>, có BIOS tới <code>0x07C0:0x0000</code>. Cùng địa chỉ, nhưng <code>CS</code> khác. Code đầu tiên nên tự nhảy xa tới một <code>CS</code> đã biết
+và tự đặt <code>DS</code>, <code>ES</code>, <code>SS</code>, <code>SP</code>.</li>
+<li>Với MBR, chỉ có 446 byte cho code (sau đó là bảng 4 phân vùng). Không đủ chỗ cho gì lớn, nên bootloader thường có nhiều tầng: sector 0 chỉ đọc tầng 2 lên RAM rồi nhảy vào.</li>
+<li>Mọi việc với phần cứng làm qua <strong>ngắt BIOS</strong>, và chỉ dùng được ở real mode:</li>
+</ol>
+<div class="table-wrap"><table>
+<thead><tr><th>Ngắt</th><th>Dùng để</th></tr></thead>
+<tbody>
+<tr><td><code>int 0x13</code>, <code>AH=0x42</code></td><td>đọc sector theo LBA (extended read, cần một "disk address packet")</td></tr>
+<tr><td><code>int 0x15</code>, <code>EAX=0xE820</code></td><td>lấy memory map, từng vùng một (cách chuẩn trên máy BIOS)</td></tr>
+<tr><td><code>int 0x15</code>, <code>AX=0x2401</code></td><td>mở A20</td></tr>
+<tr><td><code>int 0x10</code></td><td>in chữ, đổi chế độ màn hình; VBE (<code>AX=0x4F0x</code>) để lấy framebuffer</td></tr>
+<tr><td><code>int 0x16</code></td><td>đọc phím</td></tr>
+</tbody>
+</table></div>
+<p>Bootloader gom đủ thông tin (memory map, framebuffer) <strong>trước</strong> khi rời real mode, vì sau đó không gọi BIOS được nữa.</p>
+
+<h2 id="a20">A20</h2>
+<p class="lede"><em>Một sợi dây địa chỉ bị khoá từ thời 8086 để giữ một lỗi cũ; không mở nó thì mọi MiB lẻ là bản sao của MiB chẵn.</em></p>
+<p>8086 chỉ có 20 dây địa chỉ, nên <code>0xFFFF:0x0010</code> quay vòng về <code>0x00000</code>. Vài chương trình cũ dựa vào chuyện đó, nên máy PC về sau giữ dây thứ 21 (A20) ở 0 cho tới khi phần
+mềm mở nó. Khi A20 đóng, bit 20 của mọi địa chỉ bị ép về 0, kể cả ở protected mode: ghi vào <code>0x100000</code> là ghi đè <code>0x000000</code>.</p>
+<ul>
+<li><strong>Cách mở</strong> (thử lần lượt): <code>int 0x15, AX=0x2401</code>; "fast A20" (bật bit 1 của cổng <code>0x92</code>); hoặc qua bộ điều khiển bàn phím 8042 (cách cổ nhất).</li>
+<li><strong>Cách kiểm</strong>: ghi một giá trị ở <code>0x0000:0x0500</code>, ghi giá trị khác ở <code>0xFFFF:0x0510</code> (= <code>0x100500</code>), rồi đọc lại cái đầu. Đổi theo thì A20 còn đóng.</li>
+<li>Máy mới và firmware UEFI để A20 mở sẵn; QEMU cũng vậy. Bootloader vẫn nên kiểm, vì thiếu nó thì lỗi chỉ hiện ra khi kernel dùng tới MiB lẻ.</li>
+</ul>
+
+<h2 id="protected-mode">Protected mode: cái gì đổi</h2>
+<p class="lede"><em>Bật một bit trong CR0 là có 32 bit, 4 GiB và bảo vệ bộ nhớ; đổi lại mất toàn bộ dịch vụ BIOS.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Real mode</th><th>Protected mode (32-bit)</th></tr></thead>
+<tbody>
+<tr><td>Thanh ghi segment chứa</td><td>một số, nhân 16 ra base</td><td>một <strong>selector</strong> trỏ vào <a href="gdt.html">GDT</a>; base, limit, quyền lấy từ descriptor</td></tr>
+<tr><td>Không gian địa chỉ</td><td>~1 MiB</td><td>4 GiB (thêm PAE thì RAM vật lý tới 64 GiB)</td></tr>
+<tr><td>Bảo vệ</td><td>không</td><td>ring 0–3, limit của segment, paging (tuỳ chọn: 2 cấp, hoặc 3 cấp với PAE)</td></tr>
+<tr><td>Bảng ngắt</td><td>IVT ở địa chỉ 0</td><td>IDT ở đâu cũng được (<code>lidt</code>), mỗi cổng 8 byte</td></tr>
+<tr><td>Dịch vụ BIOS</td><td>gọi bằng <code>int</code></td><td><strong>không gọi được</strong>: muốn đọc đĩa phải có driver riêng, hoặc tạm quay về real mode</td></tr>
+</tbody>
+</table></div>
+<p>Thường thì kernel dựng GDT "phẳng": code và data đều base 0, limit 4 GiB, nên địa chỉ segment trùng địa chỉ tuyến tính và segment coi như không tồn tại. Việc phân vùng và bảo vệ
+thật để cho paging.</p>
+
+<h2 id="vao-pm">Vào protected mode</h2>
+<p class="lede"><em>Tắt ngắt, nạp GDT, bật CR0.PE, rồi một cú nhảy xa để CPU bắt đầu đọc lệnh 32 bit.</em></p>
+<div class="code"><div class="code-bar">asm</div><pre><code>bits 16
+    cli                         ; no interrupts: the IVT is useless once PE = 1, and there is no IDT yet
+    lgdt [gdt_ptr]
+    mov eax, cr0
+    or  eax, 1                  ; CR0.PE
+    mov cr0, eax
+    jmp 0x08:pm_entry           ; far jump: loads CS from the GDT, flushes 16-bit decoding
+
+bits 32
+pm_entry:
+    mov ax, 0x10                ; flat data selector
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+    mov ss, ax
+    mov esp, 0x90000            ; a stack in free low memory
+    ; ... now 32-bit code; no BIOS from here on
+
+gdt:      dq 0                          ; 0x00: null
+          dq 0x00CF9A000000FFFF         ; 0x08: code, base 0, limit 4 GiB, ring 0, 32-bit
+          dq 0x00CF92000000FFFF         ; 0x10: data, base 0, limit 4 GiB, ring 0
+gdt_ptr:  dw gdt_ptr - gdt - 1
+          dd gdt</code></pre></div>
+<ul>
+<li>Sau <code>mov cr0</code>, CPU đã ở protected mode, nhưng <code>CS</code> vẫn giữ phần ẩn của real mode và lệnh vẫn được giải mã 16 bit. Cú nhảy xa mới nạp <code>CS</code> từ GDT. Xem
+<a href="gdt.html#11-nạp-gdt-trong-thực-tế-vì-sao-phải-nhảy-xa">GDT: vì sao phải nhảy xa</a>.</li>
+<li>Muốn đi tiếp lên 64-bit: bật PAE, nạp CR3, set <code>EFER.LME</code>, bật PG, nhảy xa vào code segment có L = 1. Đoạn code đó ở <a href="long_mode.html#leo-thang">Long Mode</a>.</li>
+</ul>
+
+<h2 id="multiboot">Kernel được nạp bằng Multiboot</h2>
+<p class="lede"><em>GRUB giao máy ở 32-bit protected mode, nhưng không giao gì khác: kernel phải tự lo GDT, stack và mọi thứ sau đó.</em></p>
+<p>Theo spec Multiboot2, lúc vào kernel (i386):</p>
+<ul>
+<li><code>EAX</code> = <code>0x36d76289</code> (magic), <code>EBX</code> = địa chỉ vật lý của khối thông tin (memory map, framebuffer, ACPI...).</li>
+<li>CR0: PE = 1, <strong>PG = 0</strong>. <code>CS</code> là code segment phẳng 32 bit, các segment data phẳng; A20 đã mở; ngắt tắt.</li>
+<li><strong>GDTR có thể không hợp lệ</strong>: kernel không được nạp lại segment nào cho tới khi có GDT của mình. <strong>ESP không xác định</strong>: kernel phải tự đặt stack. IDT là việc
+của kernel.</li>
+</ul>
+<p>Vì vậy đoạn code đầu của một kernel Multiboot (viết bằng asm, link ở địa chỉ thấp) thường làm: đặt stack, cất <code>EAX</code>/<code>EBX</code>, nạp GDT của mình, rồi leo lên long mode như ở
+trang <a href="long_mode.html#leo-thang">Long Mode</a>.</p>
+
+<h2 id="trampoline">Trampoline cho CPU phụ</h2>
+<p class="lede"><em>Mỗi CPU phụ thức dậy ở real mode tại một trang dưới 1 MiB mà CPU chính chọn, và phải tự leo lên 64-bit.</em></p>
+<ul>
+<li>CPU chính gửi INIT rồi SIPI với số vector <code>V</code>. CPU phụ bắt đầu ở real mode với <code>CS = V × 0x100</code>, <code>IP = 0</code>, tức địa chỉ <code>V × 0x1000</code>. Vì vậy trampoline phải nằm ở đầu
+một trang 4 KiB, dưới 1 MiB.</li>
+<li>Kernel đã ở nửa cao, nên trampoline được build riêng (asm, tự tính địa chỉ so với điểm bắt đầu) rồi <strong>chép</strong> xuống trang đó lúc chạy. Nó cần thấy được GDT và bảng trang của
+mình bằng địa chỉ thấp; thường kernel ghi sẵn vài giá trị (CR3, stack, địa chỉ hàm C) vào một vùng dữ liệu ngay trong trang trampoline.</li>
+<li>Trampoline leo đủ cái thang: <code>lgdt</code>, PE, nhảy xa vào 32 bit, PAE, CR3, LME, PG, nhảy xa vào 64 bit, lấy stack riêng, gọi vào kernel. Cuối cùng báo cho CPU chính
+"đã lên" (vd một biến đếm), vì CPU chính phải chờ trước khi đánh thức CPU tiếp theo hoặc tái dùng trang trampoline.</li>
+<li>Paging bật ở giữa trampoline, nên trang chứa nó phải được map identity (VA = PA) trong bảng trang mà nó nạp.</li>
+</ul>
+
+<h2 id="bay">Bẫy</h2>
+<p class="lede"><em>Hầu hết lỗi ở hai chế độ này không báo gì: máy treo, hoặc reset liên tục.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Làm sai</th><th>Hậu quả</th></tr></thead>
+<tbody>
+<tr><td>Quên <code>cli</code> trước khi bật PE</td><td>ngắt timer tới, CPU tra IDT chưa có: triple fault, máy reset</td></tr>
+<tr><td>Không nhảy xa sau khi bật PE</td><td>lệnh 32 bit bị giải mã như 16 bit: chạy lung tung</td></tr>
+<tr><td>Gọi <code>int 0x13</code> sau khi vào protected mode</td><td>không còn IVT: triple fault</td></tr>
+<tr><td>Quên mở A20</td><td>ghi vào MiB lẻ đè lên MiB chẵn; lỗi hiện ra rất xa chỗ gây ra</td></tr>
+<tr><td>Ghi đè giá trị <code>DL</code> lúc vào</td><td>các lần đọc đĩa sau đọc nhầm ổ</td></tr>
+<tr><td>GDT của trampoline trên trang chỉ đọc, bit Accessed = 0</td><td>CPU tự ghi bit Accessed khi nạp segment: page fault không có IDT, triple fault</td></tr>
+<tr><td>Trampoline không map identity</td><td>ngay sau khi bật PG, lệnh kế tiếp không còn địa chỉ: triple fault</td></tr>
+</tbody>
+</table></div>
+<p>Triple fault trên QEMU thì máy reset im lặng. Chạy với <code>-d int,cpu_reset -no-reboot</code> để thấy exception cuối cùng và giá trị các thanh ghi.</p>
+
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>cavOS không tự viết dòng nào ở hai chế độ này; Limine làm hộ cả phần BIOS lẫn trampoline.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html#trang-thai-luc-vao">Bài 1 - Boot &amp; Limine, Đọc thêm</a>: Limine đã leo xong cái thang trước <code>_start</code>.</li>
+<li><a href="../bai/bai_12_multitasking_scheduler.html#ap-limine">Bài 12 - Multitasking &amp; Scheduler, Đọc thêm</a>: trampoline của Limine (bảng 7 bước từ real mode lên 64-bit).</li>
+<li><a href="cau_truc_os_img.html">Cấu trúc os.img</a>: đường BIOS của các lab, từ MBR tới <code>limine-bios.sys</code>.</li>
+<li>Liên quan: <a href="x86_segmentation.html">x86 Segmentation</a>, <a href="gdt.html">GDT</a>, <a href="long_mode.html">Long Mode</a>, <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>.</li>
+</ul>
+
+<h2 id="spec">Spec</h2>
+<p class="lede"><em>Chỗ tra khi cần chi tiết.</em></p>
+<ul>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A: chương Processor Management and Initialization (trạng thái lúc reset, chuyển sang protected mode, khởi động nhiều CPU),
+chương 8086 Emulation (real mode).</li>
+<li>Multiboot2 Specification: "Machine state" (i386).</li>
+<li>OSDev Wiki: Real Mode, Memory Map (x86), A20 Line, Detecting Memory (x86) (E820), Protected Mode, SMP.</li>
+<li>Ralf Brown's Interrupt List: danh sách ngắt BIOS.</li>
+</ul>
+<nav class="pager" aria-label="Pages"></nav>
+<footer>Học cavOS · Real Mode và Protected Mode</footer>
+</main>
+</div>
+<script src="../../assets/site.js"></script>
+<script src="../../assets/noir.js"></script>
+</body>
+</html>

@@ -36,7 +36,7 @@ chỉ đọc, kiểm vài điều kiện, và chép lại một lần.</p>
 Nhờ vậy muốn đọc địa chỉ vật lý (PA) nào chỉ cần cộng: <code>VA = PA + hhdmOffset</code>. Kernel không thể đọc thẳng PA vì paging đã bật, mọi truy cập đều là địa chỉ ảo.
 Đọc sâu: <a href="../khai_niem/hhdm.html">HHDM</a>.</li>
 <li><strong>Memory map</strong> — danh sách các vùng địa chỉ vật lý, mỗi vùng có <code>base</code>, <code>length</code> và loại (RAM trống, RAM bootloader mượn tạm, kernel, framebuffer, vùng cấm...).
-Firmware dựng danh sách này; Limine chỉ chuyển lại. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Limine Protocol</a> (mục 5b).</li>
+Firmware dựng danh sách này; Limine chỉ chuyển lại. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a> (mục 5b).</li>
 <li><strong>SMP và BSP</strong> — SMP (Symmetric Multi-Processing) là máy có nhiều nhân CPU. Lúc boot chỉ một nhân chạy, gọi là <strong>BSP</strong> (Bootstrap Processor);
 các nhân khác chờ được đánh thức. Mỗi nhân có một số <strong>LAPIC ID</strong> riêng. Đa nhân sẽ học ở <a href="bai_12_multitasking_scheduler.html">Bài 12</a>.</li>
 </ul>
@@ -233,6 +233,22 @@ Lab khác cavOS: chỉ in ra chứ không gom vào struct, chưa xử lý RSDP v
 <h3 id="so-do-lab">Sơ đồ RAM vật lý và địa chỉ ảo</h3>
 <p>Sơ đồ mũi tên aliasing với số thật: <a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>.
 Bảng đầy đủ 3 cột PA / VA-HHDM / VA-kernel cho mọi vùng: <a href="../../thuc_hanh/lab_0x03_pmm_vmm.html">Lab 0x03 - PMM &amp; VMM</a> (<code>pmm_dump_map</code>).</p>
+<h3 id="vung-cam">Hai "vùng cấm" của <code>isProtectedMemory()</code></h3>
+<p>Hai trường <code>hhdmOffset</code> và <code>kernelVirtBase</code> cũng được dùng làm vùng cấm trong <code>cpu/system.c</code>. Vùng kernel được coi là 256 MiB (<code>268435456</code>)
+tính từ <code>kernelVirtBase</code>, rộng hơn nhiều so với khoảng 1 MiB thật của ảnh kernel:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>bool isProtectedMemory(uint64_t virt) {
+  if (virt &gt; bootloader.hhdmOffset &amp;&amp;
+      virt &lt; (bootloader.hhdmOffset + bootloader.mmTotal))
+    return true;
+  else if (virt &gt; bootloader.kernelVirtBase &amp;&amp;
+           virt &lt; bootloader.kernelVirtBase + 268435456) {
+    return true;
+  }
+
+  return false;
+}</code></pre></div>
+<p>Hai vùng này giữ nguyên địa chỉ suốt quá trình chạy, vì cavOS dùng lại bảng trang của Limine (<a href="bai_06_virtual_memory_paging.html">Bài 6</a>). Khái niệm:
+<a href="../khai_niem/higher_half_kernel.html#hai-anh-xa">kernel mapping và direct map</a>.</p>
 <h3 id="anh-xa-spec">Ánh xạ spec</h3>
 <ul>
 <li>Limine protocol (struct request/response, memmap types): <a href="../tai_lieu_goc/danh_muc_tai_lieu.html">Danh mục tài liệu</a>, <a href="../khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>.</li>

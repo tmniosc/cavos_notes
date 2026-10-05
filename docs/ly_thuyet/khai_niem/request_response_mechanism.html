@@ -18,36 +18,73 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p>Cách <a href="limine_protocol.html">Limine</a> truyền dữ liệu cho kernel. Ý tưởng: <strong>phong bì có nhãn</strong>.</p>
+<p>Một cách để kernel <strong>xin</strong> thông tin từ bootloader: kernel đặt sẵn các struct "yêu cầu" có nhãn trong file nhị phân của mình, bootloader tìm các nhãn đó và điền
+câu trả lời vào trước khi nhảy vào kernel. Limine dùng cách này; Multiboot dùng một nửa của nó. Xem <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>.</p>
 </div>
-<h2 id="ẩn-dụ">Ẩn dụ</h2>
-<p>Kernel để sẵn các "phong bì có nhãn" trong file nhị phân ("tôi muốn biết X"). Nhãn = <strong>dãy số magic
-64-bit</strong> (gần như không trùng tình cờ). Limine quét nhị phân kernel, tìm nhãn, rồi nhét "tờ trả lời"
-(response) vào phong bì. Kernel chạy thì mở ra đọc.</p>
-<h2 id="ví-dụ-thật-hhdm-limineh">Ví dụ thật — HHDM (<code>limine.h</code>)</h2>
+<h2 id="an-du">Ẩn dụ</h2>
+<p class="lede"><em>Phong bì có nhãn trong file kernel, bootloader tìm nhãn và nhét câu trả lời vào.</em></p>
+<p>Kernel để sẵn các "phong bì có nhãn" trong file nhị phân ("tôi muốn biết X"). Nhãn là <strong>một dãy số magic 64-bit</strong>, gần như không thể trùng tình cờ. Bootloader quét
+nhị phân kernel, tìm nhãn, rồi nhét "tờ trả lời" (response) vào phong bì. Kernel chạy thì mở ra đọc.</p>
+
+<h2 id="vi-du">Ví dụ: yêu cầu direct map trong <code>limine.h</code></h2>
+<p class="lede"><em>Một nhãn bốn số và một con trỏ chờ được điền.</em></p>
 <div class="code"><div class="code-bar">c</div><pre><code>#define LIMINE_COMMON_MAGIC 0xc7b1dd30df4c8b88, 0x0a82e883a194f07b
 #define LIMINE_HHDM_REQUEST { LIMINE_COMMON_MAGIC, 0x48dcf1cb8ad2b852, 0x63984e959a98244b }
 
 struct limine_hhdm_request {
-    uint64_t id[4];        // nhãn (2 magic chung + 2 magic riêng)
+    uint64_t id[4];        // the label: 2 common magics + 2 for this feature
     uint64_t revision;
-    struct limine_hhdm_response *response;  // ban đầu NULL; Limine điền vào
+    struct limine_hhdm_response *response;  // NULL in the file; the loader fills it in
 };
 struct limine_hhdm_response { uint64_t revision; uint64_t offset; };</code></pre></div>
-<p>Trong <code>entry/bootloader.c</code>:</p>
-<div class="code"><div class="code-bar">c</div><pre><code>static volatile struct limine_hhdm_request limineHHDMreq = {
-    .id = LIMINE_HHDM_REQUEST, .revision = 0};      // response còn NULL
-...
-struct limine_hhdm_response *res = limineHHDMreq.response;  // Limine đã điền
-bootloader.hhdmOffset = res-&gt;offset;</code></pre></div>
-<h2 id="dòng-thời-gian">Dòng thời gian</h2>
-<div class="code"><div class="code-bar">text</div><pre><code>Biên dịch : request có id=magic, response=NULL nằm trong nhị phân kernel
-Limine nạp: quét thấy magic → tạo response → gán địa chỉ vào request.response
-_start    : request.response đã trỏ dữ liệu thật → kernel đọc</code></pre></div>
-<h2 id="vì-sao-static-volatile">Vì sao <code>static volatile</code>?</h2>
-<p><code>volatile</code> báo compiler "biến bị bên ngoài (Limine) sửa" → không tối ưu/cache, không xóa code đọc
-<code>response</code>. <code>static</code> để biến tồn tại trong nhị phân cho Limine quét.</p>
-<p>→ Cùng cơ chế này áp dụng cho <a href="limine_protocol.html">base revision</a>.</p>
+<p>Phía kernel:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>__attribute__((used, section(".limine_requests")))
+static volatile struct limine_hhdm_request hhdm_req = {
+    .id = LIMINE_HHDM_REQUEST, .revision = 0 };     // response is still NULL here
+
+void kernel_entry(void) {
+    if (hhdm_req.response == NULL)                  // the loader did not (or could not) answer
+        halt();
+    uint64_t hhdm_offset = hhdm_req.response-&gt;offset;
+    ...</code></pre></div>
+
+<h2 id="dong-thoi-gian">Dòng thời gian</h2>
+<p class="lede"><em>Ba thời điểm: lúc biên dịch, lúc bootloader nạp, lúc kernel chạy.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>build time : the request (id = magic, response = NULL) sits in the kernel binary
+load time  : the loader finds the magic, builds the response, stores its address in request.response
+run time   : request.response points to real data; the kernel reads it</code></pre></div>
+
+<h2 id="static-volatile">Vì sao <code>static volatile</code>, <code>used</code> và section riêng</h2>
+<p class="lede"><em>Mấy từ khoá giữ cho phong bì còn trong file, tìm được, và câu trả lời được đọc thật.</em></p>
+<ul>
+<li><code>volatile</code>: báo compiler biến bị bên ngoài (bootloader) sửa. Không có nó, compiler thấy <code>response</code> luôn bằng NULL lúc build và có thể bỏ luôn code đọc nó.</li>
+<li><code>static</code> + <code>__attribute__((used))</code>: biến phải nằm trong file dù không ai trong C nhắc tới nó; với <code>-ffunction-sections</code> / <code>--gc-sections</code> linker sẽ xoá
+biến "không dùng" nếu thiếu <code>used</code>.</li>
+<li>Section riêng (vd <code>.limine_requests</code>, kẹp giữa hai marker <code>LIMINE_REQUESTS_START_MARKER</code> / <code>END_MARKER</code>): cho bootloader biết chỗ để quét, khỏi quét cả file, và
+giữ request ở vùng ghi được (response phải ghi vào được).</li>
+</ul>
+<p>Cùng cơ chế này dùng cho <a href="limine_protocol.html#base-revision">base revision</a>: ở đó bootloader "trả lời" bằng cách ghi 0 vào phần tử thứ ba.</p>
+
+<h2 id="so-sanh">So với cách khác</h2>
+<p class="lede"><em>Câu hỏi luôn nằm trong file kernel; khác nhau ở chỗ câu trả lời được giao tới đâu.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th>Protocol</th><th>Kernel hỏi bằng</th><th>Bootloader trả lời bằng</th></tr></thead>
+<tbody>
+<tr><td>Limine</td><td>các struct request rải trong file</td><td>ghi con trỏ vào chính từng request</td></tr>
+<tr><td>Multiboot2</td><td>các tag trong một header ở đầu file</td><td>một khối thông tin chung, địa chỉ trong <code>EBX</code></td></tr>
+<tr><td>Linux boot protocol</td><td>trường trong setup header</td><td>struct <code>boot_params</code>, địa chỉ trong <code>RSI</code></td></tr>
+</tbody>
+</table></div>
+<p>Cách của Limine có một điểm tiện: mỗi tính năng là một struct độc lập, kernel chỉ khai cái mình cần, và đọc câu trả lời qua biến của chính mình, không phải lần theo một khối
+thông tin chung.</p>
+
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>cavOS khai sáu request và đọc chúng một lần lúc boot.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html#request-response">Bài 1 - Boot &amp; Limine</a>: cavOS "đặt hàng" thông tin.</li>
+<li><a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>: sáu request trong <code>entry/bootloader.c</code> và <code>initialiseBootloaderParser()</code> đọc từng response.</li>
+<li><a href="../../thuc_hanh/lab_0x01_bootloader_parser.html">Lab 0x01 - Bootloader Parser</a>: khai request trong section <code>.limine_requests</code> với <code>used</code>, in mọi response.</li>
+</ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Request-Response Mechanism</footer>
 </main>

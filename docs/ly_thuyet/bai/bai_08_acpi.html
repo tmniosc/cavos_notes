@@ -331,6 +331,54 @@ khởi tạo đều không chờ gì. Trên QEMU không sao; trên máy thật c
 <p>Lab chỉ làm phần bảng tĩnh của bước (1): RSDP, RSDT/XSDT, header, checksum, FADT, MADT. Nó không nạp namespace, không chạy <code>_PIC</code>/<code>_STA</code>/<code>_INI</code>, không có SCI,
 không tắt máy được. Đủ cho Bài 10; phần còn lại cần một trình thông dịch AML thật.</p>
 
+<h3 id="khong-uefi-runtime">cavOS không gọi UEFI Runtime Services</h3>
+<p>Khái niệm chung: <a href="../khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a>. cavOS coi như máy không có UEFI sau khi Limine đi: không khai báo
+request EFI nào, tắt máy và khởi động lại qua ACPI.</p>
+<div class="code"><div class="code-bar">bash</div><pre><code>$ grep -rn 'LIMINE_EFI\|limine_efi\|EFI_SYSTEM_TABLE\|efi_memmap' src/kernel
+src/kernel/include/limine.h:498:#define LIMINE_EFI_SYSTEM_TABLE_REQUEST { LIMINE_COMMON_MAGIC, 0x5ceba5163eaaf6d6, 0x0a6981610cf65fcc }
+src/kernel/include/limine.h:500:struct limine_efi_system_table_response {
+src/kernel/include/limine.h:505:struct limine_efi_system_table_request {
+src/kernel/include/limine.h:508:    LIMINE_PTR(struct limine_efi_system_table_response *) response;
+src/kernel/include/limine.h:513:#define LIMINE_EFI_MEMMAP_REQUEST { LIMINE_COMMON_MAGIC, 0x7df62a431d6872d5, 0xa4fcdfb3e57306c8 }
+src/kernel/include/limine.h:515:struct limine_efi_memmap_response {
+src/kernel/include/limine.h:523:struct limine_efi_memmap_request {
+src/kernel/include/limine.h:526:    LIMINE_PTR(struct limine_efi_memmap_response *) response;
+
+$ cd src/kernel &amp;&amp; grep -rn 'limine_.*_request\b' --include=*.c . | grep -v lwip
+./entry/bootloader.c:8:static volatile struct limine_paging_mode_request liminePagingreq = {
+./entry/bootloader.c:13:static volatile struct limine_kernel_address_request limineKrnreq = {
+./entry/bootloader.c:16:static volatile struct limine_hhdm_request limineHHDMreq = {
+./entry/bootloader.c:19:static volatile struct limine_memmap_request limineMMreq = {
+./entry/bootloader.c:22:static volatile struct limine_smp_request limineSmpReq = {
+./entry/bootloader.c:25:static volatile struct limine_rsdp_request limineRsdpReq = {
+./drivers/vga.c:11:static volatile struct limine_framebuffer_request limineFBreq = {</code></pre></div>
+<p>Các request EFI chỉ có định nghĩa trong <code>limine.h</code>; không file <code>.c</code> nào khai báo chúng.</p>
+<p>Tắt máy và khởi động lại (syscall <code>reboot</code>, <code>syscalls/linux/syscalls_proc.c</code>) đi qua ACPI bằng uACPI, không qua
+<code>ResetSystem</code>:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>// acpi/acpi.c
+size_t acpiPoweroff() {
+  uacpi_status ret = uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
+  ...
+  uacpi_status retPoweroff = uacpi_enter_sleep_state(UACPI_SLEEP_STATE_S5);
+  ...
+}
+size_t acpiReboot() {
+  uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
+  uacpi_status ret = uacpi_reboot();
+  ...
+}</code></pre></div>
+<p>Muốn cavOS gọi được Runtime Services (ví dụ đọc biến, hay <code>ResetSystem</code> khi ACPI hỏng) thì cần:</p>
+<ol>
+<li>Khai báo <code>limine_efi_system_table_request</code>. cavOS dùng base revision 2 (<code>entry/kernel.c:40</code>), nên Limine trả địa chỉ
+system table đã cộng offset HHDM (<code>reported_addr(gST)</code>).</li>
+<li>Khai báo <code>limine_efi_memmap_request</code> để biết vùng runtime nằm đâu, rồi map chúng vào page table của kernel (giữ nguyên địa chỉ
+vật lý, hoặc tự gọi <code>SetVirtualAddressMap</code> một lần).</li>
+<li>Gọi hàm theo quy ước Microsoft x64 (<code>__attribute__((ms_abi))</code>), không phải System V như phần còn lại của kernel.
+Xem <a href="../khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a>.</li>
+<li>Chỉ làm được khi boot qua UEFI. Boot BIOS (mặc định của <code>make qemu</code>) thì Limine không trả response này.</li>
+</ol>
+
+
 <h3 id="lien-he">Liên hệ</h3>
 <ul>
 <li>RSDP lấy từ đâu: <a href="bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a> · <a href="../khai_niem/hhdm.html">HHDM</a>.</li>

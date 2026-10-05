@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Limine Protocol · Học cavOS</title>
+<title>Boot Protocol &amp; Limine · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/khai_niem/limine_protocol.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
-    <h1>Limine Protocol</h1>
+    <h1>Boot Protocol &amp; Limine</h1>
     <div class="facts"><span class="fact"><b>Tags</b> concept, boot, spec</span></div>
   </div>
 </header>
@@ -18,109 +18,118 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p>Quy ước (ABI) để <strong>bootloader bàn giao thông tin phần cứng cho kernel</strong>. cavOS dùng Limine thay vì
-tự viết bootloader. Liên quan: <a href="request_response_mechanism.html">Request-Response Mechanism</a>, <a href="hhdm.html">HHDM</a>, <a href="higher_half_kernel.html">Higher-Half Kernel</a>, <a href="long_mode.html">Long Mode</a>.</p>
+<p><strong>Boot protocol</strong> là hợp đồng giữa bootloader và kernel: kernel phải trông thế nào để được nạp, máy ở trạng thái nào lúc vào kernel, và thông tin phần cứng
+được giao qua đâu. Multiboot, Linux boot protocol và Limine protocol là ba hợp đồng như vậy. Trang này dùng Limine làm ví dụ chính.
+Liên quan: <a href="request_response_mechanism.html">Request-Response Mechanism</a>, <a href="limine_va_loader_tu_viet.html">Limine và loader tự viết</a>.</p>
 </div>
-<h2 id="1-chuỗi-boot">1. Chuỗi boot</h2>
-<div class="code"><div class="code-bar">text</div><pre><code>[Nguồn] → Firmware (UEFI/BIOS) → Bootloader (Limine) → Kernel (_start)</code></pre></div>
+
+<h2 id="chuoi-boot">Chuỗi boot</h2>
+<p class="lede"><em>Ba chương trình chạy nối nhau, mỗi chương trình giao máy cho chương trình sau.</em></p>
+<div class="code"><div class="code-bar">text</div><pre><code>[power] → firmware (UEFI / BIOS) → bootloader (GRUB, Limine, ...) → kernel entry point</code></pre></div>
 <ul>
-<li><strong>Firmware</strong>: chạy đầu, init phần cứng cơ bản, nạp bootloader.</li>
-<li><strong>Bootloader (Limine)</strong>: đọc file kernel, đưa CPU vào trạng thái phù hợp, nhảy vào <code>_start</code>.</li>
-<li><strong>Kernel</strong>: code của bạn.</li>
+<li><strong>Firmware</strong>: chạy đầu, khởi tạo phần cứng cơ bản, dựng memory map và bảng ACPI, nạp bootloader.</li>
+<li><strong>Bootloader</strong>: đọc file kernel, đặt nó vào bộ nhớ, đưa CPU vào trạng thái đã hứa, nhảy vào điểm vào của kernel.</li>
+<li><strong>Kernel</strong>: từ đây mọi thứ là của nó.</li>
 </ul>
-<h2 id="2-protocol-hợp-đồng-giữa-2-chương-trình">2. "Protocol" = hợp đồng giữa 2 chương trình</h2>
-<p>Bootloader và kernel do 2 bên viết → cần thống nhất: <em>kernel muốn gì</em> và <em>bootloader để thông tin ở đâu</em>.
-Limine là một cách cụ thể (khác Multiboot/Multiboot2).</p>
-<h2 id="3-cơ-chế-requestresponse-xem-request-response-mechanism">3. Cơ chế request/response → xem <a href="request_response_mechanism.html">Request-Response Mechanism</a></h2>
-<p>Kernel để sẵn "phong bì có nhãn" (struct request, nhãn = dãy magic) trong nhị phân; Limine quét tìm
-nhãn rồi điền con trỏ <code>response</code>.</p>
-<h2 id="4-base-revision-bắt-tay-phiên-bản">4. Base revision — bắt tay phiên bản</h2>
+
+<h2 id="hop-dong">Một hợp đồng phải ghi gì</h2>
+<p class="lede"><em>Bootloader và kernel do hai người viết, nên cần một hợp đồng ghi rõ ai đưa gì cho ai.</em></p>
+<ol>
+<li><strong>Nhận diện kernel:</strong> file định dạng gì (ELF, PE, ảnh thô), và dấu hiệu gì cho biết nó theo protocol này.</li>
+<li><strong>Trạng thái máy lúc vào:</strong> CPU ở chế độ nào, paging bật chưa, kernel ở địa chỉ nào, stack ra sao, ngắt bật hay tắt.</li>
+<li><strong>Đường giao thông tin:</strong> memory map, framebuffer, ACPI, dòng lệnh, module (initrd) được đưa tới đâu.</li>
+<li><strong>Cách kernel xin tính năng:</strong> muốn framebuffer, muốn paging 5 cấp, muốn khởi động các CPU phụ thì nói bằng cách nào.</li>
+<li><strong>Phiên bản:</strong> protocol đổi theo thời gian; hai bên phải biết bên kia hiểu tới đâu.</li>
+</ol>
+
+<h2 id="so-sanh">Ba protocol thường gặp</h2>
+<p class="lede"><em>Cùng năm câu hỏi, ba cách trả lời khác nhau.</em></p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Multiboot2 (GRUB)</th><th>Linux x86 boot protocol</th><th>Limine protocol</th></tr></thead>
+<tbody>
+<tr><td>Nhận diện</td><td>header magic <code>0xE85250D6</code> trong 32 KiB đầu file</td><td>"setup header" ở offset <code>0x1f1</code> của bzImage</td><td>file ELF64 có các struct request mang magic</td></tr>
+<tr><td>CPU lúc vào</td><td>32-bit protected mode, paging tắt</td><td>32- hoặc 64-bit (điểm vào 64-bit), paging identity</td><td>64-bit long mode, paging bật, kernel ở nửa cao</td></tr>
+<tr><td>Thông tin giao qua</td><td><code>EBX</code> = địa chỉ chuỗi tag (memory map, framebuffer, ACPI...)</td><td>struct <code>boot_params</code> ("zero page")</td><td>con trỏ <code>response</code> điền thẳng vào request trong kernel</td></tr>
+<tr><td>Xin tính năng</td><td>tag trong header</td><td>trường trong setup header</td><td>có request nào thì được tính năng đó</td></tr>
+<tr><td>Phiên bản</td><td>magic <code>0x36d76289</code> trong <code>EAX</code></td><td>số phiên bản trong setup header</td><td>base revision (dưới)</td></tr>
+</tbody>
+</table></div>
+<p>Còn một đường nữa là không dùng protocol nào: kernel tự là một ứng dụng UEFI (file PE), firmware chạy thẳng nó và giao <code>EFI_SYSTEM_TABLE</code>. Xem
+<a href="limine_va_loader_tu_viet.html">Limine và loader tự viết</a>.</p>
+
+<h2 id="request-response">Limine: request và response</h2>
+<p class="lede"><em>Kernel gửi phiếu yêu cầu dán nhãn; Limine tìm nhãn và điền câu trả lời.</em></p>
+<p>Kernel để sẵn "phong bì có nhãn" (struct request, nhãn là dãy magic) trong file nhị phân; Limine quét tìm nhãn rồi điền con trỏ <code>response</code> trước khi nhảy vào kernel.
+Không có request thì không có response, và Limine không làm tính năng đó. Chi tiết: <a href="request_response_mechanism.html">Request-Response Mechanism</a>.</p>
+<p>Các request hay dùng: <code>paging_mode</code> (chọn 4 hay 5 cấp), <code>hhdm</code> (offset của direct map), <code>executable_address</code> (địa chỉ thật của kernel), <code>memmap</code>,
+<code>framebuffer</code>, <code>rsdp</code> (bảng ACPI), <code>smp</code> (các CPU phụ), <code>module</code> (file nạp kèm), <code>executable_cmdline</code>.</p>
+
+<h2 id="base-revision">Base revision: bắt tay phiên bản</h2>
+<p class="lede"><em>Kernel nói nó hiểu phiên bản giao thức nào; Limine trả lời có đáp ứng được hay không.</em></p>
 <div class="code"><div class="code-bar">c</div><pre><code>#define LIMINE_BASE_REVISION(N) \
     uint64_t limine_base_revision[3] = { 0xf9562b2d5c95a6c8, 0x6a7b384944536bdc, (N) };
 #define LIMINE_BASE_REVISION_SUPPORTED (limine_base_revision[2] == 0)</code></pre></div>
-<p>Kernel khai báo <code>{magic1, magic2, N=2}</code>. Nếu Limine <strong>hỗ trợ</strong> revision N, nó ghi phần tử thứ 3 = 0.<br/>
-→ kiểm <code>LIMINE_BASE_REVISION_SUPPORTED</code>. Trong <code>kernel.c</code>:</p>
-<div class="code"><div class="code-bar">c</div><pre><code>static volatile LIMINE_BASE_REVISION(2);
-if (LIMINE_BASE_REVISION_SUPPORTED == false) panic();</code></pre></div>
-<h2 id="5-limine-đã-làm-gì-trước-khi-vào-start">5. Limine ĐÃ làm gì trước khi vào <code>_start</code></h2>
+<p>Kernel khai <code>{magic1, magic2, N}</code>. Nếu Limine hỗ trợ revision N, nó ghi phần tử thứ 3 thành 0. Kernel kiểm ngay ở dòng đầu:</p>
+<div class="code"><div class="code-bar">c</div><pre><code>static volatile LIMINE_BASE_REVISION(N);
+
+void kernel_entry(void) {
+    if (!LIMINE_BASE_REVISION_SUPPORTED)
+        halt();                 // the loader is too old for what this kernel expects
+    ...</code></pre></div>
+<p>Mỗi revision đổi vài lời hứa, nên đọc mục "Base Revision Changes" trước khi chọn N. Ví dụ revision 5 hứa thêm IDTR, LDTR, TR rỗng và mọi bit khác của CR0/CR4/EFER bằng 0;
+revision thấp hơn không hứa.</p>
+
+<h2 id="limine-lam-gi">Limine làm gì trước khi vào kernel</h2>
+<p class="lede"><em>Lúc vào kernel, CPU đã ở 64 bit, paging đã bật, kernel đã ở nửa cao.</em></p>
 <div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Đã thiết lập</th>
-<th>Kernel KHỎI phải tự làm</th>
-</tr>
-</thead>
+<thead><tr><th>Đã thiết lập</th><th>Kernel khỏi phải tự làm</th></tr></thead>
 <tbody>
-<tr>
-<td>CPU ở 64-bit <a href="long_mode.html">long mode</a></td>
-<td>không cần code chuyển real → protected → long</td>
-</tr>
-<tr>
-<td>Paging đã bật (bảng trang tạm)</td>
-<td>đã chạy ở địa chỉ ảo</td>
-</tr>
-<tr>
-<td><a href="hhdm.html">HHDM</a>: map toàn bộ RAM vật lý vào nửa cao</td>
-<td>truy cập phys = <code>phys + hhdmOffset</code></td>
-</tr>
-<tr>
-<td>Kernel nạp ở <a href="higher_half_kernel.html">higher-half</a>, relocate (<a href="kaslr_pie_kernel.html">KASLR</a>)</td>
-<td>không tự relocate, không tự map kernel</td>
-</tr>
-<tr>
-<td>Stack sẵn sàng; các <code>response</code> đã điền</td>
-<td>chỉ việc đọc</td>
-</tr>
+<tr><td>CPU ở 64-bit <a href="long_mode.html">long mode</a></td><td>không cần code chuyển real → protected → long</td></tr>
+<tr><td>Paging đã bật (bảng trang của Limine)</td><td>đã chạy ở địa chỉ ảo</td></tr>
+<tr><td><a href="hhdm.html">HHDM</a>: map toàn bộ RAM vật lý vào nửa cao</td><td>đọc ghi địa chỉ vật lý bằng <code>phys + offset</code></td></tr>
+<tr><td>Kernel nạp ở <a href="higher_half_kernel.html">nửa cao</a>, relocate nếu là PIE (<a href="kaslr_pie_kernel.html">KASLR</a>)</td><td>không tự relocate, không tự map kernel</td></tr>
+<tr><td>Stack ≥ 64 KiB; các <code>response</code> đã điền</td><td>chỉ việc đọc</td></tr>
 </tbody>
 </table></div>
-<p>→ Vì vậy <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> không có dòng asm bật long mode/paging nào.</p>
-<h2 id="5b-limine-không-làm-gì-dễ-hiểu-nhầm">5b. Limine KHÔNG làm gì (dễ hiểu nhầm)</h2>
-<p>Limine là <strong>người đưa thư</strong>, không phải người cấu hình phần cứng. Nó <strong>chỉ đọc lại</strong> thông tin firmware đã
-dựng rồi giao cho kernel — KHÔNG tự tạo/sửa.</p>
+<p>Những gì Limine <em>không</em> hứa thì kernel phải tự lo: IDT (trạng thái không xác định), GDT và TSS của riêng mình, bảng trang của riêng mình nếu muốn đổi quyền.</p>
+
+<h2 id="khong-lam">Bootloader không làm gì (dễ hiểu nhầm)</h2>
+<p class="lede"><em>Bootloader là người đưa thư: nó đọc lại thông tin firmware đã có, không tự cấu hình phần cứng.</em></p>
 <div class="table-wrap"><table>
-<thead>
-<tr>
-<th>Việc</th>
-<th>Ai làm</th>
-<th>Limine?</th>
-</tr>
-</thead>
+<thead><tr><th>Việc</th><th>Ai làm</th><th>Bootloader?</th></tr></thead>
 <tbody>
-<tr>
-<td><strong>Dựng memory map</strong> (đánh dấu RAM/MMIO/reserved)</td>
-<td><strong>Firmware</strong> (UEFI/BIOS) lúc POST</td>
-<td>✗ chỉ <strong>đọc lại</strong> → trả qua <code>memmap</code></td>
-</tr>
-<tr>
-<td><strong>Enumerate PCI + gán BAR</strong> (cấp MMIO cho thiết bị)</td>
-<td>Firmware (boot device) / <strong>Kernel</strong> sau (<a href="../bai/bai_14_pci_nic.html">Bài 14 - PCI &amp; NIC</a>)</td>
-<td>✗ không đụng</td>
-</tr>
-<tr>
-<td><strong>Framebuffer</strong></td>
-<td>Firmware cấp qua GOP (đã gán BAR sẵn)</td>
-<td>chỉ <strong>lấy địa chỉ</strong>, không tự gán</td>
-</tr>
-<tr>
-<td><strong>ACPI tables</strong></td>
-<td>Firmware tạo</td>
-<td>✗ chỉ trả con trỏ <strong>RSDP</strong></td>
-</tr>
+<tr><td><strong>Dựng memory map</strong> (đánh dấu RAM/MMIO/reserved)</td><td><strong>Firmware</strong> (UEFI/BIOS) lúc POST</td><td>chỉ <strong>đọc lại</strong>, thêm vùng của chính nó (bootloader, kernel, module)</td></tr>
+<tr><td><strong>Liệt kê PCI + gán BAR</strong></td><td>Firmware (thiết bị boot) / kernel về sau</td><td>không đụng</td></tr>
+<tr><td><strong>Framebuffer</strong></td><td>Firmware cấp qua GOP (UEFI) hoặc VBE (BIOS)</td><td>chọn mode, <strong>lấy địa chỉ</strong></td></tr>
+<tr><td><strong>Bảng ACPI</strong></td><td>Firmware tạo</td><td>chỉ trả con trỏ <strong>RSDP</strong></td></tr>
 </tbody>
 </table></div>
-<p>→ Các vùng <code>FRAMEBUF</code>/<code>RESERVED</code>/MMIO (vd <code>0xfd000000</code>, <code>0xb0000000</code>) thấy trong memmap là <strong>di sản của
-firmware</strong>, có TRƯỚC khi Limine chạy — không phải Limine tạo. Triết lý bootloader: làm ít nhất có thể, chỉ đủ
-để kernel tự chủ (nạp kernel + long mode + paging + HHDM + giao map). Mọi việc điều khiển thiết bị → kernel tự lo.</p>
-<h2 id="6-các-request-cavos-dùng-entrybootloaderc">6. Các request cavOS dùng (<code>entry/bootloader.c</code>)</h2>
-<p><code>paging_mode</code> (ép 4-level), <code>hhdm</code>, <code>kernel_address</code>, <code>memmap</code>, <code>smp</code>, <code>rsdp</code>.
-Chi tiết: <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
-<h2 id="tóm-tắt-1-câu">Tóm tắt 1 câu</h2>
-<p>Kernel "đặt hàng" thông tin qua struct request (nhãn magic); Limine "giao hàng" bằng cách điền
-<code>response</code> trước khi nhảy vào <code>_start</code>, đồng thời đặt CPU vào long mode + paging + higher-half.</p>
+<p>Các vùng FRAMEBUFFER/RESERVED/MMIO thấy trong memory map là <strong>di sản của firmware</strong>, có trước khi bootloader chạy. Triết lý chung của bootloader: làm ít nhất có thể,
+chỉ đủ để kernel tự chủ. Mọi việc điều khiển thiết bị là của kernel.</p>
+
+<h2 id="tom-tat">Tóm tắt một câu</h2>
+<p class="lede"><em>Kernel đặt hàng, bootloader giao hàng trước khi nhảy vào kernel.</em></p>
+<p>Boot protocol nói kernel phải trông thế nào, máy ở trạng thái nào lúc vào, và thông tin giao qua đâu. Với Limine, kernel "đặt hàng" qua struct request; Limine "giao hàng" bằng
+cách điền <code>response</code>, đồng thời đặt CPU vào long mode + paging + nửa cao.</p>
+
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>cavOS dùng Limine, nên mọi bài đầu khoá đều chạm tới protocol này.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>: chuỗi boot của cavOS, kiểm base revision 2 ở đầu <code>_start</code>; Đọc thêm có
+<a href="../bai/bai_01_boot_limine.html#trang-thai-luc-vao">trạng thái máy lúc vào, đo thật</a>.</li>
+<li><a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>: sáu request cavOS khai (<code>paging_mode</code>, <code>hhdm</code>, <code>kernel_address</code>, <code>memmap</code>, <code>smp</code>, <code>rsdp</code>) và cách đọc response.</li>
+<li><a href="../bai/bai_04_framebuffer_console.html">Bài 4 - Framebuffer &amp; Console</a>: request framebuffer.</li>
+</ul>
+
 <h2 id="spec">Spec</h2>
-<p>Limine <code>PROTOCOL.md</code> — <em>Base revision, Features, Paging Mode, HHDM, Kernel Address, Memory Map, SMP, RSDP</em>.</p>
+<p class="lede"><em>Chỗ tra khi cần chi tiết.</em></p>
+<ul>
+<li>Limine <code>PROTOCOL.md</code> (repo <code>limine-protocol</code>): Base Revision, Features, Paging Mode, HHDM, Executable Address, Memory Map, MP, RSDP, Machine State at Entry.</li>
+<li>Multiboot2 Specification (GNU): header, boot information format, machine state.</li>
+<li>Linux, <code>Documentation/arch/x86/boot.rst</code>: Linux/x86 boot protocol, setup header, 64-bit boot.</li>
+</ul>
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · Limine Protocol</footer>
+<footer>Học cavOS · Boot Protocol &amp; Limine</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>

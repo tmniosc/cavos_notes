@@ -21,8 +21,6 @@
 <p><em><code>os.img</code> <strong>không phải</strong> kernel. Nó là <strong>ảnh nguyên một ổ đĩa</strong> — QEMU cắm vào như cắm HDD thật.
 Kernel chỉ là một file nằm bên trong nó.</em></p>
 </div>
-<p>Liên quan: <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a> · <a href="limine_protocol.html">Limine Protocol</a> · <a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a> ·
-lệnh build: <a href="../../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a></p>
 <h2 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h2>
 <p class="lede"><em>Tưởng tượng bạn viết xong một lá thư (<code>kernel.bin</code>) và muốn người ta đọc được. Không thể đưa lá thư trần
 cho bưu điện — phải bỏ vào <strong>phong bì có địa chỉ đúng chuẩn</strong> thì họ mới chuyển.</em></p>
@@ -150,6 +148,13 @@ mdir -i "os.img@@1M" -b -/ ::   # cây file bên trong FAT32
 xxd -s 510 -l 2 os.img          # 2 byte cuối sector 0 phải là 55 aa</code></pre></div>
 <p><code>mtools</code> (<code>mformat</code>/<code>mmd</code>/<code>mcopy</code>/<code>mdir</code>) đọc ghi FAT32 <strong>ngay trên file ảnh</strong>, không mount vào hệ thống.
 Đó là lý do dựng ảnh trong WSL2 không cần quyền root — mount loop device trong WSL hay trục trặc.</p>
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>Mọi lab đều build ra một os.img như thế này.</em></p>
+<ul>
+<li><a href="../../thuc_hanh/lab_0x00_hello_serial.html">Lab 0x00 - Hello Serial</a>: os.img đầu tiên; lệnh build ở <a href="../../cong_cu_va_moi_truong/cam_nang_build_debug.html">Cẩm nang build &amp; debug</a>.</li>
+<li><a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>: chuỗi boot; ảnh đĩa của chính cavOS ở <a href="../bai/bai_01_boot_limine.html#disk-img">Đọc thêm</a>.</li>
+<li>Liên quan: <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>, <a href="esp_va_uefi_boot.html">ESP và UEFI boot</a>.</li>
+</ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Cấu trúc os.img</footer>
 </main>

@@ -707,6 +707,35 @@ trúng thì phải gõ phím đúng lúc một task được tạo (fork, thread
 và nhánh <code>next = dummyTask</code> không bao giờ tới (trừ khi chính helper bị chặn). Thời gian CPU rảnh được tiêu vào vòng "helper chạy, page fault, <code>schedule()</code>, quay về helper"; CPU
 không bao giờ <code>hlt</code>, và dummy cũng chỉ <code>pause</code>. Lab 0x07 bản <code>HELPER_SPIN</code> làm y như vậy và đo được: dummy 0 tick, helper 2141 tick trong 2291 ms.</p>
 
+<h3 id="ap-limine">Các CPU phụ: Limine leo thang rồi cho ngồi chờ</h3>
+<p>Mỗi AP thức dậy ở real mode và phải có trampoline leo lại lên long mode (<a href="../khai_niem/long_mode.html#ap">Long Mode: CPU phụ</a>). Trong cavOS không có đoạn đó: grep
+<code>trampoline</code>, <code>goto_address</code> trong <code>~/cavOS/src/kernel</code> không ra code nào; <code>entry/bootloader.c</code> chỉ gửi <code>limine_smp_request</code>. Theo
+<code>PROTOCOL.md</code>, chỉ cần request này có mặt là Limine tự bootstrap các AP. Trampoline của Limine 10.8.5 (<code>common/sys/smp_trampoline.asm_x86</code>) leo theo thứ tự:</p>
+<div class="table-wrap"><table>
+<thead><tr><th>Bước</th><th>Lệnh trong trampoline</th><th>Kết quả</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>lidt</code> (IDT rỗng), <code>lgdt</code>, <code>mov cr0, 0x11</code>, far jmp selector <code>0x18</code></td><td>PE = 1 (và ET), vào code 32-bit: protected mode</td></tr>
+<tr><td>2</td><td>xoá CR4, ghi MSR PAT (<code>0x277</code>) nếu CPU có PAT, chép MSR APIC base (<code>0x1b</code>) của BSP</td><td>AP bắt đầu từ trạng thái sạch, cùng kiểu APIC với BSP</td></tr>
+<tr><td>3</td><td><code>bts</code> bit 5 của CR4</td><td>PAE = 1</td></tr>
+<tr><td>4</td><td><code>wrmsr</code> MSR <code>0xc0000080</code> = <code>0x100</code>, thêm bit 11 nếu CPU có NX</td><td>EFER.LME = 1 (và NXE)</td></tr>
+<tr><td>5</td><td><code>mov cr3</code>; CR0 set bit 16 (nếu được yêu cầu) và bit 31</td><td>WP = 1, PG = 1: CPU set LMA (compatibility mode)</td></tr>
+<tr><td>6</td><td><code>push 0x28</code>, <code>retf</code></td><td>CS = code 64-bit (L = 1): 64-bit mode</td></tr>
+<tr><td>7</td><td>nạp segment <code>0x30</code>, <code>lgdt</code> lại bằng địa chỉ HHDM, <code>ltr 0x38</code>, nhảy tới <code>parking64</code> qua HHDM</td><td>AP chạy ở nửa cao, có TSS của Limine</td></tr>
+</tbody>
+</table></div>
+<p>Sau đó AP đứng chờ trong vòng lặp "parking" (<code>monitor</code>/<code>mwait</code> nếu CPU có, không thì vòng <code>pause</code>), cho tới khi kernel ghi một địa chỉ hàm vào
+<code>goto_address</code> của nó. cavOS không bao giờ ghi trường này, và <code>cpu/apic.c</code> còn để <code>for (size_t i = 0; i &lt; 1; i++) { // todo: bootloader.smp-&gt;cpu_count</code>.
+Thanh ghi CPU 1 trong cùng lần boot ở <a href="bai_01_boot_limine.html#trang-thai-luc-vao">Bài 1</a> (monitor <code>cpu 1</code>, <code>info registers</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>RIP=ffff8000000601ac RFL=00000046 [---Z-P-] CPL=0 II=0 A20=1 SMM=0 HLT=0
+CS =0028 0000000000000000 00000000 00209b00 DPL=0 CS64 [-RA]
+CR0=80010011 CR2=0000000000000000 CR3=00000000bff8a000 CR4=00000020
+EFER=0000000000000d00</code></pre></div>
+<ul>
+<li>AP cũng ở 64-bit mode (<code>CS64</code>, <code>EFER=0xd00</code> = LME + LMA + NXE).</li>
+<li>Không có SCE, CR4 chỉ có PAE: đúng những gì trampoline của Limine bật, không có bit nào của cavOS.</li>
+<li><code>RIP</code> nằm trong HHDM (<code>0xffff8000…</code>): AP đang chạy vòng lặp parking ở vùng nhớ thấp, gọi qua HHDM.</li>
+</ul>
+
 <h3 id="lien-he">Liên hệ</h3>
 <ul>
 <li>Khung ngắt, <code>isr_common</code>, interrupt gate: <a href="bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a> · tick, <code>timerTick</code>: <a href="bai_10_apic_timer.html">Bài 10 - APIC &amp; Timer</a>

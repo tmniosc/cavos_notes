@@ -18,14 +18,15 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p>cavOS không tự viết bootloader: nó khai báo các <a href="request_response_mechanism.html">request</a> và để
-<a href="limine_protocol.html">Limine</a> làm phần việc với firmware. Trang này liệt kê phần việc đó, tức những gì một
-kernel phải tự làm nếu tự viết loader UEFI.</p>
+<p>Một kernel có hai lựa chọn trên máy UEFI: dùng một bootloader có sẵn (vd <a href="limine_protocol.html">Limine</a>, khai báo các
+<a href="request_response_mechanism.html">request</a> rồi để nó làm phần việc với firmware), hoặc tự viết một loader UEFI. Trang này liệt kê phần việc đó, tức những gì
+kernel phải tự làm nếu chọn cách thứ hai.</p>
 </div>
 
 <h2 id="hai-đường-từ-firmware-tới-kernel">Hai đường từ firmware tới kernel</h2>
-<p>Firmware UEFI chỉ chạy một file <code>.efi</code> trên ESP. Với cavOS, file đó là <code>BOOTX64.EFI</code> của Limine.
-Với một loader tự viết (ví dụ bằng gnu-efi), file đó là chương trình của bạn.</p>
+<p class="lede"><em>Firmware UEFI chỉ chạy một file .efi; file đó là Limine, hoặc là chương trình của chính bạn.</em></p>
+<p>Firmware UEFI chỉ chạy một file <code>.efi</code> trên ESP. Với kernel dùng Limine, file đó là <code>BOOTX64.EFI</code> của Limine.
+Với một loader tự viết (ví dụ bằng gnu-efi hoặc EDK II), file đó là chương trình của bạn.</p>
 <figure class="diagram">
 <svg id="svg-loader-paths" role="img" aria-label="own UEFI loader vs Limine" width="100%" viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
@@ -46,7 +47,7 @@ Với một loader tự viết (ví dụ bằng gnu-efi), file đó là chương
 <text x="355" y="59" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">read ELF · GOP · memory map</text>
 <text x="355" y="73" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">ExitBootServices · jump</text>
 <rect x="230" y="170" width="250" height="62" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
-<text x="355" y="192" text-anchor="middle" fill="#F0DBAE" font-size="11.5" font-weight="600">Limine (cavOS)</text>
+<text x="355" y="192" text-anchor="middle" fill="#F0DBAE" font-size="11.5" font-weight="600">Limine</text>
 <text x="355" y="209" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">same steps + own page tables</text>
 <text x="355" y="223" text-anchor="middle" fill="#D8A54A" font-size="9" class="mono">fills the kernel's requests</text>
 <line x1="480" y1="51" x2="538" y2="51" class="flow" stroke-width="1.4" marker-end="url(#svg-loader-paths-arrow)"/>
@@ -65,24 +66,25 @@ Với một loader tự viết (ví dụ bằng gnu-efi), file đó là chương
 <figcaption>Cùng bắt đầu ở <code>BOOTX64.EFI</code>; khác ở chỗ ai viết file đó và kernel được giao gì.</figcaption></figure>
 
 <h2 id="ai-làm-việc-gì">Ai làm việc gì</h2>
-<p>Cột phải là các request cavOS khai báo trong <code>entry/bootloader.c</code> (paging mode, kernel address, HHDM,
-memmap, SMP, RSDP) và <code>drivers/vga.c</code> (framebuffer). Cột giữa là việc tương ứng khi tự viết loader.</p>
+<p class="lede"><em>Mỗi thứ kernel cần lúc boot, ai lo trong từng cách.</em></p>
+<p>Cột phải là request của Limine lo việc đó. Cột giữa là việc tương ứng khi tự viết loader.</p>
 <div class="table-wrap"><table>
-<thead><tr><th>Việc</th><th>Loader tự viết</th><th>Limine trong cavOS</th></tr></thead>
+<thead><tr><th>Việc</th><th>Loader tự viết</th><th>Limine</th></tr></thead>
 <tbody>
 <tr><td>Hợp đồng với kernel</td><td>Một struct tự định nghĩa (framebuffer, memory map…), truyền qua thanh ghi đầu tiên (<code>RDI</code>)</td><td>Struct request có số magic trong nhị phân kernel; Limine điền response trước khi nhảy vào <code>_start</code></td></tr>
 <tr><td>Nạp kernel</td><td>Đọc file ELF qua Simple File System, chép từng <code>PT_LOAD</code> tới địa chỉ nó cần</td><td>Limine nạp ELF; kernel address request cho biết base vật lý và ảo thực tế</td></tr>
-<tr><td>Page table</td><td>Dùng tạm bảng của firmware (ảo = vật lý), kernel tự dựng bảng sau</td><td>Paging mode request (cavOS ép 4 cấp); Limine dựng sẵn higher-half + <a href="hhdm.html">HHDM</a></td></tr>
+<tr><td>Page table</td><td>Dùng tạm bảng của firmware (ảo = vật lý), kernel tự dựng bảng sau</td><td>Paging mode request (chọn 4 hay 5 cấp); Limine dựng sẵn higher-half + <a href="hhdm.html">HHDM</a></td></tr>
 <tr><td>Màn hình</td><td>Tự hỏi GOP: base, pitch, định dạng điểm ảnh</td><td>Framebuffer request</td></tr>
 <tr><td>Memory map</td><td>Nguyên mảng <code>EFI_MEMORY_DESCRIPTOR</code>, tự phân loại vùng nào dùng được</td><td>Memmap request: đã gộp theo loại của Limine (usable, bootloader-reclaimable, ACPI, framebuffer…)</td></tr>
 <tr><td>ExitBootServices</td><td>Tự gọi, phải đọc lại map và thử lại khi MapKey cũ</td><td>Limine gọi; kernel không thấy Boot Services</td></tr>
-<tr><td>ACPI</td><td>Tìm RSDP trong Configuration Table của UEFI theo GUID</td><td>RSDP request (<a href="../bai/bai_08_acpi.html">Bài 8</a>)</td></tr>
+<tr><td>ACPI</td><td>Tìm RSDP trong Configuration Table của UEFI theo GUID</td><td>RSDP request</td></tr>
 <tr><td>CPU khác</td><td>Tự gửi INIT-SIPI qua local APIC</td><td>SMP request: Limine đánh thức các AP, mỗi AP chờ một địa chỉ để nhảy tới</td></tr>
 <tr><td>Máy BIOS cũ</td><td>Không chạy</td><td>Chạy</td></tr>
 </tbody>
 </table></div>
 
 <h2 id="tự-viết-thì-học-thêm-được-gì">Tự viết thì học thêm được gì</h2>
+<p class="lede"><em>Tự viết loader là học đúng những thứ Limine đang giấu đi.</em></p>
 <p>Đúng những thứ Limine giấu đi: <a href="esp_va_uefi_boot.html">ESP và đường dẫn boot</a>, Boot Services và
 <a href="uefi_runtime_services.html">Runtime Services</a>, memory map gốc của UEFI và vòng thử lại ExitBootServices,
 <a href="pe_elf_va_abi.html">PE và quy ước gọi hàm của firmware</a>, <a href="secure_boot.html">Secure Boot</a>.
@@ -92,13 +94,24 @@ memmap, SMP, RSDP) và <code>drivers/vga.c</code> (framebuffer). Cột giữa l�
 <code>BOOTLOADER_RECLAIMABLE</code>; với loader tự viết là <code>EfiBootServicesData</code> / <code>EfiLoaderData</code>.
 Đọc xong và đổi CR3 sang bảng của kernel rồi mới đưa vùng đó cho PMM.</p></div>
 
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>cavOS đi đường Limine; các lab đi đường Limine luôn, nên phần "tự viết" chỉ có ở trang này.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>: chuỗi boot của cavOS qua <code>BOOTX64.EFI</code> của Limine.</li>
+<li><a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>: các request cavOS khai (paging mode, kernel address, HHDM, memmap, SMP, RSDP) và framebuffer ở
+<a href="../bai/bai_04_framebuffer_console.html">Bài 4</a>.</li>
+<li><a href="../bai/bai_08_acpi.html">Bài 8 - ACPI</a>: RSDP từ Limine.</li>
+<li>Liên quan: <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>, <a href="esp_va_uefi_boot.html">ESP và UEFI boot</a>.</li>
+</ul>
+
 <h2 id="spec">Spec</h2>
+<p class="lede"><em>Mã nguồn Limine và hai trang OSDev để bắt đầu.</em></p>
 <ul>
 <li><a href="https://github.com/limine-bootloader/limine">limine-bootloader/limine</a>: mã nguồn và <code>PROTOCOL.md</code> (các request, trạng thái máy khi vào kernel)</li>
 <li><a href="https://wiki.osdev.org/Limine_Bare_Bones">Limine Bare Bones - OSDev Wiki</a></li>
 <li><a href="https://wiki.osdev.org/UEFI">UEFI - OSDev Wiki</a>: viết ứng dụng UEFI và loader của riêng mình</li>
 </ul>
-<p>Liên quan: <a href="limine_protocol.html">Limine Protocol</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>.</p>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Limine hay tự viết loader UEFI</footer>
 </main>

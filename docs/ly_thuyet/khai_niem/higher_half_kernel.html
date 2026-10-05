@@ -11,170 +11,161 @@
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
     <h1>Higher-Half Kernel</h1>
-    <div class="facts"><span class="fact"><b>Tags</b> concept, memory</span></div>
+    <div class="facts"><span class="fact"><b>Tags</b> concept, memory, x86-64</span></div>
   </div>
 </header>
 <div class="layout">
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p>Kernel được nạp ở <strong>nửa cao</strong> của không gian địa chỉ ảo. cavOS: <code>0xffffffff80000000</code> (xem <code>link.ld</code>).</p>
+<p>Một <strong>higher-half kernel</strong> là kernel được link và chạy ở <strong>nửa cao</strong> của không gian địa chỉ ảo, để nửa thấp trọn cho chương trình người dùng.
+Trên x86-64, địa chỉ quen thuộc nhất là <code>0xffffffff80000000</code>: 2 GiB cuối cùng của không gian địa chỉ.</p>
 </div>
 
-<h2 id="vì-sao-nửa-cao">Vì sao nửa cao?</h2>
-<p class="lede"><em>Chia đôi không gian địa chỉ: nửa dưới cho chương trình người dùng, nửa trên cho kernel.</em></p>
+<h2 id="hai-nua">Hai nửa của không gian địa chỉ</h2>
+<p class="lede"><em>Không gian ảo của x86-64 không liền một dải: nó có hai đầu dùng được và một cái lỗ khổng lồ ở giữa.</em></p>
 <ul>
-<li>Không gian ảo x86_64 (4-level) là <strong>48-bit có dấu</strong>, sign-extend lên 64-bit → địa chỉ hợp lệ
-("canonical") chỉ ở 2 đầu: nửa thấp <code>0x0..00–0x0000_7fff_ffff_ffff</code> và nửa cao
-<code>0xffff_8000_..–0xffff_ffff_..</code>. Khoảng giữa là "lỗ" không dùng được. → xem <a href="long_mode.html">Long Mode</a>.</li>
-<li>Quy ước: <strong>kernel ở nửa cao, userspace ở nửa thấp</strong> → mỗi tiến trình dùng chung mapping kernel,
-tách bạch rõ ràng, dễ bảo vệ.</li>
+<li>Với paging 4 cấp, địa chỉ ảo chỉ có <strong>48 bit</strong> thật. Bit 63..48 phải chép y hệt bit 47 ("sign-extend"); địa chỉ như vậy gọi là <strong>canonical</strong>.</li>
+<li>Bit 47 = 0 cho <strong>nửa thấp</strong> <code>0x0000000000000000</code>–<code>0x00007fffffffffff</code>; bit 47 = 1 cho <strong>nửa cao</strong> <code>0xffff800000000000</code>–<code>0xffffffffffffffff</code>.
+Mỗi nửa rộng 128 TiB.</li>
+<li>Khoảng giữa là <strong>lỗ non-canonical</strong>. Dùng địa chỉ trong lỗ thì CPU báo <code>#GP</code> ngay, không cần tra bảng trang.</li>
+<li>Với paging 5 cấp (LA57) con số là 57 bit, mỗi nửa 64 PiB; ý tưởng không đổi.</li>
 </ul>
-<p>"Sign-extend" nghĩa là: bit 63..48 phải chép y hệt bit 47. Bit 47 = 0 cho nửa thấp, bit 47 = 1 cho nửa cao. Mỗi nửa rộng 128 TiB. Dùng địa chỉ nằm trong lỗ thì CPU báo lỗi #GP ngay, không cần tra bảng trang.</p>
-<p>Ba lợi ích cụ thể của việc đặt kernel ở nửa cao:</p>
-<ul>
-<li><strong>Một nửa trên dùng chung.</strong> Mỗi tiến trình có bảng trang riêng (CR3 riêng). Chỉ cần chép các entry PML4 của nửa cao (entry 256–511) sang bảng mới là tiến trình nào cũng thấy kernel ở cùng địa chỉ. Khi có syscall hay ngắt, không phải đổi CR3.</li>
-<li><strong>Nửa dưới để trọn cho user.</strong> Chương trình user có thể link ở địa chỉ thấp quen thuộc mà không đụng kernel.</li>
-<li><strong>Dễ kiểm tra con trỏ.</strong> Con trỏ user đưa vào syscall mà có bit 63 = 1 là chắc chắn trỏ vào kernel → từ chối được bằng một phép so sánh.</li>
-</ul>
-<p>Với cavOS còn một lý do đơn giản hơn: <a href="limine_protocol.html">Limine</a> bắt buộc. Mục "Memory Layout at Entry" của <code>PROTOCOL.md</code> (bản Limine 10.8.5 dùng — binary cavOS thật sự boot) viết kernel phải nạp ở hoặc trên <code>0xffffffff80000000</code> và "Lower half executables are <em>not supported</em>".</p>
-
-<h2 id="bản-đồ-không-gian-địa-chỉ-của-cavos">Bản đồ không gian địa chỉ của cavOS</h2>
-<p class="lede"><em>Số thật đo từ file kernel và từ QEMU khi cavOS đang chạy.</em></p>
 <figure class="diagram">
-<svg id="svg-hh-layout" role="img" aria-label="cavOS virtual address space" style="max-width:1083px" width="100%" viewBox="0 0 720 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg id="svg-hh-layout" role="img" aria-label="A typical x86-64 higher-half layout: the lower half for user space, a non-canonical hole, then the kernel half with a direct map of all RAM, other kernel areas, and the kernel image in the top 2 GiB" style="max-width:1083px" width="100%" viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
   <style>#svg-hh-layout .lbl{fill:#c2c0b6;} #svg-hh-layout .mono{font-family:'SF Mono',Consolas,monospace;}</style>
 </defs>
-<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">cavOS virtual address space (4-level paging, QEMU -m 4g)</text>
-<!-- addresses on the left -->
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">typical x86-64 higher-half layout (4-level paging, not to scale)</text>
 <text x="190" y="50" text-anchor="end" class="lbl mono" font-size="9">0x0000000000000000</text>
 <text x="190" y="118" text-anchor="end" class="lbl mono" font-size="9">0x00007fffffffffff</text>
 <text x="190" y="184" text-anchor="end" class="lbl mono" font-size="9">0xffff800000000000</text>
-<text x="190" y="252" text-anchor="end" class="lbl mono" font-size="9">0xffff800140000000</text>
 <text x="190" y="314" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80000000</text>
-<text x="190" y="344" text-anchor="end" class="lbl mono" font-size="9">0xffffffff8008f4c0</text>
-<text x="190" y="374" text-anchor="end" class="lbl mono" font-size="9">0xffffffff800acb00</text>
-<text x="190" y="412" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80101378</text>
-<text x="190" y="446" text-anchor="end" class="lbl mono" font-size="9">0xffffffffffffffff</text>
-<!-- lower half -->
+<text x="190" y="376" text-anchor="end" class="lbl mono" font-size="9">0xffffffffffffffff</text>
 <rect x="200" y="40" width="420" height="82" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
-<text x="216" y="64" fill="#B5D4F4" font-size="11.5" font-weight="600">Lower half — user space (128 TiB)</text>
+<text x="216" y="64" fill="#B5D4F4" font-size="11.5" font-weight="600">Lower half: user space (128 TiB)</text>
 <text x="216" y="84" fill="#85B7EB" font-size="9">bit 47 = 0; each process has its own mapping</text>
-<text x="216" y="102" fill="#85B7EB" font-size="9">PML4 entries 0–255</text>
-<!-- hole -->
+<text x="216" y="102" fill="#85B7EB" font-size="9">PML4 entries 0-255</text>
 <rect x="200" y="128" width="420" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
 <text x="216" y="148" fill="#D3D1C7" font-size="11" font-weight="600">non-canonical hole</text>
 <text x="216" y="164" fill="#B4B2A9" font-size="9">any access here is #GP</text>
-<!-- HHDM -->
-<rect x="200" y="178" width="420" height="78" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
-<text x="216" y="200" fill="#C6E7CC" font-size="11.5" font-weight="600">HHDM — all RAM, VA = PA + hhdmOffset</text>
-<text x="216" y="218" fill="#8FC79A" font-size="9" class="mono">hhdmOffset = 0xffff800000000000, 5 GiB mapped (rw)</text>
-<text x="216" y="234" fill="#8FC79A" font-size="9" class="mono">framebuffer at 0xffff8000fd000000</text>
-<text x="216" y="249" fill="#8FC79A" font-size="9" class="mono">kernel frames again at 0xffff8000bfbbf000</text>
-<!-- gap -->
-<text x="410" y="284" text-anchor="middle" class="lbl" font-size="9">… unused by Limine (cavOS maps heap, MMIO, tasks in the high half later) …</text>
-<!-- kernel image -->
-<rect x="200" y="304" width="420" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
-<text x="216" y="323" fill="#F0DBAE" font-size="10.5" font-weight="600">.text — R X (0x8e4a4 bytes), _start = 0xffffffff8002a548</text>
-<rect x="200" y="334" width="420" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
-<text x="216" y="353" fill="#F0DBAE" font-size="10.5" font-weight="600">.rodata + .rela.dyn — R</text>
-<rect x="200" y="364" width="420" height="52" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
-<text x="216" y="384" fill="#F0DBAE" font-size="10.5" font-weight="600">.data + .dynamic + .bss — RW</text>
-<text x="216" y="402" fill="#D8A54A" font-size="9">ends at kernel_end; physical base 0xbfbbf000</text>
-<text x="410" y="440" text-anchor="middle" class="lbl" font-size="9">top 2 GiB: kernel image only (about 1 MiB of it used)</text>
+<rect x="200" y="178" width="420" height="62" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="216" y="200" fill="#C6E7CC" font-size="11.5" font-weight="600">direct map: all RAM, VA = PA + offset</text>
+<text x="216" y="218" fill="#8FC79A" font-size="9">same in every process (PML4 entries 256-511 are shared)</text>
+<text x="216" y="232" fill="#8FC79A" font-size="9">HHDM in Limine, "direct mapping" in Linux</text>
+<rect x="200" y="246" width="420" height="54" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="216" y="268" fill="#D3D1C7" font-size="11" font-weight="600">other kernel areas</text>
+<text x="216" y="286" fill="#B4B2A9" font-size="9">heap / vmalloc, MMIO mappings, per-task kernel stacks</text>
+<rect x="200" y="306" width="420" height="58" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="216" y="328" fill="#F0DBAE" font-size="11.5" font-weight="600">kernel image: top 2 GiB</text>
+<text x="216" y="346" fill="#D8A54A" font-size="9">.text R-X, .rodata R--, .data/.bss RW-</text>
+<text x="216" y="358" fill="#D8A54A" font-size="9">reachable with 32-bit sign-extended addresses</text>
 </svg>
+<figcaption>Bố cục thường gặp. Mỗi kernel đặt các vùng ở chỗ khác nhau, nhưng gần như mọi kernel x86-64 đều để chương trình ở nửa thấp và mọi thứ của kernel ở nửa cao.</figcaption>
 </figure>
-<p>Các số trong sơ đồ lấy từ đâu:</p>
-<ul>
-<li><strong>Khi build</strong>: <code>readelf -lW ~/cavOS/target/boot/kernel.bin</code> (bản build <code>2ba0edb</code>) cho 3 segment <code>PT_LOAD</code> và 1 <code>PT_DYNAMIC</code>:</li>
-</ul>
-<div class="code"><div class="code-bar">text</div><pre><code>  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
-  LOAD           0x001000 0xffffffff80000000 0xffffffff80000000 0x08e4a4 0x08e4a4 R E 0x1000
-  LOAD           0x08f4c0 0xffffffff8008f4c0 0xffffffff8008f4c0 0x01c638 0x01c638 R   0x1000
-  LOAD           0x0abb00 0xffffffff800acb00 0xffffffff800acb00 0x00deb8 0x054878 RW  0x1000
-  DYNAMIC        0x0b98b8 0xffffffff800ba8b8 0xffffffff800ba8b8 0x000100 0x000100 RW  0x8</code></pre></div>
-<ul>
-<li><strong>Lúc chạy</strong>: QEMU monitor <code>info mem</code> khi cavOS đã boot xong. Dòng thứ nhất là HHDM, hai dòng sau là kernel (<code>info mem</code> không in quyền X):</li>
-</ul>
-<div class="code"><div class="code-bar">text</div><pre><code>ffff800000000000-ffff800140000000 0000000140000000 -rw
-ffffffff80000000-ffffffff800ac000 00000000000ac000 -r-
-ffffffff800ac000-ffffffff80102000 0000000000056000 -rw</code></pre></div>
-<ul>
-<li>Địa chỉ framebuffer <code>fb{ffff8000fd000000}</code> có trong serial log (<code>[graphics] Resolution fixed: …</code>). Địa chỉ vật lý của kernel lấy bằng monitor <code>gva2gpa 0xffffffff80000000</code> → <code>gpa: 0xbfbbf000</code>.</li>
-</ul>
-<p>HHDM rộng 5 GiB dù máy ảo chỉ có 4 GiB RAM: với base revision 2 (cavOS dùng <code>LIMINE_BASE_REVISION(2)</code>), Limine luôn map 4 GiB vật lý đầu tiên vào HHDM, cộng thêm các vùng RAM nằm trên 4 GiB. QEMU đặt phần RAM vượt quá 3 GiB lên trên mốc 4 GiB, nên cửa sổ dài tới 5 GiB.</p>
 
-<h2 id="vì-sao-đúng-0xffffffff80000000-2gib">Vì sao đúng <code>0xffffffff80000000</code> (= −2GiB)?</h2>
-<p class="lede"><em>Lý do gốc là code model của GCC; với cavOS thì lý do thật là luật của Limine.</em></p>
-<p><code>0xffffffff80000000</code> là −2 GiB nếu đọc như số có dấu: chỉ còn 2 GiB tới đỉnh không gian địa chỉ. Đây là chỗ duy nhất ở nửa cao mà một số 32-bit có dấu, khi sign-extend lên 64-bit, trỏ tới được.</p>
-<p>GCC có <strong><code>-mcmodel=kernel</code></strong> dựa đúng vào điều đó. Mọi địa chỉ tuyệt đối của biến/hàm được nhúng thẳng vào lệnh dưới dạng số 32-bit có dấu (relocation <code>R_X86_64_32S</code>) → lệnh ngắn và nhanh hơn, nhưng kernel bắt buộc nằm trong 2 GiB cuối. Đó là lý do Linux và hầu hết hobby kernel chọn địa chỉ này.</p>
-<p><strong>cavOS không dùng <code>-mcmodel=kernel</code>.</strong> <code>src/kernel/Makefile</code> build với <code>-fPIE</code> và link với <code>-pie</code>. Hai thứ này còn không đi cùng được — thử với cross compiler của cavOS:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>$ x86_64-cavos-gcc -ffreestanding -c -O2 -fPIE -mcmodel=kernel t.c
-cc1: error: code model kernel does not support PIC mode</code></pre></div>
-<p>So sánh cùng một hàm <code>int g(long i){ return a[i]; }</code> ở hai chế độ (objdump + readelf thật):</p>
-<div class="code"><div class="code-bar">text</div><pre><code>### -fno-pic -mcmodel=kernel
-   0:	mov    0x0(,%rdi,4),%eax          ; địa chỉ a nhúng thẳng, 32-bit có dấu
-0000000000000003  ...  R_X86_64_32S    a + 0
-### -fPIE
-   0:	lea    0x0(%rip),%rax             ; địa chỉ a = RIP + độ lệch
-   7:	mov    (%rax,%rdi,4),%eax
-0000000000000003  ...  R_X86_64_PC32   a - 4</code></pre></div>
-<p>Với <code>-fPIE</code>, code tham chiếu dữ liệu bằng độ lệch so với RIP (thanh ghi con trỏ lệnh). Điều kiện duy nhất là code và dữ liệu cách nhau không quá ±2 GiB — kernel cavOS chỉ khoảng 1 MiB nên luôn thoả, đặt ở đâu cũng được. Đếm relocation trong phần <code>.text</code> của <code>entry/kernel.o</code> chỉ thấy loại tương đối: <code>R_X86_64_PC32</code> (14), <code>R_X86_64_PLT32</code> (38), <code>R_X86_64_REX_GOTPCRELX</code> (4). Vậy với cavOS, địa chỉ −2 GiB không phải do compiler đòi, mà do Limine đòi (và do <code>link.ld</code> chép theo mẫu của Limine).</p>
-
-<h2 id="trong-code-linkld">Trong code (<code>link.ld</code>)</h2>
-<p class="lede"><em><code>link.ld</code> đặt địa chỉ bắt đầu và chia kernel thành 3 segment có quyền khác nhau.</em></p>
-<div class="code"><div class="code-bar">ld</div><pre><code>. = 0xffffffff80000000;
-kernel_start = .;
-.text : { *(.text .text.*) } :text</code></pre></div>
-<p>Phần còn lại của <code>src/kernel/link.ld</code> làm ba việc:</p>
+<h2 id="vi-sao">Vì sao kernel ở nửa cao</h2>
+<p class="lede"><em>Một nửa cho kernel, giống nhau ở mọi tiến trình; một nửa cho chương trình, mỗi tiến trình một kiểu.</em></p>
 <ul>
-<li><code>PHDRS</code> khai 3 segment <code>text</code> (R+X), <code>rodata</code> (R), <code>data</code> (R+W) và 1 segment <code>dynamic</code>. Limine đọc cờ của từng segment để map trang với quyền tương ứng. Segment <code>dynamic</code> chứa thông tin relocation → xem <a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</li>
-<li>Giữa các section có <code>. += CONSTANT(MAXPAGESIZE);</code> để mỗi segment bắt đầu ở trang 4 KiB mới. Hai segment khác quyền không bao giờ chung một trang.</li>
-<li>Các symbol <code>kernel_start</code>, <code>kernel_text_start/end</code>, <code>kernel_rodata_start/end</code>, <code>kernel_data_start/end</code>, <code>kernel_end</code> được khai <code>extern</code> trong <code>include/bootloader.h</code> để C biết ranh giới từng phần. <code>nm</code> trên bản build: <code>kernel_start = ffffffff80000000</code>, <code>_start = ffffffff8002a548</code>, <code>kernel_end = ffffffff80101378</code>.</li>
+<li><strong>Một nửa trên dùng chung.</strong> Mỗi tiến trình có bảng trang riêng (CR3 riêng). Chỉ cần chép các entry PML4 của nửa cao (entry 256–511) sang bảng mới là tiến trình
+nào cũng thấy kernel ở cùng địa chỉ. Khi có syscall hay ngắt, không phải đổi CR3.</li>
+<li><strong>Nửa dưới để trọn cho chương trình.</strong> Chương trình có thể link ở địa chỉ thấp quen thuộc (vd <code>0x400000</code>) mà không đụng kernel.</li>
+<li><strong>Dễ kiểm con trỏ.</strong> Con trỏ do chương trình đưa vào syscall mà có bit 63 = 1 là chắc chắn trỏ vào kernel: từ chối được bằng một phép so sánh.</li>
 </ul>
-<p>Liên quan: <a href="hhdm.html">HHDM</a> (cũng ở nửa cao, vùng khác), <a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>.</p>
+<p>Kernel "lower half" vẫn làm được (kernel ở địa chỉ thấp, chương trình ở trên), nhưng mỗi tiến trình mất một khúc ở đầu không gian, và mọi ABI quen thuộc (Linux, các
+chương trình ELF link ở <code>0x400000</code>) đều giả định ngược lại.</p>
 
-<h2 id="kernel-mapping-vs-hhdm">Kernel mapping vs HHDM</h2>
-<p class="lede"><em>Cùng một byte của kernel có hai địa chỉ ảo: một để chạy, một để đọc/ghi như dữ liệu.</em></p>
-<p>Limine tạo hai vùng ở nửa cao, và kernel cần biết cả hai. <code>entry/bootloader.c</code>, hàm <code>initialiseBootloaderParser()</code>, lưu chúng vào struct <code>bootloader</code> (đọc kỹ ở <a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>):</p>
-<div class="code"><div class="code-bar">c</div><pre><code>  // HHDM (randomized kernel positionings)
-  struct limine_hhdm_response *limineHHDMres = limineHHDMreq.response;
-  bootloader.hhdmOffset = limineHHDMres-&gt;offset;
-
-  // Kernel address
-  struct limine_kernel_address_response *limineKrnres = limineKrnreq.response;
-  bootloader.kernelVirtBase = limineKrnres-&gt;virtual_base;
-  bootloader.kernelPhysBase = limineKrnres-&gt;physical_base;</code></pre></div>
+<h2 id="tru-2gib">Vì sao đúng <code>0xffffffff80000000</code> (= −2 GiB)</h2>
+<p class="lede"><em>Lý do nằm ở cách compiler nhúng địa chỉ vào lệnh máy.</em></p>
+<p><code>0xffffffff80000000</code> là −2 GiB nếu đọc như số có dấu: chỉ còn 2 GiB tới đỉnh không gian địa chỉ. Đây là vùng duy nhất ở nửa cao mà một số <strong>32-bit có dấu</strong>,
+sign-extend lên 64-bit, trỏ tới được.</p>
+<p>x86-64 không có lệnh nào chứa trọn một địa chỉ tuyệt đối 64 bit trong toán hạng bộ nhớ (trừ <code>movabs</code>); hầu hết lệnh chỉ chứa 32 bit. GCC có
+<strong><code>-mcmodel=kernel</code></strong> dựa đúng vào điều đó: mọi địa chỉ của biến và hàm được nhúng thẳng vào lệnh dưới dạng số 32-bit có dấu (relocation
+<code>R_X86_64_32S</code>). Lệnh ngắn và nhanh, đổi lại kernel phải nằm trọn trong 2 GiB cuối. Linux và phần lớn hobby kernel chọn địa chỉ này vì thế.</p>
 <div class="table-wrap"><table>
-<thead><tr><th></th><th>Kernel mapping</th><th>HHDM</th></tr></thead>
+<thead><tr><th>Code model</th><th>Code + dữ liệu phải nằm ở</th><th>Dùng cho</th></tr></thead>
 <tbody>
-<tr><td>Địa chỉ (đo thật)</td><td><code>0xffffffff80000000</code> → phys <code>0xbfbbf000</code></td><td><code>0xffff800000000000</code> + PA</td></tr>
-<tr><td>Phủ</td><td>chỉ ảnh kernel (~1 MiB)</td><td>toàn bộ RAM</td></tr>
-<tr><td>Dùng để</td><td>chạy code, biến global — compiler tự sinh địa chỉ</td><td>kernel cầm một PA và muốn đọc/ghi nó</td></tr>
-<tr><td>Trong cavOS</td><td><code>bootloader.kernelVirtBase</code></td><td><code>bootloader.hhdmOffset</code> (macro <code>HHDMoffset</code> trong <code>memory/paging.c</code>)</td></tr>
+<tr><td><code>-mcmodel=small</code> (mặc định)</td><td>2 GiB đầu: <code>0</code>–<code>0x7fffffff</code></td><td>chương trình bình thường</td></tr>
+<tr><td><code>-mcmodel=kernel</code></td><td>2 GiB cuối: <code>0xffffffff80000000</code> trở lên</td><td>kernel ở nửa cao</td></tr>
+<tr><td><code>-mcmodel=large</code></td><td>ở đâu cũng được</td><td>khi cần; địa chỉ 64 bit nạp bằng <code>movabs</code>, chậm hơn</td></tr>
+<tr><td><code>-fPIE</code> / <code>-fPIC</code></td><td>ở đâu cũng được, miễn code và dữ liệu cách nhau ≤ 2 GiB</td><td>code nạp ở địa chỉ không biết trước (KASLR)</td></tr>
 </tbody>
 </table></div>
-<p>Vì HHDM phủ mọi RAM, khung vật lý của kernel cũng hiện ra lần nữa trong HHDM: <code>0xffff800000000000 + 0xbfbbf000 = 0xffff8000bfbbf000</code>. Hai địa chỉ ảo, một khung vật lý — đó là aliasing, giải thích kỹ ở <a href="hhdm.html">HHDM</a>.</p>
-<p>cavOS dùng cả hai vùng làm "vùng cấm" trong <code>cpu/system.c</code>, hàm <code>isProtectedMemory()</code>. Vùng kernel được coi là 256 MiB (<code>268435456</code>) tính từ <code>kernelVirtBase</code>, rộng hơn nhiều so với 1 MiB thật:</p>
-<div class="code"><div class="code-bar">c</div><pre><code>bool isProtectedMemory(uint64_t virt) {
-  if (virt &gt; bootloader.hhdmOffset &amp;&amp;
-      virt &lt; (bootloader.hhdmOffset + bootloader.mmTotal))
-    return true;
-  else if (virt &gt; bootloader.kernelVirtBase &amp;&amp;
-           virt &lt; bootloader.kernelVirtBase + 268435456) {
-    return true;
-  }
+<p>Cùng một hàm <code>int g(long i){ return a[i]; }</code> ở hai chế độ (objdump + readelf thật, GCC x86-64):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>### -fno-pic -mcmodel=kernel
+   0:	mov    0x0(,%rdi,4),%eax          ; address of a embedded, 32-bit signed
+0000000000000003  ...  R_X86_64_32S    a + 0
+### -fPIE
+   0:	lea    0x0(%rip),%rax             ; address of a = RIP + offset
+   7:	mov    (%rax,%rdi,4),%eax
+0000000000000003  ...  R_X86_64_PC32   a - 4</code></pre></div>
+<p>Với <code>-fPIE</code>, code tham chiếu dữ liệu bằng độ lệch so với RIP, nên không cần đặt ở −2 GiB. Hai chế độ cũng không đi cùng nhau được:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>$ gcc -ffreestanding -c -O2 -fPIE -mcmodel=kernel t.c
+cc1: error: code model kernel does not support PIC mode</code></pre></div>
+<p>Kernel build bằng PIE vẫn thường được đặt ở −2 GiB, nhưng là vì bootloader đòi (xem dưới) hoặc theo thói quen, không phải vì compiler. Chi tiết PIE và KASLR:
+<a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</p>
 
-  return false;
+<h2 id="ai-dat">Ai đặt kernel lên nửa cao</h2>
+<p class="lede"><em>Linker quyết định kernel "nghĩ" nó ở đâu; bootloader (hoặc chính kernel) phải làm cho điều đó thành thật.</em></p>
+<p>Linker script đặt địa chỉ ảo bắt đầu, và tách code, dữ liệu chỉ-đọc, dữ liệu ghi được thành các segment khác quyền, mỗi segment bắt đầu ở trang mới:</p>
+<div class="code"><div class="code-bar">ld</div><pre><code>PHDRS {
+    text   PT_LOAD FLAGS(5);   /* R X */
+    rodata PT_LOAD FLAGS(4);   /* R   */
+    data   PT_LOAD FLAGS(6);   /* R W */
+}
+SECTIONS {
+    . = 0xffffffff80000000;
+    kernel_start = .;
+    .text   : { *(.text .text.*) } :text
+    . = ALIGN(4096);
+    .rodata : { *(.rodata .rodata.*) } :rodata
+    . = ALIGN(4096);
+    .data   : { *(.data .data.*) } :data
+    .bss    : { *(.bss .bss.*) *(COMMON) } :data
+    kernel_end = .;
 }</code></pre></div>
-<p>Khi cavOS tự quản bảng trang (<a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>), nó dùng lại bảng của Limine, nên hai vùng này giữ nguyên địa chỉ suốt quá trình chạy.</p>
+<p>Còn ai map địa chỉ đó vào RAM thật thì có hai đường:</p>
+<ul>
+<li><strong>Bootloader làm hộ.</strong> Bootloader dựng bảng trang, map các segment ELF ở địa chỉ ảo đã link (trỏ tới đâu đó trong RAM vật lý), bật paging rồi mới nhảy vào kernel.
+Limine làm vậy và còn <em>bắt buộc</em>: <code>PROTOCOL.md</code> yêu cầu kernel nạp ở hoặc trên <code>0xffffffff80000000</code>, không nhận kernel nửa thấp.</li>
+<li><strong>Kernel tự làm.</strong> Với Multiboot (GRUB), kernel bắt đầu ở 32-bit, chưa có paging, chạy ở địa chỉ vật lý. Một đoạn code đầu tiên link ở địa chỉ thấp
+(hay tính bằng <code>sym - KERNEL_VMA</code>) dựng bảng trang tạm map kernel <em>hai lần</em> (identity + nửa cao), bật paging, nhảy lên nửa cao, rồi gỡ identity map.
+Phần segment trong ELF khi đó có VMA ở nửa cao nhưng LMA thấp (<code>AT(...)</code> trong linker script).</li>
+</ul>
+
+<h2 id="hai-anh-xa">Hai ánh xạ của cùng một kernel</h2>
+<p class="lede"><em>Cùng một byte của kernel có hai địa chỉ ảo: một để chạy, một để đọc/ghi như dữ liệu.</em></p>
+<p>Hầu hết higher-half kernel có cả hai vùng sau ở nửa cao:</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Kernel mapping</th><th>Direct map (HHDM)</th></tr></thead>
+<tbody>
+<tr><td>Địa chỉ</td><td>địa chỉ link, vd <code>0xffffffff80000000</code></td><td><code>offset + PA</code></td></tr>
+<tr><td>Phủ</td><td>chỉ ảnh kernel</td><td>toàn bộ RAM</td></tr>
+<tr><td>Dùng để</td><td>chạy code, biến global: compiler tự sinh địa chỉ</td><td>kernel cầm một địa chỉ vật lý (bảng trang, frame vừa cấp) và muốn đọc/ghi nó</td></tr>
+<tr><td>Quyền</td><td>theo segment: R-X, R--, RW-</td><td>RW, không chạy được (nếu kernel bật NX)</td></tr>
+</tbody>
+</table></div>
+<p>Vì direct map phủ mọi RAM, khung vật lý của kernel hiện ra thêm một lần trong đó: hai địa chỉ ảo, một khung vật lý (aliasing). Ghi qua địa chỉ nào cũng thấy ở địa chỉ kia.
+Xem <a href="hhdm.html">HHDM</a>.</p>
+
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>Những chỗ cavOS dùng ý này, với số đo thật.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html#link-ld">Bài 1 - Boot &amp; Limine</a>: <code>link.ld</code> của cavOS; Đọc thêm có
+<a href="../bai/bai_01_boot_limine.html#ban-do-dia-chi">bản đồ địa chỉ của cavOS khi chạy</a> và <a href="../bai/bai_01_boot_limine.html#tru-2gib-cavos">vì sao cavOS ở −2 GiB dù build PIE</a>.</li>
+<li><a href="../bai/bai_03_bootloader_parser.html#parser">Bài 3 - Bootloader Parser</a>: lưu địa chỉ kernel và HHDM offset; Đọc thêm có
+<a href="../bai/bai_03_bootloader_parser.html#vung-cam">hai "vùng cấm" của <code>isProtectedMemory()</code></a>.</li>
+<li><a href="../bai/bai_06_virtual_memory_paging.html">Bài 6 - Virtual Memory &amp; Paging</a>: bảng trang mỗi tiến trình chép nửa cao của bảng kernel.</li>
+<li>Liên quan: <a href="hhdm.html">HHDM</a>, <a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>, <a href="long_mode.html">Long Mode</a>.</li>
+</ul>
 
 <h2 id="spec">Spec</h2>
-<p><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §4.5 (canonical address / sign-extension); Limine <code>PROTOCOL.md</code> (Kernel Address — bắt buộc nửa cao).</p>
+<p class="lede"><em>Chỗ tra khi cần chi tiết.</em></p>
 <ul>
-<li>Limine <code>PROTOCOL.md</code> (repo <code>limine-protocol</code>, commit <code>e42d010</code> mà Limine 10.8.5 ghim; Limine 8.x gọi mục đầu là "Entry memory layout"): "Memory Layout at Entry" (nạp ở hoặc trên <code>0xffffffff80000000</code>, bảng mapping theo base revision), "HHDM (Higher Half Direct Map) Feature", "Executable Address Feature" (tên mới của Kernel Address; cùng ID request).</li>
-<li>GCC manual, x86 Options: <code>-mcmodel=small</code> / <code>kernel</code>; System V x86-64 psABI (relocation <code>R_X86_64_32S</code>, <code>R_X86_64_PC32</code>).</li>
+<li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol 3A §4.5 (paging 4/5 cấp, canonical address).</li>
+<li>GCC manual, x86 Options: <code>-mcmodel=small</code> / <code>kernel</code> / <code>large</code>; System V x86-64 psABI (relocation <code>R_X86_64_32S</code>, <code>R_X86_64_PC32</code>).</li>
+<li>Linux, <code>Documentation/arch/x86/x86_64/mm.rst</code>: bản đồ không gian địa chỉ của một kernel thật (direct mapping, vmalloc, kernel text ở <code>ffffffff80000000</code>).</li>
+<li>Limine <code>PROTOCOL.md</code>: "Memory Layout at Entry", "HHDM Feature", "Executable Address Feature".</li>
 </ul>
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · Higher-Half Kernel</footer>

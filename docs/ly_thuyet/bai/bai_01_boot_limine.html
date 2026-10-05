@@ -22,7 +22,7 @@
 <p class="lede"><em>Từ lúc bật nguồn tới dòng C đầu tiên của kernel.</em></p>
 <p>Bài này đưa CPU từ lúc bật máy tới hàm <code>_start()</code> của cavOS, và cho thấy file kernel được xếp vào bộ nhớ ra sao.
 <a href="bai_02_serial_uart.html">Bài 2</a> cần điểm xuất phát này: việc đầu tiên <code>_start()</code> làm là bật cổng serial.
-(Cách cài môi trường và bản đồ cả khoá học: <a href="bai_00_bat_dau.html">Bài 0</a>.)</p>
+(Cách cài môi trường và bản đồ cả khoá học: <a href="bai_00_bat_dau.html">Bắt đầu</a>.)</p>
 
 <h2 id="noi-that-don-gian" class="card-head">Nói thật đơn giản</h2>
 <p>Bật máy lên, CPU chưa biết kernel của bạn là gì. Phải có người đọc file kernel từ đĩa, đưa CPU vào chế độ 64-bit,
@@ -44,7 +44,7 @@ Limine làm sẵn cả hai. Đọc sâu: <a href="../khai_niem/long_mode.html">L
 <li><strong>Higher-half kernel</strong> — kernel chạy ở địa chỉ ảo rất cao (<code>0xffffffff80000000</code>, 2 GiB cuối của không gian 64-bit),
 để nửa thấp dành cho chương trình người dùng. Đọc sâu: <a href="../khai_niem/higher_half_kernel.html">Higher-Half Kernel</a>.</li>
 <li><strong>Limine protocol</strong> — "hợp đồng" giữa Limine và kernel. Kernel đặt trong file những struct <em>request</em> có số nhận dạng (magic);
-Limine tìm thấy thì điền con trỏ <em>response</em>. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Limine Protocol</a>,
+Limine tìm thấy thì điền con trỏ <em>response</em>. Đọc sâu: <a href="../khai_niem/limine_protocol.html">Boot Protocol &amp; Limine</a>,
 <a href="../khai_niem/request_response_mechanism.html">Request-Response Mechanism</a>.</li>
 </ul>
 
@@ -244,8 +244,8 @@ void _start(void) {
 <ul>
 <li><code>LIMINE_BASE_REVISION(2)</code> (trong <code>include/limine.h</code>) tạo mảng <code>limine_base_revision[3]</code> = hai số magic + số 2.
 Limine nào hiểu revision 2 sẽ ghi <strong>0</strong> vào phần tử cuối. <code>LIMINE_BASE_REVISION_SUPPORTED</code> chỉ là phép so <code>limine_base_revision[2] == 0</code>.
-Không được ghi 0 nghĩa là Limine quá cũ, kernel dừng ngay. Chi tiết: <a href="../khai_niem/limine_protocol.html#4-base-revision-bắt-tay-phiên-bản">Limine Protocol §4</a>.</li>
-<li>Sau đó <code>_start</code> gọi lần lượt từng hệ con. Mỗi bài tiếp theo đọc một dòng trong danh sách này; thứ tự đầy đủ ở <a href="bai_00_bat_dau.html">Bài 0</a>.</li>
+Không được ghi 0 nghĩa là Limine quá cũ, kernel dừng ngay. Chi tiết: <a href="../khai_niem/limine_protocol.html#base-revision">Limine Protocol §4</a>.</li>
+<li>Sau đó <code>_start</code> gọi lần lượt từng hệ con. Mỗi bài tiếp theo đọc một dòng trong danh sách này; thứ tự đầy đủ ở <a href="bai_00_bat_dau.html">Bắt đầu</a>.</li>
 </ul>
 
 <h2 id="tu-lam">Tự làm</h2>
@@ -285,12 +285,155 @@ nhưng quyền ra vẫn đúng W^X (xem <a href="#ld-tu-suy">ld tự suy quyền
 <h3 id="phia-firmware-uefi">Phía firmware UEFI</h3>
 <p>Ô "Firmware" trong sơ đồ chuỗi boot được giải thích ở các trang khái niệm sau:</p>
 <ul>
-<li><a href="../khai_niem/esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a> — firmware tìm file <code>.efi</code> trên phân vùng nào và theo thứ tự nào.</li>
+<li><a href="../khai_niem/esp_va_uefi_boot.html">ESP và UEFI boot</a> — firmware tìm file <code>.efi</code> trên phân vùng nào và theo thứ tự nào (đĩa thật của cavOS: <a href="#disk-img">mục dưới</a>).</li>
 <li><a href="../khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a> — dịch vụ nào của firmware còn dùng được sau khi kernel đã chạy.</li>
-<li><a href="../khai_niem/secure_boot.html">Secure Boot</a> — firmware kiểm chữ ký bootloader thế nào, và cavOS có chạy được khi bật nó không.</li>
+<li><a href="../khai_niem/secure_boot.html">Secure Boot</a> — firmware kiểm chữ ký bootloader thế nào (cavOS khi bật nó: <a href="#secure-boot-cavos">mục dưới</a>).</li>
 <li><a href="../khai_niem/pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a> — vì sao Limine là file PE còn kernel là ELF, và hai bên gọi hàm theo quy ước nào.</li>
 <li><a href="../khai_niem/limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a> — tự viết loader thì phải làm thêm những việc gì Limine đang làm hộ.</li>
 </ul>
+
+<h3 id="disk-img">Trên <code>disk.img</code> của cavOS có gì, và UEFI tìm Limine thế nào</h3>
+<p>Khái niệm chung: <a href="../khai_niem/esp_va_uefi_boot.html">ESP và UEFI boot</a>. Ảnh đĩa cavOS không phải GPT, và phân vùng boot cũng không mang nhãn ESP, nhưng vẫn boot được trên OVMF.</p>
+<p><code>tools/kernel/make_disk.sh</code> dựng ảnh bằng <code>parted ... mklabel msdos</code> (tức MBR), hai phân vùng, rồi
+<code>mkdosfs -F32</code> cho phân vùng 1, <code>mke2fs -L "cavOS"</code> cho phân vùng 2, <code>fatlabel ... LIMINE</code>.
+Phân vùng 1 được mount vào <code>/boot</code> của phân vùng 2 khi chép file, nên trong FAT các file nằm ở gốc:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>$ fdisk -l disk.img
+Disk disk.img: 1.75 GiB, 1881310208 bytes, 3674434 sectors
+Disklabel type: dos
+Device     Boot  Start     End Sectors  Size Id Type
+disk.img1  *      2048  133120  131073   64M 83 Linux
+disk.img2       266240 3674111 3407872  1.6G 83 Linux
+
+$ xxd -s 512 -l 16 disk.img          # LBA 1: không có chữ ký "EFI PART"
+00000200: fc30 c0bf ff0a 0700 b9ff 0a07 0081 e9ff  .0..............
+
+$ mlabel -i disk.img@@1M -s ::
+ Volume label is LIMINE
+
+$ mdir -i disk.img@@1M -/ -b ::
+::/limine/
+::/EFI/
+::/kernel.bin
+::/limine/limine-bios.sys
+::/limine/limine.conf
+::/EFI/BOOT/
+::/EFI/BOOT/BOOTX64.EFI
+::/EFI/BOOT/BOOTIA32.EFI</code></pre></div>
+<ul>
+<li>Phân vùng 1 có type <code>0x83</code> (Linux), không phải <code>0xEF</code>. Theo spec nó không phải ESP. OVMF vẫn boot được vì
+driver FAT của nó gắn vào mọi phân vùng FAT, không xét type. Firmware máy thật có thể khắt khe hơn; điều này chưa được thử.</li>
+<li><code>BOOTX64.EFI</code> trên đĩa trùng byte với <code>src/bootloader/limine/BOOTX64.EFI</code> (chuỗi version trong file là <code>Limine 10.8.5 (x86-64, UEFI)</code>;
+<code>src/bootloader/assert.sh</code> ghim <code>TARGET_VERSION="10.1.1"</code> và ghi số đó vào <code>.version</code>, nhưng clone đầu nhánh
+<code>v10.x-binary</code>, nên bản thật sự cài là <strong>10.8.5</strong>), <code>kernel.bin</code> trùng với <code>target/boot/kernel.bin</code> (kiểm bằng <code>cmp</code>).</li>
+<li><code>make qemu</code> của cavOS không truyền firmware UEFI nào cho QEMU, nên mặc định nó boot qua SeaBIOS (đường BIOS:
+MBR → <code>limine-bios.sys</code>). Đường UEFI chỉ chạy khi bạn tự thêm OVMF như ở trên.</li>
+</ul>
+<div class="code"><div class="code-bar">text</div><pre><code># /limine/limine.conf trên phân vùng FAT
+timeout: 0
+/cavOS
+    protocol: limine
+    kaslr: yes
+    kernel_path: boot():/kernel.bin</code></pre></div>
+<p><code>boot():</code> là phân vùng chứa <code>limine.conf</code>, tức phân vùng FAT <code>LIMINE</code>.</p>
+
+<figure class="diagram">
+<svg id="svg-cavos-esp-boot" role="img" aria-label="How OVMF finds Limine on the cavOS disk: BootOrder, Boot0002 without a file node, the fallback path BOOTX64.EFI, Limine reading FAT32 itself, then ExitBootServices and the cavOS entry point; and the MBR layout of disk.img with a FAT32 partition labelled LIMINE and an ext2 root" style="max-width:1083px" width="100%" viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <marker id="svg-cavos-esp-boot-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <style>#svg-cavos-esp-boot .mono{font-family:'SF Mono',Consolas,monospace;} #svg-cavos-esp-boot .lbl{fill:#c2c0b6;} #svg-cavos-esp-boot .flow{stroke:#7d7b73;}</style>
+</defs>
+<text x="185" y="24" text-anchor="middle" class="lbl" font-size="10">boot path under OVMF</text>
+<text x="575" y="24" text-anchor="middle" class="lbl" font-size="10">disk.img (MBR, 3674434 sectors)</text>
+<!-- left: flow -->
+<rect x="20" y="40" width="330" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="36" y="63" fill="#D3D1C7" font-size="11.5" font-weight="600">UEFI boot manager (BdsDxe)</text>
+<text x="36" y="82" fill="#B4B2A9" font-size="9" class="mono">BootOrder: 0000,0001,0002,0003</text>
+<line x1="185" y1="96" x2="185" y2="118" class="flow" stroke-width="1.4" marker-end="url(#svg-cavos-esp-boot-arrow)"/>
+<rect x="20" y="120" width="330" height="56" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
+<text x="36" y="143" fill="#CECBF6" font-size="11.5" font-weight="600">Boot0002 — QEMU HARDDISK</text>
+<text x="36" y="162" fill="#AFA9EC" font-size="9">device path stops at the disk, no file node</text>
+<line x1="185" y1="176" x2="185" y2="198" class="flow" stroke-width="1.4" marker-end="url(#svg-cavos-esp-boot-arrow)"/>
+<rect x="20" y="200" width="330" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="36" y="223" fill="#F0DBAE" font-size="11.5" font-weight="600">Removable-media fallback path</text>
+<text x="36" y="242" fill="#D8A54A" font-size="9" class="mono">\EFI\BOOT\BOOTX64.EFI</text>
+<line x1="185" y1="256" x2="185" y2="278" class="flow" stroke-width="1.4" marker-end="url(#svg-cavos-esp-boot-arrow)"/>
+<rect x="20" y="280" width="330" height="76" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="36" y="303" fill="#B5D4F4" font-size="11.5" font-weight="600">Limine 10.8.5 (PE32+ UEFI app)</text>
+<text x="36" y="322" fill="#85B7EB" font-size="9">sectors via EFI_BLOCK_IO ReadBlocks</text>
+<text x="36" y="340" fill="#85B7EB" font-size="9">files via its own FAT32 driver</text>
+<line x1="185" y1="356" x2="185" y2="378" class="flow" stroke-width="1.4" marker-end="url(#svg-cavos-esp-boot-arrow)"/>
+<rect x="20" y="380" width="330" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="36" y="403" fill="#C6E7CC" font-size="11.5" font-weight="600">ExitBootServices, then cavOS _start</text>
+<text x="36" y="422" fill="#8FC79A" font-size="9" class="mono">entry 0xffffffff8002a548</text>
+<!-- right: disk -->
+<rect x="410" y="40" width="330" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
+<text x="426" y="57" fill="#D3D1C7" font-size="11" font-weight="600" class="mono">sectors 0..2047</text>
+<text x="426" y="72" fill="#B4B2A9" font-size="9">MBR table + limine bios-install code</text>
+<rect x="410" y="80" width="330" height="200" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="426" y="100" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">p1  2048..133120  FAT32</text>
+<text x="426" y="116" fill="#85B7EB" font-size="9">label LIMINE, MBR type 0x83, boot flag</text>
+<text x="426" y="146" fill="#85B7EB" font-size="9" class="mono">/kernel.bin</text>
+<text x="426" y="166" fill="#85B7EB" font-size="9" class="mono">/limine/limine.conf</text>
+<text x="426" y="186" fill="#85B7EB" font-size="9" class="mono">/limine/limine-bios.sys</text>
+<text x="426" y="206" fill="#85B7EB" font-size="9" class="mono">/EFI/BOOT/BOOTX64.EFI</text>
+<text x="426" y="226" fill="#85B7EB" font-size="9" class="mono">/EFI/BOOT/BOOTIA32.EFI</text>
+<text x="426" y="260" fill="#85B7EB" font-size="9">mounted at /boot of the root fs</text>
+<rect x="410" y="280" width="330" height="36" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="426" y="302" fill="#B4B2A9" font-size="9" class="mono">133121..266239  unpartitioned</text>
+<rect x="410" y="316" width="330" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="426" y="339" fill="#C6E7CC" font-size="11" font-weight="600" class="mono">p2  266240..3674111  ext2</text>
+<text x="426" y="358" fill="#8FC79A" font-size="9">label cavOS, root filesystem /</text>
+<line x1="350" y1="228" x2="408" y2="228" class="flow" stroke-width="1.4" marker-end="url(#svg-cavos-esp-boot-arrow)"/>
+</svg>
+<figcaption>Bên trái là đường đi đã chạy thật trên OVMF; bên phải là bố cục <code>disk.img</code> đọc bằng <code>fdisk</code> và <code>mdir</code>.</figcaption></figure>
+<p>Limine tìm <code>limine.conf</code> theo thứ tự trong <code>common/lib/config.c</code>; với đĩa này nó trúng <code>/limine/limine.conf</code>. Entry của kernel là
+<code>0xffffffff8002a548</code>.</p>
+<p>Kho biến NVRAM sau khi boot đĩa này trên OVMF:</p>
+<p>Đã kiểm thật: boot một bản overlay của <code>disk.img</code> trên OVMF (<code>OVMF_CODE_4M.fd</code> + bản chép của
+<code>OVMF_VARS_4M.fd</code>), rồi đọc lại kho biến NVRAM bằng một script Python nhỏ:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>BdsDxe: loading Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
+BdsDxe: starting Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
+[serial] Installing serial...
+
+Boot0000   attr=0x109 "BootManagerMenuApp"            devpath[04/07 04/06]
+Boot0001   attr=0x101 "EFI Firmware Setup"            devpath[04/07 04/06]
+Boot0002   attr=0x1   "UEFI QEMU HARDDISK QM00013 "   devpath[02/01 01/01 03/12]
+Boot0003   attr=0x101 "EFI Internal Shell"            devpath[04/07 04/06]
+BootOrder  -&gt; Boot0000,Boot0001,Boot0002,Boot0003
+LimineLastBootedEntry  513ee0d0-6e43-cb05-b272-f146a2fcb88a  attr=0x07 size=8</code></pre></div>
+<ul>
+<li>OVMF tự tạo <code>Boot0002</code> cho ổ SATA. Device path của nó chỉ có ACPI (<code>02/01</code>) → PCI (<code>01/01</code>) →
+SATA (<code>03/12</code>), <strong>không có node file</strong> → boot manager dùng fallback path.</li>
+<li><code>Boot0000</code>/<code>0001</code>/<code>0003</code> có bit <code>0x100</code> (category app) nên không được boot tự động.
+<code>Boot0000</code> còn có bit <code>0x8</code> (hidden).</li>
+<li><code>LimineLastBootedEntry</code> là biến do chính Limine ghi (<code>gRT-&gt;SetVariable</code> trong <code>common/menu.c</code>).
+Xem thêm ở <a href="../khai_niem/uefi_runtime_services.html">UEFI Runtime Services và biến</a>.</li>
+</ul>
+
+
+<h3 id="secure-boot-cavos">cavOS và Secure Boot</h3>
+<p>Khái niệm chung: <a href="../khai_niem/secure_boot.html">Secure Boot</a>. <code>BOOTX64.EFI</code> của Limine trên đĩa cavOS không có chữ ký nào, nên cavOS chỉ boot UEFI được khi
+Secure Boot tắt.</p>
+<p>Kiểm chữ ký: <code>sbverify</code> không có trong WSL, nên đọc thẳng Data Directory của file PE bằng Python
+(file chép ra từ phân vùng FAT bằng <code>mcopy</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>BOOTX64.EFI 307200 bytes
+MZ magic: b'MZ'  e_lfanew=0x80
+PE sig: b'PE\x00\x00'
+OptionalHeader.Magic=0x20b
+Subsystem=10 DllCharacteristics=0x0000
+  DataDirectory[4] Security(Certificate)  VA/off=0x0 Size=0
+  DataDirectory[5] BaseReloc              VA/off=0x34000 Size=12</code></pre></div>
+<p>Certificate Table bằng 0 nghĩa là không có chữ ký nào. Thử boot bản overlay của <code>disk.img</code> (đĩa gốc không bị ghi) với
+<code>OVMF_CODE_4M.secboot.fd</code>, bản chép của <code>OVMF_VARS_4M.ms.fd</code>, <code>-machine q35,smm=on</code> và
+<code>-global driver=cfi.pflash01,property=secure,value=on</code>. Serial ghi:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>BdsDxe: loading Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
+BdsDxe: failed to load Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0): Access Denied -- rejected probably by Secure Boot
+BdsDxe: No bootable option or device was found.
+BdsDxe: Press any key to enter the Boot Manager Menu.</code></pre></div>
+<p>Cùng ảnh đó với <code>OVMF_CODE_4M.fd</code> (không Secure Boot) boot tới <code>====== REACHED SYSTEM ======</code>.</p>
+
 
 <h3 id="ld-tu-suy">Không ghi <code>FLAGS</code> thì ld tự suy quyền</h3>
 <p>Nhiều kernel hobby (và <code>linker.ld</code> của lab) bỏ <code>FLAGS(...)</code>. Khi đó <code>ld</code> lấy quyền segment bằng phép OR flag của các section bên trong.
@@ -306,18 +449,180 @@ Flag của section lại do tên section chuẩn quyết định khi compile:</p
 Ghi tường minh như cavOS (<code>FLAGS(5)</code>, <code>FLAGS(4)</code>, <code>FLAGS(6)</code>) thì <code>ld</code> dùng đúng số bạn ghi, không suy nữa.
 Xem flag section của một file <code>.o</code>: <code>readelf -S kernel.o</code>.</p>
 
-<h3 id="pie-kaslr">PIE, relocation và KASLR</h3>
+<h3 id="trang-thai-luc-vao">Trạng thái máy lúc vào <code>_start</code></h3>
+<p>Khái niệm chung: <a href="../khai_niem/long_mode.html">Long Mode</a>. Binary Limine mà cavOS thật sự boot là <strong>Limine 10.8.5</strong> (<code>src/bootloader/limine/BOOTX64.EFI</code>
+tự báo như vậy; <code>assert.sh</code> ghim "10.1.1" nhưng clone đầu nhánh <code>v10.x-binary</code>). Từ Limine 9, spec của protocol nằm ở repo riêng <code>limine-protocol</code>; Limine 10.8.5 ghim
+<a href="https://codeberg.org/Limine/limine-protocol/src/commit/e42d010a761e4e9ac6bad1b578110ba72c61e1d9/PROTOCOL.md">commit <code>e42d010</code> của <code>PROTOCOL.md</code></a>. Mục
+"Machine State at Entry → x86-64" viết:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>PE is enabled (cr0), ET is enabled (cr0), WP is enabled (cr0), PG is enabled (cr0),
+PAE is enabled (cr4), LME and LMA are enabled (EFER). NX is enabled (EFER)
+(if it is available).</code></pre></div>
 <ul>
-<li>cavOS compile với <code>-fPIE</code> và link với <code>-pie</code> (<code>src/kernel/Makefile</code>). <strong>PIE</strong> (Position-Independent Executable) là code chạy được ở địa chỉ nạp bất kỳ;
-những chỗ vẫn cần địa chỉ tuyệt đối được liệt kê trong bảng relocation (<code>.rela.dyn</code>, nằm trong segment <code>R</code> ở bảng readelf trên),
-và <code>PT_DYNAMIC</code> chỉ cho loader biết bảng đó ở đâu. Lab thì ngược lại: <code>-no-pie -mcmodel=kernel</code>.</li>
-<li><code>target/boot/limine/limine.conf</code> của cavOS có dòng <code>kaslr: yes</code> (comment phía trên ghi "Disable KASLR", nhưng giá trị là <code>yes</code>).
-<strong>KASLR</strong> = nạp kernel ở địa chỉ ảo ngẫu nhiên mỗi lần boot để khó khai thác lỗi.</li>
-<li><code>readelf -h</code> trên <code>kernel.bin</code> hiện tại báo <code>Type: EXEC</code>. Trang này chưa kiểm chứng Limine có thật sự dời kernel cavOS khỏi
-<code>0xffffffff80000000</code> hay không; cách kiểm: in <code>bootloader.kernelVirtBase</code> ra serial sau <a href="bai_03_bootloader_parser.html">Bài 3</a>.
-Dù có dời hay không, kernel luôn đọc địa chỉ thật qua request <code>kernel_address</code> chứ không đoán.
-Khái niệm đầy đủ: <a href="../khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</li>
+<li>Mọi segment register đã nạp segment 64-bit; GDTR trỏ tới một GDT của Limine (null, code/data 16-bit, 32-bit, 64-bit).</li>
+<li>IDT ở trạng thái không xác định: kernel phải tự nạp IDT của mình.</li>
+<li>Cờ IF, VM, DF bị xoá. A20 đã mở. PIC cũ bị mask hết; ở IO APIC, các entry delivery mode Fixed hoặc Lowest Priority bị mask.</li>
+<li><code>rsp</code> trỏ tới đỉnh một stack ít nhất 64 KiB; các thanh ghi đa dụng khác bằng 0.</li>
+<li>Base revision 5 hứa thêm (IDTR, LDTR, TR rỗng; mọi bit khác của CR0/CR4/EFER bằng 0; Local APIC ở trạng thái xác định; IOMMU tắt). cavOS xin base revision 2 nên không được
+hứa những điều đó.</li>
 </ul>
+<p>Vì vậy <code>_start</code> là một hàm C bình thường: không <code>mov cr0</code>, không <code>wrmsr EFER</code>, không far jump. Về sau cavOS chỉ <em>thêm</em> bit, không đổi chế độ:
+<code>EFER.SCE</code> cho syscall (<code>cpu/fastSyscall.c</code>), mấy bit CR0/CR4 cho FPU/SSE (<code>cpu/system.c</code>, <code>cpu/sse.asm</code>). Thanh ghi CPU 0 khi cavOS đã boot xong
+(QEMU monitor <code>info registers</code>, máy 2, KVM, <code>-smp 2</code>):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>RIP=ffffffff8008e368 RFL=00000046 [---Z-P-] CPL=0 II=0 A20=1 SMM=0 HLT=0
+CS =0028 0000000000000000 00000000 00209b00 DPL=0 CS64 [-RA]
+CR0=80010033 CR2=00005ffffffff000 CR3=000000000212b000 CR4=00000620
+EFER=0000000000000d01</code></pre></div>
+<ul>
+<li><code>EFER=0xd01</code> = SCE (bit 0) + LME (bit 8) + LMA (bit 10) + NXE (bit 11).</li>
+<li><code>CR0=0x80010033</code> = PG + WP + PE, cộng MP/ET/NE cho FPU.</li>
+<li><code>CR4=0x620</code> = PAE (bit 5) + OSFXSR/OSXMMEXCPT (bit 9, 10) cho SSE. LA57 = 0: paging 4 cấp.</li>
+<li>Thuộc tính CS <code>00209b00</code> có bit 21 của dword cao (= bit 53 của descriptor) bằng 1: L = 1. QEMU ghi luôn là <code>CS64</code>.</li>
+</ul>
+
+<h3 id="pie-kaslr">PIE, relocation và KASLR trong cavOS</h3>
+<p>Khái niệm chung: <a href="../khai_niem/kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>. Lab thì ngược lại cavOS: <code>-no-pie -mcmodel=kernel</code>.</p>
+<p><strong>Cờ build.</strong> <code>src/kernel/Makefile</code> compile với <code>-fPIE</code> và link với:</p>
+<div class="code"><div class="code-bar">make</div><pre><code>LDFLAGS = -m elf_x86_64 \
+		-nostdlib \
+    -static \
+    -pie \
+    --no-dynamic-linker \
+    -z text \
+    -z max-page-size=0x1000 -T link.ld</code></pre></div>
+<p><code>link.ld</code> có thêm segment <code>dynamic</code> (<code>PHDRS { ... dynamic PT_DYNAMIC FLAGS(...); }</code>, <code>.dynamic : { *(.dynamic) } :data :dynamic</code>) để loader tìm
+bảng relocation. Kết quả trên <code>kernel.bin</code> (bản build <code>2ba0edb</code>), <code>readelf -dW</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code> 0x0000000000000007 (RELA)               0xffffffff800a05a8
+ 0x0000000000000008 (RELASZ)             46416 (bytes)
+ 0x0000000000000009 (RELAENT)            24 (bytes)
+ 0x000000006ffffffb (FLAGS_1)            Flags: PIE
+ 0x000000006ffffff9 (RELACOUNT)          1934</code></pre></div>
+<div class="code"><div class="code-bar">text</div><pre><code>Relocation section '.rela.dyn' at offset 0xa05a8 contains 1934 entries:
+   1934 R_X86_64_RELATIVE</code></pre></div>
+<p>1934 mục × 24 byte = 46416 byte, khớp <code>RELASZ</code>. Tất cả đều là <code>RELATIVE</code>. Mục đầu tiên: offset <code>ffffffff800acb50</code> (trong <code>.data</code>), addend
+<code>-7fffe8ef</code> = <code>0xffffffff80001711</code>, một địa chỉ trong <code>.text</code>. Limine (<code>common/lib/elf.c</code>, <code>elf64_apply_relocations</code>) ghi
+<code>*ptr = slide + r_addend</code>; slide = 0 thì giá trị giữ nguyên.</p>
+<p>CFLAGS của kernel (<code>src/kernel/Makefile</code>): <code>-fPIE</code>, không FPU/SIMD, không red zone (lý do:
+<a href="../khai_niem/pe_elf_va_abi.html#vì-sao-kernel-build-với-mno-red-zone">PE, ELF và ABI</a>):</p>
+<div class="code"><div class="code-bar">make</div><pre><code>CFLAGS = -m64 -g -c -ffreestanding -Wall -Werror -fcommon -Iinclude/ -Inetworking/lwip/include/ -fPIE -mno-80387 \
+    -mno-mmx \
+    -mno-sse \
+		-nostartfiles \
+		-nostdlib \
+    -mno-sse2 \
+    -mno-red-zone -fno-stack-protector \
+    -fno-stack-check \
+    -fno-lto</code></pre></div>
+<p><strong>Địa chỉ thật do Limine báo.</strong> <code>initialiseBootloaderParser()</code> đọc <code>bootloader.kernelVirtBase</code> / <code>kernelPhysBase</code> từ request
+<code>limine_kernel_address_request</code> (<a href="bai_03_bootloader_parser.html">Bài 3</a>). Trong <code>PROTOCOL.md</code> hiện hành tính năng này tên "Executable Address Feature",
+nhưng ID request giữ nguyên (<code>0x71ba76863cc55f63, 0xb2644a48c516a487</code>).</p>
+<p><strong>KASLR có chạy không? Không.</strong> <code>target/boot/limine/limine.conf</code> ghi (comment chép từ mẫu cũ của Limine 8.x; với Limine 10.8.5 chính dòng <code>yes</code> mới bật KASLR):</p>
+<div class="code"><div class="code-bar">text</div><pre><code>    # Disable KASLR (it is enabled by default for relocatable kernels)
+    kaslr: yes</code></pre></div>
+<p>Nhưng Limine chỉ ngẫu nhiên hoá kernel relocatable: <code>elf64_is_relocatable</code> trả <code>false</code> ngay nếu kiểu ELF không phải <code>ET_DYN</code>, và
+<code>protos/limine.c</code> làm <code>kaslr = kaslr &amp;&amp; is_reloc;</code>, nên HHDM cũng không bị ngẫu nhiên. Kernel cavOS lại là <code>EXEC</code>:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>$ readelf -h ~/cavOS/target/boot/kernel.bin
+  Type:                              EXEC (Executable file)
+  Entry point address:               0xffffffff8002a548</code></pre></div>
+<p>Link lại cùng các file <code>.o</code>, cùng cờ, chỉ đổi <code>. = 0xffffffff80000000;</code> thành <code>. = 0;</code> trong một bản sao <code>link.ld</code> thì ra <code>DYN (Position-Independent
+Executable file)</code>, entry <code>0x2a548</code>. GNU ld 2.38 của cavOS (và ld 2.46 của Ubuntu) ghi PIE thành <code>EXEC</code> khi link ở base khác 0. <code>PROTOCOL.md</code> có tính đến cách
+link ở 0 ("a minimum slide of <code>0xffffffff80000000</code> is applied"); bản link ở 0 này chưa được boot thử. Hai lần boot thật (QEMU, KVM, <code>-snapshot</code>, monitor
+<code>info mem</code> và <code>gva2gpa 0xffffffff80000000</code>) cho cùng kết quả:</p>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>Lần 1</th><th>Lần 2</th></tr></thead>
+<tbody>
+<tr><td>Base ảo kernel</td><td><code>ffffffff80000000</code></td><td><code>ffffffff80000000</code></td></tr>
+<tr><td>Base vật lý kernel</td><td><code>0xbfbbf000</code></td><td><code>0xbfbbf000</code></td></tr>
+<tr><td>HHDM</td><td><code>ffff800000000000</code></td><td><code>ffff800000000000</code></td></tr>
+</tbody>
+</table></div>
+<p>Thêm nữa, cavOS in nhiều địa chỉ kernel ra serial và màn hình (vd <code>fb{ffff8000fd000000}</code> lộ base HHDM), nên kể cả khi KASLR chạy, một dòng log là đủ biết slide.</p>
+<p><strong>Limine 10.8.5 ngẫu nhiên hoá gì</strong> (đọc trong source) khi KASLR bật: base ảo của kernel (<code>elf.c</code>: <code>slide = rand32() &amp; ~(max_align - 1)</code>, thử lại tới khi
+kernel còn nằm gọn trên <code>0xffffffff80000000</code>; bước 4 KiB trong 2 GiB, tối đa khoảng 2<sup>19</sup> vị trí) và base HHDM (<code>set_paging_mode()</code>: bước 1 GiB trong một phần tư
+nửa cao, khoảng 2<sup>15</sup> vị trí với 4 cấp; theo <code>CONFIG.md</code>, <code>randomise_hhdm_base</code> mặc định bật khi KASLR bật). Địa chỉ vật lý thì không ngẫu nhiên. Từ
+Limine 10.0.0 KASLR mặc định tắt (Limine 8.x ngược lại).</p>
+
+<h3 id="ban-do-dia-chi">Bản đồ địa chỉ của cavOS khi chạy</h3>
+<p>Số thật đo từ file kernel và từ QEMU khi cavOS đang chạy (khái niệm chung: <a href="../khai_niem/higher_half_kernel.html">Higher-Half Kernel</a>).</p>
+<figure class="diagram">
+<svg id="svg-cavos-va-layout" role="img" aria-label="cavOS virtual address space: user half, hole, HHDM of 5 GiB at 0xffff800000000000, and the kernel image at 0xffffffff80000000 split into text, rodata and data segments" style="max-width:1083px" width="100%" viewBox="0 0 720 470" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<defs>
+  <style>#svg-cavos-va-layout .lbl{fill:#c2c0b6;} #svg-cavos-va-layout .mono{font-family:'SF Mono',Consolas,monospace;}</style>
+</defs>
+<text x="380" y="22" text-anchor="middle" class="lbl" font-size="10">cavOS virtual address space (4-level paging, QEMU -m 4g)</text>
+<text x="190" y="50" text-anchor="end" class="lbl mono" font-size="9">0x0000000000000000</text>
+<text x="190" y="118" text-anchor="end" class="lbl mono" font-size="9">0x00007fffffffffff</text>
+<text x="190" y="184" text-anchor="end" class="lbl mono" font-size="9">0xffff800000000000</text>
+<text x="190" y="252" text-anchor="end" class="lbl mono" font-size="9">0xffff800140000000</text>
+<text x="190" y="314" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80000000</text>
+<text x="190" y="344" text-anchor="end" class="lbl mono" font-size="9">0xffffffff8008f4c0</text>
+<text x="190" y="374" text-anchor="end" class="lbl mono" font-size="9">0xffffffff800acb00</text>
+<text x="190" y="412" text-anchor="end" class="lbl mono" font-size="9">0xffffffff80101378</text>
+<text x="190" y="446" text-anchor="end" class="lbl mono" font-size="9">0xffffffffffffffff</text>
+<rect x="200" y="40" width="420" height="82" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
+<text x="216" y="64" fill="#B5D4F4" font-size="11.5" font-weight="600">Lower half: user space (128 TiB)</text>
+<text x="216" y="84" fill="#85B7EB" font-size="9">bit 47 = 0; each process has its own mapping</text>
+<text x="216" y="102" fill="#85B7EB" font-size="9">PML4 entries 0-255</text>
+<rect x="200" y="128" width="420" height="44" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
+<text x="216" y="148" fill="#D3D1C7" font-size="11" font-weight="600">non-canonical hole</text>
+<text x="216" y="164" fill="#B4B2A9" font-size="9">any access here is #GP</text>
+<rect x="200" y="178" width="420" height="78" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
+<text x="216" y="200" fill="#C6E7CC" font-size="11.5" font-weight="600">HHDM: all RAM, VA = PA + hhdmOffset</text>
+<text x="216" y="218" fill="#8FC79A" font-size="9" class="mono">hhdmOffset = 0xffff800000000000, 5 GiB mapped (rw)</text>
+<text x="216" y="234" fill="#8FC79A" font-size="9" class="mono">framebuffer at 0xffff8000fd000000</text>
+<text x="216" y="249" fill="#8FC79A" font-size="9" class="mono">kernel frames again at 0xffff8000bfbbf000</text>
+<text x="410" y="284" text-anchor="middle" class="lbl" font-size="9">... unused by Limine (cavOS maps heap, MMIO, tasks in the high half later) ...</text>
+<rect x="200" y="304" width="420" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="216" y="323" fill="#F0DBAE" font-size="10.5" font-weight="600">.text: R X (0x8e4a4 bytes), _start = 0xffffffff8002a548</text>
+<rect x="200" y="334" width="420" height="30" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="216" y="353" fill="#F0DBAE" font-size="10.5" font-weight="600">.rodata + .rela.dyn: R</text>
+<rect x="200" y="364" width="420" height="52" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
+<text x="216" y="384" fill="#F0DBAE" font-size="10.5" font-weight="600">.data + .dynamic + .bss: RW</text>
+<text x="216" y="402" fill="#D8A54A" font-size="9">ends at kernel_end; physical base 0xbfbbf000</text>
+<text x="410" y="440" text-anchor="middle" class="lbl" font-size="9">top 2 GiB: kernel image only (about 1 MiB of it used)</text>
+</svg>
+</figure>
+<ul>
+<li><strong>Khi build</strong>: <code>readelf -lW ~/cavOS/target/boot/kernel.bin</code> (bản build <code>2ba0edb</code>) cho 3 segment <code>PT_LOAD</code> và 1 <code>PT_DYNAMIC</code>:</li>
+</ul>
+<div class="code"><div class="code-bar">text</div><pre><code>  Type           Offset   VirtAddr           PhysAddr           FileSiz  MemSiz   Flg Align
+  LOAD           0x001000 0xffffffff80000000 0xffffffff80000000 0x08e4a4 0x08e4a4 R E 0x1000
+  LOAD           0x08f4c0 0xffffffff8008f4c0 0xffffffff8008f4c0 0x01c638 0x01c638 R   0x1000
+  LOAD           0x0abb00 0xffffffff800acb00 0xffffffff800acb00 0x00deb8 0x054878 RW  0x1000
+  DYNAMIC        0x0b98b8 0xffffffff800ba8b8 0xffffffff800ba8b8 0x000100 0x000100 RW  0x8</code></pre></div>
+<p>Section nào vào segment nào (<code>readelf -l</code>), và <code>file</code> nói gì:</p>
+<div class="code"><div class="code-bar">text</div><pre><code> Section to Segment mapping:
+  Segment Sections...
+   00     .text
+   01     .rodata .dynsym .dynstr .hash .rela.dyn
+   02     .data .dynamic .bss
+   03     .dynamic
+
+$ file kernel.bin
+kernel.bin:  ELF 64-bit LSB executable, x86-64, version 1 (SYSV), static-pie linked, with debug_info, not stripped</code></pre></div>
+<ul>
+<li><strong>Lúc chạy</strong>: QEMU monitor <code>info mem</code> khi cavOS đã boot xong. Dòng thứ nhất là HHDM, hai dòng sau là kernel (<code>info mem</code> không in quyền X):</li>
+</ul>
+<div class="code"><div class="code-bar">text</div><pre><code>ffff800000000000-ffff800140000000 0000000140000000 -rw
+ffffffff80000000-ffffffff800ac000 00000000000ac000 -r-
+ffffffff800ac000-ffffffff80102000 0000000000056000 -rw</code></pre></div>
+<ul>
+<li>Địa chỉ framebuffer <code>fb{ffff8000fd000000}</code> có trong serial log (<code>[graphics] Resolution fixed: …</code>). Địa chỉ vật lý của kernel lấy bằng monitor
+<code>gva2gpa 0xffffffff80000000</code> → <code>gpa: 0xbfbbf000</code>. <code>nm</code> trên bản build: <code>kernel_start = ffffffff80000000</code>, <code>_start = ffffffff8002a548</code>,
+<code>kernel_end = ffffffff80101378</code>.</li>
+<li>HHDM rộng 5 GiB dù máy ảo chỉ có 4 GiB RAM: với base revision 2 (cavOS dùng <code>LIMINE_BASE_REVISION(2)</code>), Limine luôn map 4 GiB vật lý đầu tiên vào HHDM,
+cộng thêm các vùng RAM nằm trên 4 GiB. QEMU đặt phần RAM vượt quá 3 GiB lên trên mốc 4 GiB, nên cửa sổ dài tới 5 GiB.</li>
+</ul>
+
+<h3 id="tru-2gib-cavos">Vì sao cavOS ở −2 GiB dù build PIE</h3>
+<p><code>-mcmodel=kernel</code> là lý do thường gặp để đặt kernel ở <code>0xffffffff80000000</code>
+(<a href="../khai_niem/higher_half_kernel.html#tru-2gib">Higher-Half Kernel</a>). cavOS không dùng nó: <code>src/kernel/Makefile</code> build với <code>-fPIE</code>, link với <code>-pie</code>,
+và cross compiler của cavOS từ chối ghép hai cờ:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>$ x86_64-cavos-gcc -ffreestanding -c -O2 -fPIE -mcmodel=kernel t.c
+cc1: error: code model kernel does not support PIC mode</code></pre></div>
+<p>Đếm relocation trong phần <code>.text</code> của <code>entry/kernel.o</code> chỉ thấy loại tương đối: <code>R_X86_64_PC32</code> (14), <code>R_X86_64_PLT32</code> (38),
+<code>R_X86_64_REX_GOTPCRELX</code> (4). Kernel cavOS chỉ khoảng 1 MiB, nên điều kiện "code và dữ liệu cách nhau ≤ 2 GiB" luôn thoả, đặt ở đâu cũng được. Vậy địa chỉ
+−2 GiB không do compiler đòi, mà do Limine đòi: mục "Memory Layout at Entry" của <code>PROTOCOL.md</code> (bản Limine 10.8.5 mà binary cavOS boot) viết kernel phải nạp ở
+hoặc trên <code>0xffffffff80000000</code> và "Lower half executables are <em>not supported</em>". <code>link.ld</code> chép theo mẫu của Limine.</p>
 
 <h3 id="anh-xa-spec">Ánh xạ spec</h3>
 <ul>

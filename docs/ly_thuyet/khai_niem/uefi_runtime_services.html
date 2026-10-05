@@ -20,8 +20,7 @@
 <div class="callout quote">
 <p>UEFI cho chương trình hai bộ hàm: <strong>Boot Services</strong> chỉ sống tới lúc gọi <code>ExitBootServices</code>,
 <strong>Runtime Services</strong> sống tiếp cả khi OS đã chạy. Limine dùng Boot Services rồi gọi <code>ExitBootServices</code>
-trước khi vào kernel. Kernel cavOS <strong>không gọi hàm firmware nào</strong>: không khai báo request EFI nào của Limine, tắt máy và
-khởi động lại qua ACPI.</p>
+trước khi vào kernel; kernel chỉ còn Runtime Services, kho biến NVRAM và các bảng mô tả phần cứng.</p>
 </div>
 
 <h2 id="boot-services-và-runtime-services">Boot Services và Runtime Services</h2>
@@ -41,7 +40,7 @@ khởi động lại qua ACPI.</p>
 <h2 id="exitbootservices">ExitBootServices</h2>
 <p class="lede"><em>Đây là lúc firmware "giao nhà": từ đây phần cứng thuộc về OS.</em></p>
 <p>Gọi <code>ExitBootServices(ImageHandle, MapKey)</code> với <code>MapKey</code> lấy từ lần <code>GetMemoryMap</code> mới nhất. Nếu memory
-map đổi sau lần đó (kể cả do chính việc cấp phát), firmware trả lỗi và phải lấy map rồi gọi lại. Limine 10.8.5 (bản cavOS thật sự boot) làm
+map đổi sau lần đó (kể cả do chính việc cấp phát), firmware trả lỗi và phải lấy map rồi gọi lại. Limine 10.8.5 làm
 đúng như vậy, trong <code>efi_exit_boot_services()</code> (<code>common/lib/misc.c</code>):</p>
 <div class="code"><div class="code-bar">c</div><pre><code>retry:
     status = gBS-&gt;GetMemoryMap(&amp;efi_mmap_size, efi_mmap, &amp;efi_mmap_key, &amp;efi_desc_size, &amp;efi_desc_ver);
@@ -58,13 +57,13 @@ map đổi sau lần đó (kể cả do chính việc cấp phát), firmware tr�
 
 #if defined(__x86_64__) || defined(__i386__)
     asm volatile ("cli" ::: "memory");</code></pre></div>
-<p>Hàm này được gọi ở <code>common/protos/limine.c:1466</code>, trước khi nhảy vào <code>_start</code> của kernel. Vì vậy kernel cavOS
-không bao giờ thấy Boot Services.</p>
+<p>Hàm này được gọi ở <code>common/protos/limine.c:1466</code>, trước khi nhảy vào kernel. Vì vậy kernel boot qua Limine không bao giờ thấy Boot Services.
+Loader tự viết thì phải tự viết vòng thử lại này, và không được gọi bất kỳ hàm cấp phát nào (kể cả in ra màn hình) giữa <code>GetMemoryMap</code> và <code>ExitBootServices</code>.</p>
 
 <h2 id="cái-gì-còn-lại-sau-exitbootservices">Cái gì còn lại sau ExitBootServices</h2>
 <p class="lede"><em>Firmware đi rồi nhưng để lại ba thứ: vài hàm runtime, kho biến NVRAM, và các bảng mô tả phần cứng.</em></p>
 <figure class="diagram">
-<svg id="svg-uefi-services" role="img" aria-label="what survives ExitBootServices" style="max-width:1083px" width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg id="svg-uefi-services" role="img" aria-label="What survives ExitBootServices: Boot Services and protocols are gone, Runtime Services, the variable store and the configuration tables remain" style="max-width:1083px" width="100%" viewBox="0 0 760 330" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
   <marker id="svg-uefi-services-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
     <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -97,10 +96,10 @@ không bao giờ thấy Boot Services.</p>
 <text x="36" y="290" fill="#CECBF6" font-size="11" font-weight="600">Limine 10.8.5</text>
 <text x="36" y="308" fill="#AFA9EC" font-size="9">ReadBlocks, GetMemoryMap, SetVariable</text>
 <rect x="400" y="268" width="340" height="52" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
-<text x="416" y="290" fill="#CECBF6" font-size="11" font-weight="600">cavOS kernel</text>
-<text x="416" y="308" fill="#AFA9EC" font-size="9">no EFI request, no runtime call; ACPI only</text>
+<text x="416" y="290" fill="#CECBF6" font-size="11" font-weight="600">OS kernel</text>
+<text x="416" y="308" fill="#AFA9EC" font-size="9">runtime calls optional; ACPI tables always</text>
 </svg>
-<figcaption>Hàng xanh lá và vàng kéo dài qua cả hai cột: đó là phần sống sót. Hàng cuối là ai thực sự dùng chúng trong cavOS.</figcaption></figure>
+<figcaption>Hàng xanh lá và vàng kéo dài qua cả hai cột: đó là phần sống sót. Hàng cuối: bootloader dùng gì trước, kernel dùng gì sau.</figcaption></figure>
 <ul>
 <li><strong>Runtime Services</strong>: code và data của chúng nằm trong vùng <code>EfiRuntimeServicesCode/Data</code>.</li>
 <li><strong>Kho biến</strong>: firmware giữ trong flash, đọc ghi qua <code>GetVariable</code>/<code>SetVariable</code>.</li>
@@ -119,8 +118,8 @@ entry point SMBIOS. Bảng ACPI nằm trong vùng <code>EfiACPIReclaimMemory</co
 <tr><td><code>EfiRuntimeServicesCode/Data</code>, <code>EfiReservedMemoryType</code>, <code>EfiMemoryMappedIO</code>, <code>EfiUnusableMemory</code>…</td><td><code>MEMMAP_RESERVED</code></td></tr>
 </tbody>
 </table></div>
-<p>Vùng runtime thành <code>RESERVED</code> (với base revision 2 của cavOS; từ base revision 5, protocol báo nó là <code>RESERVED_MAPPED</code>), nên PMM của cavOS (<a href="../bai/bai_05_physical_memory_manager.html">Bài 5</a>) không bao giờ
-cấp nó cho ai. Muốn xem nguyên bản map của UEFI thì phải khai báo <code>LIMINE_EFI_MEMMAP_REQUEST</code>.</p>
+<p>Vùng runtime thành <code>RESERVED</code> (base revision dưới 5; từ base revision 5 protocol báo nó là <code>RESERVED_MAPPED</code>), nên một PMM chỉ cấp vùng USABLE sẽ
+không bao giờ đụng nó. Muốn xem nguyên bản map của UEFI thì phải khai báo <code>LIMINE_EFI_MEMMAP_REQUEST</code>.</p>
 
 <h2 id="biến-uefi">Biến UEFI</h2>
 <p class="lede"><em>Biến UEFI là một cặp tên-giá trị firmware cất hộ, có thể giữ qua lần tắt máy.</em></p>
@@ -143,7 +142,7 @@ db         d719b2cb-3d3a-4596-a3bc-dad00e67656f   attr=0x27 size=7636
 Boot0002   EFI_GLOBAL_VARIABLE                    attr=0x07 size=110
 BootOrder  EFI_GLOBAL_VARIABLE                    attr=0x07 size=6</code></pre></div>
 <ul>
-<li><code>BootOrder</code>, <code>Boot####</code>: <code>0x07</code> = NV + BS + RT. Cách firmware dùng chúng: <a href="esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a>.</li>
+<li><code>BootOrder</code>, <code>Boot####</code>: <code>0x07</code> = NV + BS + RT. Cách firmware dùng chúng: <a href="esp_va_uefi_boot.html">ESP và UEFI boot</a>.</li>
 <li><code>PK</code>, <code>KEK</code>, <code>db</code>, <code>dbx</code>: <code>0x27</code> = thêm bit authenticated, chỉ ghi được bằng chữ ký. Xem <a href="secure_boot.html">Secure Boot</a>.</li>
 <li><code>SecureBoot</code> (1 byte, 1 = đang bật) là biến <em>volatile</em> firmware tạo lúc boot, nên không có trong file kho biến.</li>
 </ul>
@@ -155,53 +154,32 @@ BootOrder  EFI_GLOBAL_VARIABLE                    attr=0x07 size=6</code></pre><
 ở địa chỉ firmware mong đợi mỗi lần gọi. Trong Limine 10.8.5, <code>SetVirtualAddressMap</code> chỉ xuất hiện ở
 <code>common/protos/linux_risc.c</code> (boot Linux trên RISC-V/ARM); với Limine protocol nó không gọi, để kernel tự quyết.</p>
 
-<h2 id="cavos-có-dùng-không">cavOS có dùng không</h2>
-<p class="lede"><em>Không. cavOS coi như máy không có UEFI sau khi Limine đi.</em></p>
-<div class="code"><div class="code-bar">bash</div><pre><code>$ grep -rn 'LIMINE_EFI\|limine_efi\|EFI_SYSTEM_TABLE\|efi_memmap' src/kernel
-src/kernel/include/limine.h:498:#define LIMINE_EFI_SYSTEM_TABLE_REQUEST { LIMINE_COMMON_MAGIC, 0x5ceba5163eaaf6d6, 0x0a6981610cf65fcc }
-src/kernel/include/limine.h:500:struct limine_efi_system_table_response {
-src/kernel/include/limine.h:505:struct limine_efi_system_table_request {
-src/kernel/include/limine.h:508:    LIMINE_PTR(struct limine_efi_system_table_response *) response;
-src/kernel/include/limine.h:513:#define LIMINE_EFI_MEMMAP_REQUEST { LIMINE_COMMON_MAGIC, 0x7df62a431d6872d5, 0xa4fcdfb3e57306c8 }
-src/kernel/include/limine.h:515:struct limine_efi_memmap_response {
-src/kernel/include/limine.h:523:struct limine_efi_memmap_request {
-src/kernel/include/limine.h:526:    LIMINE_PTR(struct limine_efi_memmap_response *) response;
-
-$ cd src/kernel &amp;&amp; grep -rn 'limine_.*_request\b' --include=*.c . | grep -v lwip
-./entry/bootloader.c:8:static volatile struct limine_paging_mode_request liminePagingreq = {
-./entry/bootloader.c:13:static volatile struct limine_kernel_address_request limineKrnreq = {
-./entry/bootloader.c:16:static volatile struct limine_hhdm_request limineHHDMreq = {
-./entry/bootloader.c:19:static volatile struct limine_memmap_request limineMMreq = {
-./entry/bootloader.c:22:static volatile struct limine_smp_request limineSmpReq = {
-./entry/bootloader.c:25:static volatile struct limine_rsdp_request limineRsdpReq = {
-./drivers/vga.c:11:static volatile struct limine_framebuffer_request limineFBreq = {</code></pre></div>
-<p>Các request EFI chỉ có định nghĩa trong <code>limine.h</code>; không file <code>.c</code> nào khai báo chúng.</p>
-<p>Tắt máy và khởi động lại (syscall <code>reboot</code>, <code>syscalls/linux/syscalls_proc.c</code>) đi qua ACPI bằng uACPI, không qua
-<code>ResetSystem</code>:</p>
-<div class="code"><div class="code-bar">c</div><pre><code>// acpi/acpi.c
-size_t acpiPoweroff() {
-  uacpi_status ret = uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
-  ...
-  uacpi_status retPoweroff = uacpi_enter_sleep_state(UACPI_SLEEP_STATE_S5);
-  ...
-}
-size_t acpiReboot() {
-  uacpi_prepare_for_sleep_state(UACPI_SLEEP_STATE_S5);
-  uacpi_status ret = uacpi_reboot();
-  ...
-}</code></pre></div>
-<p>Muốn cavOS gọi được Runtime Services (ví dụ đọc biến, hay <code>ResetSystem</code> khi ACPI hỏng) thì cần:</p>
+<h2 id="kernel-co-can">Kernel có cần Runtime Services không</h2>
+<p class="lede"><em>Thường là không: nhiều kernel coi như máy không có UEFI sau khi bootloader đi.</em></p>
+<p>Những gì Runtime Services làm được thì phần lớn có đường khác: tắt máy và khởi động lại qua ACPI (S5, reset register), đồng hồ qua RTC/HPET. Kernel nhỏ thường bỏ hẳn
+UEFI sau khi boot. Kernel lớn vẫn dùng vài thứ: Linux đọc ghi biến UEFI (<code>efivarfs</code>, để sửa <code>BootOrder</code>), gửi capsule cập nhật firmware, và dùng
+<code>ResetSystem</code> khi cách khác hỏng.</p>
+<p>Muốn gọi được Runtime Services từ kernel thì cần:</p>
 <ol>
-<li>Khai báo <code>limine_efi_system_table_request</code>. cavOS dùng base revision 2 (<code>entry/kernel.c:40</code>), nên Limine trả địa chỉ
-system table đã cộng offset HHDM (<code>reported_addr(gST)</code>).</li>
-<li>Khai báo <code>limine_efi_memmap_request</code> để biết vùng runtime nằm đâu, rồi map chúng vào page table của kernel (giữ nguyên địa chỉ
-vật lý, hoặc tự gọi <code>SetVirtualAddressMap</code> một lần).</li>
-<li>Gọi hàm theo quy ước Microsoft x64 (<code>__attribute__((ms_abi))</code>), không phải System V như phần còn lại của kernel.
-Xem <a href="pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a>.</li>
-<li>Chỉ làm được khi boot qua UEFI. Boot BIOS (mặc định của <code>make qemu</code>) thì Limine không trả response này.</li>
+<li>Có địa chỉ <code>EFI_SYSTEM_TABLE</code>: loader tự viết thì có sẵn; với Limine thì khai <code>limine_efi_system_table_request</code> (địa chỉ trả về có thể đã cộng offset HHDM,
+tuỳ base revision).</li>
+<li>Biết vùng runtime nằm đâu (memory map gốc của UEFI; với Limine là <code>limine_efi_memmap_request</code>), rồi map chúng vào bảng trang của kernel: giữ nguyên địa chỉ vật lý,
+hoặc gọi <code>SetVirtualAddressMap</code> đúng một lần.</li>
+<li>Gọi hàm theo quy ước Microsoft x64 (<code>__attribute__((ms_abi))</code>), không phải System V như phần còn lại của kernel. Xem <a href="pe_elf_va_abi.html">PE, ELF và ABI</a>.</li>
+<li>Chỉ làm được khi máy boot qua UEFI; boot BIOS thì không có gì để gọi.</li>
 </ol>
 
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>cavOS không dùng Runtime Services; Limine dùng Boot Services rồi gỡ đi.</em></p>
+<ul>
+<li><a href="../bai/bai_08_acpi.html#khong-uefi-runtime">Bài 8 - ACPI, Đọc thêm</a>: grep cho thấy cavOS không khai request EFI nào; tắt máy và reboot đi qua uACPI.</li>
+<li><a href="../bai/bai_01_boot_limine.html#disk-img">Bài 1 - Boot &amp; Limine, Đọc thêm</a>: biến <code>LimineLastBootedEntry</code> mà Limine ghi vào NVRAM.</li>
+<li><a href="../bai/bai_05_physical_memory_manager.html">Bài 5 - Physical Memory Manager</a>: PMM của cavOS chỉ cấp vùng USABLE, nên không bao giờ đụng vùng runtime.</li>
+<li>Liên quan: <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>, <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>.</li>
+</ul>
+
 <h2 id="spec">Spec</h2>
+<p class="lede"><em>Các chương của UEFI 2.11 mà trang này dựa vào.</em></p>
 <ul>
 <li><a href="https://uefi.org/specs/UEFI/2.11/04_EFI_System_Table.html">UEFI 2.11 §4 EFI System Table</a>: system table, configuration table</li>
 <li><a href="https://uefi.org/specs/UEFI/2.11/07_Services_Boot_Services.html">UEFI 2.11 §7 Boot Services</a>: <code>GetMemoryMap</code>, <code>ExitBootServices</code>, các memory type</li>
@@ -209,7 +187,7 @@ Xem <a href="pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a>.</li>
 <li><a href="https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html">UEFI 2.11 §3 Boot Manager</a>: danh sách biến toàn cục (<code>BootOrder</code>, <code>SecureBoot</code>…)</li>
 <li><a href="https://wiki.osdev.org/UEFI">UEFI - OSDev Wiki</a></li>
 </ul>
-<p>Liên quan: <a href="limine_protocol.html">Limine Protocol</a>, <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>, <a href="../bai/bai_08_acpi.html">Bài 8 - ACPI</a>.</p>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · UEFI Runtime Services và biến</footer>
 </main>

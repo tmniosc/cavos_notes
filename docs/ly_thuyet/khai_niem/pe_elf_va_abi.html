@@ -18,10 +18,21 @@
 <aside class="side"></aside>
 <main>
 <div class="callout quote">
-<p>Firmware UEFI nói "ngôn ngữ Windows": file <code>.efi</code> là <strong>PE32+</strong> và hàm firmware dùng <strong>quy ước gọi Microsoft x64</strong>.
-Kernel cavOS nói "ngôn ngữ Unix": file <strong>ELF64</strong>, quy ước <strong>System V AMD64</strong>. Limine đứng giữa: là file PE, nhưng bên trong là code
-GCC System V, chỉ đổi quy ước ở chỗ chạm firmware. Kernel không bao giờ gọi firmware.</p>
+<p>Trên máy UEFI, từ lúc bật máy tới lúc kernel chạy có <strong>hai file</strong>, mỗi file do một người khác nạp, và mỗi file theo một "ngôn ngữ" khác:</p>
 </div>
+<div class="table-wrap"><table>
+<thead><tr><th></th><th>1. Bootloader (vd Limine)</th><th>2. Kernel</th></tr></thead>
+<tbody>
+<tr><td>Là gì</td><td>một <strong>ứng dụng UEFI</strong>: file <code>\EFI\BOOT\BOOTX64.EFI</code></td><td>file kernel, vd <code>kernel.bin</code></td></tr>
+<tr><td>Ai nạp nó</td><td>firmware UEFI</td><td>bootloader</td></tr>
+<tr><td>Định dạng file</td><td><strong>PE32+</strong> (định dạng file chạy của Windows), vì firmware chỉ nạp được PE</td><td><strong>ELF64</strong> (định dạng của Unix/Linux), vì bootloader đọc được ELF</td></tr>
+<tr><td>Quy ước gọi hàm</td><td>code bên trong là <strong>System V AMD64</strong> (GCC); riêng các lời gọi vào firmware dùng <strong>Microsoft x64</strong>, quy ước firmware UEFI đòi</td><td><strong>System V AMD64</strong> từ đầu tới cuối; không gọi firmware nên không cần Microsoft x64</td></tr>
+<tr><td>Sống tới khi nào</td><td>tới lúc gọi <code>ExitBootServices</code> rồi nhảy vào kernel</td><td>suốt thời gian máy chạy</td></tr>
+</tbody>
+</table></div>
+<p>Vì vậy chỉ có bootloader là phải biết cả hai "ngôn ngữ": nó là file PE để firmware nạp được, gọi firmware theo quy ước Microsoft, nhưng nạp kernel ELF và nhảy vào
+kernel theo quy ước System V. Kernel chỉ cần một ngôn ngữ. (Một kernel cũng có thể tự là ứng dụng UEFI, bỏ qua bootloader; khi đó chính kernel phải là file PE và gọi
+firmware theo quy ước Microsoft.)</p>
 
 <h2 id="pe32-ứng-dụng-uefi">PE32+: ứng dụng UEFI</h2>
 <p class="lede"><em>PE là định dạng file chạy của Windows; UEFI mượn lại nó, chỉ đổi một con số để nói "đây là ứng dụng firmware".</em></p>
@@ -32,7 +43,7 @@ GCC System V, chỉ đổi quy ước ở chỗ chạm firmware. Kernel không b
 <li><code>Subsystem = 10</code> là <code>EFI_APPLICATION</code> (11 là boot service driver, 12 là runtime driver).</li>
 <li>Firmware nạp file ở địa chỉ nó chọn, nên file cần <strong>relocation</strong> (<code>.reloc</code>, Data Directory số 5) để sửa các địa chỉ tuyệt đối.</li>
 </ul>
-<p>Đọc header <code>BOOTX64.EFI</code> trên phân vùng FAT của cavOS bằng một script Python:</p>
+<p>Ví dụ: header <code>BOOTX64.EFI</code> của Limine 10.8.5, đọc bằng một script Python:</p>
 <div class="code"><div class="code-bar">text</div><pre><code>BOOTX64.EFI 307200 bytes
 MZ magic: b'MZ'  e_lfanew=0x80
 PE sig: b'PE\x00\x00'
@@ -58,55 +69,24 @@ File đó ghi rõ <code>.reloc</code> là bản giả ("dummy"), chỉ để fir
 <li>Certificate Table = 0: không có chữ ký, xem <a href="secure_boot.html">Secure Boot</a>.</li>
 </ul>
 
-<h2 id="elf64-kernel-cavos">ELF64: kernel cavOS</h2>
-<p class="lede"><em>Kernel là file ELF bình thường; người đọc nó là Limine chứ không phải firmware.</em></p>
-<p>File: <code>target/boot/kernel.bin</code> (biến <code>OUTPUT</code> trong <code>src/kernel/Makefile</code>), cũng là <code>/kernel.bin</code> trên phân vùng FAT.</p>
-<div class="code"><div class="code-bar">text</div><pre><code>$ readelf -h -l target/boot/kernel.bin
-  Class:                             ELF64
-  Type:                              EXEC (Executable file)
-  Machine:                           Advanced Micro Devices X86-64
-  Entry point address:               0xffffffff8002a548
-  Number of program headers:         4
-
-Program Headers:
-  Type           Offset             VirtAddr           PhysAddr
-                 FileSiz            MemSiz              Flags  Align
-  LOAD           0x0000000000001000 0xffffffff80000000 0xffffffff80000000
-                 0x000000000008e4a4 0x000000000008e4a4  R E    0x1000
-  LOAD           0x000000000008f4c0 0xffffffff8008f4c0 0xffffffff8008f4c0
-                 0x000000000001c638 0x000000000001c638  R      0x1000
-  LOAD           0x00000000000abb00 0xffffffff800acb00 0xffffffff800acb00
-                 0x000000000000deb8 0x0000000000054878  RW     0x1000
-  DYNAMIC        0x00000000000b98b8 0xffffffff800ba8b8 0xffffffff800ba8b8
-                 0x0000000000000100 0x0000000000000100  RW     0x8
-
- Section to Segment mapping:
-  Segment Sections...
-   00     .text
-   01     .rodata .dynsym .dynstr .hash .rela.dyn
-   02     .data .dynamic .bss
-   03     .dynamic
-
-$ nm target/boot/kernel.bin | grep ' _start$'
-ffffffff8002a548 T _start
-
-$ file kernel.bin
-kernel.bin:  ELF 64-bit LSB executable, x86-64, version 1 (SYSV), static-pie linked, with debug_info, not stripped</code></pre></div>
+<h2 id="elf64-kernel-cavos">ELF64: kernel</h2>
+<p class="lede"><em>Kernel thường là file ELF bình thường; người đọc nó là bootloader chứ không phải firmware.</em></p>
 <ul>
-<li>Ba segment <code>LOAD</code> đúng như <code>PHDRS</code> trong <code>link.ld</code>: text (R E), rodata (R), data (RW). Limine map từng segment với đúng quyền đó.
-Segment data có <code>MemSiz</code> lớn hơn <code>FileSiz</code>: phần dư là <code>.bss</code>, Limine điền 0.</li>
-<li>Điểm vào <code>0xffffffff8002a548</code> là <code>_start</code>, nằm trong 2 GiB trên cùng (<a href="higher_half_kernel.html">Higher-Half Kernel</a>).</li>
-<li><code>PT_DYNAMIC</code> + <code>.rela.dyn</code> cho Limine sửa địa chỉ khi dời kernel (<code>kaslr: yes</code> trong <code>limine.conf</code>), xem
-<a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</li>
+<li>Header ELF (64 byte đầu, bắt đầu bằng <code>7f 45 4c 46</code>) cho biết lớp (ELF64), kiến trúc (<code>EM_X86_64</code>), kiểu (<code>ET_EXEC</code> hoặc <code>ET_DYN</code>), điểm vào, và vị trí
+bảng program header.</li>
+<li>Bootloader chỉ cần các <strong>program header</strong> <code>PT_LOAD</code>: "lấy <code>p_filesz</code> byte từ offset này của file, đặt ở địa chỉ <code>p_vaddr</code>, chiếm <code>p_memsz</code> byte,
+với quyền <code>p_flags</code>". Phần <code>p_memsz &gt; p_filesz</code> là <code>.bss</code>, phải xoá về 0. Bảng section (<code>.text</code>, <code>.data</code>...) là cho linker và debugger.</li>
+<li>Linker script quyết định có mấy segment và quyền của từng cái (thường: text R-X, rodata R--, data RW-). Bootloader map từng segment với đúng quyền đó.</li>
+<li>Kernel PIE có thêm <code>PT_DYNAMIC</code> + <code>.rela.dyn</code> để bootloader sửa địa chỉ khi dời kernel: xem <a href="kaslr_pie_kernel.html">KASLR &amp; PIE Kernel</a>.</li>
 </ul>
 <div class="table-wrap"><table>
-<thead><tr><th></th><th>PE32+ (<code>BOOTX64.EFI</code>)</th><th>ELF64 (<code>kernel.bin</code>)</th></tr></thead>
+<thead><tr><th></th><th>PE32+ (<code>BOOTX64.EFI</code>)</th><th>ELF64 (kernel)</th></tr></thead>
 <tbody>
-<tr><td>Ai nạp</td><td>firmware UEFI (<code>LoadImage</code>)</td><td>Limine</td></tr>
+<tr><td>Ai nạp</td><td>firmware UEFI (<code>LoadImage</code>)</td><td>bootloader (vd Limine, GRUB)</td></tr>
 <tr><td>Nhận dạng</td><td><code>MZ</code> … <code>PE\0\0</code>, <code>Magic 0x20b</code>, <code>Subsystem 10</code></td><td><code>7f 45 4c 46</code>, class ELF64</td></tr>
 <tr><td>Đơn vị nạp</td><td>section (theo <code>SectionAlignment</code>)</td><td>program header <code>PT_LOAD</code></td></tr>
 <tr><td>Relocation</td><td><code>.reloc</code> (base relocation)</td><td><code>.rela.dyn</code> qua <code>PT_DYNAMIC</code></td></tr>
-<tr><td>Địa chỉ</td><td><code>ImageBase 0</code>, firmware chọn chỗ</td><td>link ở <code>0xffffffff80000000</code></td></tr>
+<tr><td>Địa chỉ</td><td><code>ImageBase 0</code>, firmware chọn chỗ</td><td>thường link ở nửa cao, vd <code>0xffffffff80000000</code></td></tr>
 <tr><td>Chữ ký</td><td>Certificate Table (Authenticode)</td><td>không có chỗ chuẩn</td></tr>
 </tbody>
 </table></div>
@@ -114,7 +94,7 @@ Segment data có <code>MemSiz</code> lớn hơn <code>FileSiz</code>: phần dư
 <h2 id="hai-quy-ước-gọi-hàm">Hai quy ước gọi hàm</h2>
 <p class="lede"><em>Quy ước gọi hàm là "luật giao hàng" giữa hàm gọi và hàm được gọi: đối số để ở thanh ghi nào, ai phải giữ nguyên thanh ghi nào.</em></p>
 <div class="table-wrap"><table>
-<thead><tr><th></th><th>Microsoft x64 (firmware UEFI)</th><th>System V AMD64 (GCC, cavOS, Limine)</th></tr></thead>
+<thead><tr><th></th><th>Microsoft x64 (firmware UEFI, Windows)</th><th>System V AMD64 (Linux, BSD, GCC mặc định)</th></tr></thead>
 <tbody>
 <tr><td>Đối số nguyên/con trỏ</td><td><code>RCX, RDX, R8, R9</code>, còn lại trên stack</td><td><code>RDI, RSI, RDX, RCX, R8, R9</code>, còn lại trên stack</td></tr>
 <tr><td>Giá trị trả về</td><td><code>RAX</code></td><td><code>RAX</code> (thêm <code>RDX</code> cho giá trị 128-bit)</td></tr>
@@ -127,10 +107,10 @@ Segment data có <code>MemSiz</code> lớn hơn <code>FileSiz</code>: phần dư
 <p>Chỗ dễ sai nhất: <code>RDI</code>/<code>RSI</code> là đối số trong System V nhưng là thanh ghi phải giữ trong Microsoft x64. Gọi nhầm quy ước thì hàm nhận
 đối số rác, hoặc thanh ghi của bên gọi bị phá mà không ai báo.</p>
 
-<h2 id="limine-đổi-quy-ước-ở-đâu">Limine đổi quy ước ở đâu</h2>
-<p class="lede"><em>Limine viết bằng C thường (System V); chỉ có hai "cửa" nói chuyện với firmware là phải đổi.</em></p>
+<h2 id="limine-đổi-quy-ước-ở-đâu">Bootloader đổi quy ước ở đâu (ví dụ Limine)</h2>
+<p class="lede"><em>Một bootloader viết bằng C thường (System V) chỉ có hai "cửa" nói chuyện với firmware là phải đổi.</em></p>
 <figure class="diagram">
-<svg id="svg-pe-elf-abi" role="img" aria-label="calling convention boundary between firmware, Limine and cavOS" style="max-width:1083px" width="100%" viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
+<svg id="svg-pe-elf-abi" role="img" aria-label="Calling convention boundary: the firmware calls the loader entry with RCX and RDX, the entry moves them to RDI and RSI, the loader C code runs System V and calls firmware functions through ms_abi pointers, then jumps to the kernel" style="max-width:1083px" width="100%" viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
 <defs>
   <marker id="svg-pe-elf-abi-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
     <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -156,9 +136,9 @@ Segment data có <code>MemSiz</code> lớn hơn <code>FileSiz</code>: phần dư
 <text x="484" y="100" text-anchor="middle" fill="#85B7EB" font-size="9" class="mono">-mno-red-zone</text>
 <line x1="564" y1="80" x2="578" y2="80" class="flow" stroke-width="1.4" marker-end="url(#svg-pe-elf-abi-arrow)"/>
 <rect x="580" y="40" width="160" height="80" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
-<text x="660" y="64" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600">cavOS _start</text>
+<text x="660" y="64" text-anchor="middle" fill="#C6E7CC" font-size="11.5" font-weight="600">kernel entry</text>
 <text x="660" y="84" text-anchor="middle" fill="#8FC79A" font-size="9">ELF64, System V</text>
-<text x="660" y="100" text-anchor="middle" fill="#8FC79A" font-size="9">never calls firmware</text>
+<text x="660" y="100" text-anchor="middle" fill="#8FC79A" font-size="9">no firmware calls needed</text>
 <!-- calls back into firmware -->
 <line x1="484" y1="120" x2="484" y2="158" class="flow" stroke-width="1.4" marker-end="url(#svg-pe-elf-abi-arrow)"/>
 <rect x="212" y="160" width="352" height="72" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
@@ -177,34 +157,40 @@ tới <code>uefi_entry(EFI_HANDLE ImageHandle, EFI_SYSTEM_TABLE *SystemTable)</c
 <code>__attribute__((__ms_abi__))</code> (<code>inc/efi/x86_64/efibind.h:91</code>). GCC tự sinh code đặt đối số vào <code>RCX/RDX/R8/R9</code> và chừa shadow space.</li>
 <li>Cờ build bản UEFI x86-64 của Limine (<code>common/common.mk</code>): <code>-fPIE -fshort-wchar -m64 -mabi=sysv -mno-80387 -mno-mmx -mno-sse -mno-sse2 -mno-red-zone</code>.
 <code>-fshort-wchar</code> làm <code>wchar_t</code> 16-bit, khớp chuỗi UCS-2 của UEFI.</li>
-<li>Sau <code>ExitBootServices</code>, Limine nhảy vào <code>_start</code> của cavOS. Kernel không có <code>ms_abi</code> nào, không giữ con trỏ firmware nào
-(xem <a href="uefi_runtime_services.html#cavos-có-dùng-không">cavOS có dùng không</a>).</li>
+<li>Sau <code>ExitBootServices</code>, bootloader nhảy vào kernel. Kernel chỉ cần <code>ms_abi</code> nếu nó tự gọi Runtime Services
+(xem <a href="uefi_runtime_services.html#kernel-co-can">Kernel có cần Runtime Services không</a>). Kernel tự là ứng dụng UEFI thì ngược lại: mọi lời gọi firmware đều qua
+<code>ms_abi</code> (hoặc wrapper như <code>uefi_call_wrapper</code> của gnu-efi).</li>
 </ul>
 
 <h2 id="vì-sao-kernel-build-với-mno-red-zone">Vì sao kernel build với -mno-red-zone</h2>
 <p class="lede"><em>Red zone là khoảng nháp ngay dưới đỉnh stack; ở user mode thì an toàn, trong kernel thì một ngắt có thể ghi đè nó bất kỳ lúc nào.</em></p>
-<p>CFLAGS thật của kernel trong <code>src/kernel/Makefile</code>:</p>
-<div class="code"><div class="code-bar">make</div><pre><code>CFLAGS = -m64 -g -c -ffreestanding -Wall -Werror -fcommon -Iinclude/ -Inetworking/lwip/include/ -fPIE -mno-80387 \
-    -mno-mmx \
-    -mno-sse \
-		-nostartfiles \
-		-nostdlib \
-    -mno-sse2 \
-    -mno-red-zone -fno-stack-protector \
-    -fno-stack-check \
-    -fno-lto</code></pre></div>
+<p>Cờ build thường gặp của một kernel x86-64:</p>
+<div class="code"><div class="code-bar">make</div><pre><code>CFLAGS += -ffreestanding -nostdlib -fno-stack-protector -fno-stack-check \
+          -mno-red-zone -mno-80387 -mno-mmx -mno-sse -mno-sse2 \
+          -mcmodel=kernel          # or -fPIE, see Higher-Half Kernel</code></pre></div>
 <ol>
 <li>System V cho hàm lá (hàm không gọi hàm khác) để biến tạm ở <code>[RSP-128, RSP)</code> mà không trừ <code>RSP</code>. Ở user mode điều này an toàn: khi có ngắt,
 CPU chuyển sang stack kernel (<code>RSP0</code> trong TSS) nên stack user không bị đụng.</li>
 <li>Khi ngắt xảy ra lúc CPU <em>đang ở ring 0</em> và không dùng IST, CPU không đổi stack mà đẩy <code>SS, RSP, RFLAGS, CS, RIP</code> (và mã lỗi) thẳng xuống dưới
 <code>RSP</code> hiện tại, đúng vào vùng red zone. Biến tạm của hàm đang chạy bị ghi đè, không có lỗi nào báo.</li>
-<li><code>-mno-red-zone</code> bắt GCC luôn trừ <code>RSP</code> trước khi dùng stack, nên không còn gì nằm dưới <code>RSP</code>. Lý do này giống hệt cho Limine,
-vì Limine cũng chạy ở ring 0.</li>
+<li><code>-mno-red-zone</code> bắt GCC luôn trừ <code>RSP</code> trước khi dùng stack, nên không còn gì nằm dưới <code>RSP</code>. Lý do này giống hệt cho bootloader,
+vì nó cũng chạy ở ring 0.</li>
 </ol>
-<p>Các cờ <code>-mno-80387 -mno-mmx -mno-sse -mno-sse2</code> đi cùng mục đích: kernel không dùng thanh ghi FPU/SIMD, nên khi vào ngắt không phải lưu chúng.
-TSS và stack ngắt: <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>; FPU/SSE: <a href="../bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a>.</p>
+<p>Các cờ <code>-mno-80387 -mno-mmx -mno-sse -mno-sse2</code> (hoặc <code>-mgeneral-regs-only</code>) đi cùng mục đích: kernel không dùng thanh ghi FPU/SIMD, nên khi vào ngắt
+không phải lưu chúng.</p>
+
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>File kernel và cờ build thật của cavOS.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html#ban-do-dia-chi">Bài 1 - Boot &amp; Limine, Đọc thêm</a>: <code>readelf</code> trên <code>kernel.bin</code> của cavOS (3 <code>PT_LOAD</code> + <code>PT_DYNAMIC</code>,
+section vào segment nào); <a href="../bai/bai_01_boot_limine.html#pie-kaslr">CFLAGS/LDFLAGS</a> của cavOS.</li>
+<li><a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>: TSS và stack ngắt; <a href="../bai/bai_17_sse_fpu.html">Bài 17 - SSE &amp; FPU</a>: vì sao kernel không dùng SSE.</li>
+<li><a href="../bai/bai_18_userspace_elf_loader.html">Bài 18 - Userspace &amp; ELF Loader</a>: kernel cavOS tự nạp file ELF của chương trình.</li>
+<li>Liên quan: <a href="esp_va_uefi_boot.html">ESP và UEFI boot</a>, <a href="secure_boot.html">Secure Boot</a>, <a href="long_mode.html">Long Mode</a>.</li>
+</ul>
 
 <h2 id="spec">Spec</h2>
+<p class="lede"><em>Tài liệu gốc về PE, quy ước gọi hàm của Microsoft và System V.</em></p>
 <ul>
 <li><a href="https://learn.microsoft.com/en-us/windows/win32/debug/pe-format">PE Format - Microsoft Learn</a>: MZ/PE header, optional header, <code>Subsystem</code>, Data Directory, <code>.reloc</code></li>
 <li><a href="https://learn.microsoft.com/en-us/cpp/build/x64-calling-convention">x64 calling convention - Microsoft Learn</a>: thanh ghi đối số, shadow space, thanh ghi phải giữ</li>
@@ -212,7 +198,7 @@ TSS và stack ngắt: <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TS
 <li><a href="https://uefi.org/specs/UEFI/2.11/02_Overview.html">UEFI 2.11 §2 Overview</a>: quy ước gọi cho nền x64, định dạng ảnh PE32+</li>
 <li><a href="https://wiki.osdev.org/PE">PE - OSDev Wiki</a> · <a href="https://wiki.osdev.org/Calling_Conventions">Calling Conventions - OSDev Wiki</a></li>
 </ul>
-<p>Liên quan: <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>, <a href="esp_va_uefi_boot.html">ESP và cách UEFI tìm Limine</a>, <a href="long_mode.html">Long Mode</a>.</p>
+
 <nav class="pager" aria-label="Pages"></nav>
 <footer>Học cavOS · PE, ELF và quy ước gọi hàm</footer>
 </main>

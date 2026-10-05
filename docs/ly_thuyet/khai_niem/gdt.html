@@ -20,8 +20,7 @@
 <div class="callout quote">
 <p><strong>Bảng mô tả đoạn (segment) toàn cục</strong> của CPU x86. Mỗi dòng (descriptor) mô tả một "vùng" bộ nhớ:
 nằm đâu, to bao nhiêu, ai được chạy (ring 0/3), là code hay data. CPU <strong>bắt buộc</strong> có bảng này ở
-protected mode &amp; long mode. Note này giảng GDT <strong>theo spec x86</strong> (góc nhìn nền tảng); cách cavOS dùng
-cụ thể xem <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>.</p>
+protected mode &amp; long mode. Note này giảng GDT <strong>theo spec x86</strong>, đúng cho mọi kernel.</p>
 </div>
 <h3 class="card-head" id="nói-thật-đơn-giản">Nói thật đơn giản</h3>
 <div class="callout quote">
@@ -35,7 +34,7 @@ nên CPU <strong>gần như bỏ qua phần "phòng ở đâu, to bao nhiêu"</s
 Nhưng CPU <strong>vẫn đòi có bảng thẻ</strong>, vì nó cần đọc 2 thứ còn ý nghĩa: tấm thẻ này là <strong>code hay data</strong>, và
 <strong>ai được cầm</strong> (kernel ring 0 hay user ring 3). Giống thẻ ra vào công ty: không còn quan trọng "phòng
 nào" nữa, chỉ còn quan trọng "cấp bậc người cầm thẻ".</em></p>
-<p><em>Ngoài ra trong bảng còn vài tấm thẻ "hệ thống" đặc biệt, quan trọng nhất là <a href="../bai/bai_07_gdt_tss.html">TSS</a>
+<p><em>Ngoài ra trong bảng còn vài tấm thẻ "hệ thống" đặc biệt, quan trọng nhất là <a href="#7-descriptor-hệ-thống-s0-tss-ldt-dài-16-byte">TSS</a>
 — chỗ CPU cất sẵn địa chỉ stack của kernel để dùng khi user gọi vào kernel.</em></p>
 </div>
 <hr/>
@@ -79,7 +78,7 @@ thao tác trên <strong>không gian địa chỉ tuyến tính (linear/virtual)<
 <li><strong>GDT ở tầng segmentation</strong> → <code>base</code>/<code>limit</code> của descriptor mô tả một "cửa sổ" trong <strong>không gian địa chỉ
 tuyến tính</strong> (ảo), KHÔNG phải trong RAM vật lý.</li>
 <li>Thứ ánh xạ địa chỉ ảo → physical là <strong><a href="paging.html">Paging</a></strong> (page table, <code>cr3</code>); thứ biết "RAM nằm đâu, bao nhiêu,
-vùng nào reserved" là <strong>memmap từ bootloader</strong> (<a href="../bai/bai_03_bootloader_parser.html">Bài 3 - Bootloader Parser</a>) + <a href="../bai/bai_05_physical_memory_manager.html">PMM</a>.
+vùng nào reserved" là <strong>memory map firmware/bootloader đưa</strong> + bộ cấp phát trang vật lý (PMM) của kernel.
 <strong>Không phải GDT.</strong></li>
 </ul>
 <div class="callout warn">
@@ -119,6 +118,7 @@ nó còn dùng <code>limit</code> chặn "đoạn ảo này tới đâu", nhưng
 paging lo trọn.</p>
 <hr/>
 <h2 id="1-vì-sao-có-segmentation-lịch-sử">1. Vì sao có segmentation? (lịch sử)</h2>
+<p class="lede"><em>Segment sinh ra để với tới nhiều RAM hơn, rồi thành cơ chế bảo vệ, rồi gần như biến mất khi paging thay chỗ.</em></p>
 <div class="callout quote">
 <p><em>Segmentation ra đời để CPU 16-bit "với" tới nhiều RAM hơn khả năng của một thanh ghi; rồi tiến hoá
 thành cơ chế bảo vệ; rồi gần như biến mất khi paging lên ngôi.</em> (Bản gỡ rối đầy đủ + 3 chế độ:
@@ -161,7 +161,7 @@ bảng khai báo ring 0/ring 3 + code/data" — tối thiểu để CPU chịu c
 TSS, LDT-descriptor. Đây là note này.</li>
 <li><strong>LDT</strong> (Local Descriptor Table) — bảng <strong>cục bộ</strong> cho từng task (di sản, gần như không OS hiện đại nào
 dùng). Bản thân LDT được trỏ tới bởi 1 descriptor <em>nằm trong</em> GDT.</li>
-<li><strong><a href="../bai/bai_09_idt_interrupts.html">IDT</a></strong> (Interrupt Descriptor Table) — bảng <strong>trình xử lý ngắt</strong>. Khác hẳn
+<li><strong>IDT</strong> (Interrupt Descriptor Table) — bảng <strong>trình xử lý ngắt</strong>. Khác hẳn
 GDT về nội dung (gate descriptor), nhưng các gate này lại <strong>tham chiếu selector trong GDT</strong> (kernel code).</li>
 </ul>
 <figure class="diagram">
@@ -397,7 +397,7 @@ hay data, đọc/ghi được không. Đây là byte hay tra cứu nhất.</em><
 </tr>
 </tbody>
 </table></div>
-<p><strong>Ví dụ giải mã</strong> (khớp với cavOS, xem <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>):</p>
+<p><strong>Ví dụ giải mã</strong> bốn byte access mà gần như kernel nào cũng có:</p>
 <div class="code"><div class="code-bar">text</div><pre><code>10011010 = P=1, DPL=00, S=1, E=1, DC=0, RW=1, A=0  → kernel code (ring0, code, readable)
 10010010 = P=1, DPL=00, S=1, E=0, DC=0, RW=1, A=0  → kernel data (ring0, data, writable)
 11111010 = P=1, DPL=11, S=1, E=1, DC=0, RW=1, A=0  → user   code (ring3, code, readable)
@@ -465,8 +465,8 @@ hay data, đọc/ghi được không. Đây là byte hay tra cứu nhất.</em><
 </table></div>
 <div class="callout warn">
 <p>Ràng buộc long mode: với code segment 64-bit phải <strong>L=1 và D/B=0</strong>. <code>L=1, D/B=1</code> là <strong>bất hợp lệ</strong>
-(dành cho mở rộng tương lai). Đây là lý do descriptor code 64-bit của cavOS có <code>granularity = 0b00100000</code>
-(chỉ bit L) chứ không phải <code>0b11001111</code> như code 32-bit.</p>
+(dành cho mở rộng tương lai). Vì vậy nibble flags của code 64-bit thường là <code>0b0010</code> (chỉ bit L; byte thứ 6 = <code>0x20</code>
+hoặc <code>0xA0</code> nếu bật thêm G), chứ không phải <code>0b1100</code> (G + D/B) như code 32-bit.</p>
 </div>
 <h2 id="7-descriptor-hệ-thống-s0-tss-ldt-dài-16-byte">7. Descriptor hệ thống (S=0) — TSS, LDT dài 16 byte</h2>
 <p class="lede"><em>Khi S=0, descriptor không còn là code/data mà là "đoạn hệ thống". Ở long mode, TSS/LDT cần địa chỉ
@@ -478,11 +478,11 @@ hay data, đọc/ghi được không. Đây là byte hay tra cứu nhất.</em><
 </ul>
 </li>
 <li><strong>TSS descriptor (long mode) = 16 byte</strong>: 8 byte đầu giống layout thường, 8 byte sau chứa <strong>base 32:63</strong>
-(nửa cao địa chỉ 64-bit) + reserved. Vì vậy trong cavOS bảng khai <code>descriptors[11]</code> (8 byte mỗi cái) <strong>+
-1 ô <code>tss</code> riêng 16 byte</strong> → xem <a href="../bai/bai_07_gdt_tss.html#cau-truc-gdt">Bài 7 - GDT &amp; TSS, mục 1 "Cấu trúc bảng"</a>.</li>
+(nửa cao địa chỉ 64-bit) + reserved. Vì vậy TSS chiếm <strong>hai ô</strong> liên tiếp trong GDT; nhiều kernel khai struct GDT là một mảng
+descriptor 8 byte <strong>+ 1 ô TSS riêng 16 byte</strong> ở cuối.</li>
 <li><strong>TSS dùng để làm gì ở 64-bit?</strong> Hầu như rỗng nghĩa, chỉ giữ <code>RSP0</code> (stack kernel khi user→kernel) và
-<strong>IST</strong> (Interrupt Stack Table — stack riêng cho fault hiểm: double fault, NMI, machine check). Chi tiết
-ở <a href="../bai/bai_07_gdt_tss.html#tss">Bài 7, mục 4 "TSS: chỉ để giữ RSP0"</a> và <a href="../bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>.</li>
+<strong>IST</strong> (Interrupt Stack Table — stack riêng cho fault hiểm: double fault, NMI, machine check). Mỗi cổng trong IDT chọn
+được một ô IST (0 = không dùng).</li>
 <li>Nạp TSS: <code>ltr &lt;selector&gt;</code> (load task register), trỏ vào TSS descriptor trong GDT.</li>
 </ul>
 <h2 id="8-segment-selector-số-ghế-trỏ-vào-bảng">8. Segment selector — "số ghế" trỏ vào bảng</h2>
@@ -539,7 +539,7 @@ thứ mấy trong bảng, ở ring nào". CPU dùng selector để tra ra descri
 </table></div>
 <p><strong>Mẹo quan trọng:</strong> vì mỗi descriptor 8 byte và Index nằm từ bit 3, <strong>giá trị selector = offset byte của
 descriptor trong bảng</strong>. Ví dụ descriptor thứ 5 (offset 40 byte) → selector kernel code = <code>0x28</code> = 40 (với
-RPL=0, TI=0). Đây là vì sao cavOS dùng <code>push $0x28</code> để nạp CS = kernel code 64. Selector <strong>0x00 = null</strong> →
+RPL=0, TI=0). Vì vậy code nạp CS thường có một hằng như <code>push $0x28</code>: đó chính là vị trí của descriptor trong bảng. Selector <strong>0x00 = null</strong> →
 luôn vô hiệu (truy cập sẽ #GP), nên dòng đầu GDT bắt buộc là null descriptor.</p>
 <h2 id="9-cpl-dpl-rpl-cơ-chế-bảo-vệ-theo-ring">9. CPL / DPL / RPL — cơ chế bảo vệ theo ring</h2>
 <p class="lede"><em>Ba chữ "PL" dễ lẫn. Chúng cùng phối hợp để CPU quyết định: "lệnh đang chạy này có được đụng vào đoạn
@@ -575,7 +575,7 @@ kia không?". Quy tắc lõi: <strong>số càng nhỏ càng nhiều quyền</st
 <li>Quy tắc thô khi nạp data segment: yêu cầu <strong>max(CPL, RPL) ≤ DPL</strong> thì mới cho. RPL tồn tại để kernel
 không bị lừa truy cập hộ user vào vùng cấm (tự hạ quyền bằng cách set RPL=3).</li>
 <li>Chuyển ring (user↔kernel) <strong>không</strong> làm bằng <code>mov</code> thường — phải qua <strong>interrupt/<code>iretq</code></strong>, <strong><code>syscall</code>/
-<code>sysret</code></strong> (<a href="../bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>), hay call gate. Khi user→kernel, CPU lấy stack ring 0 từ
+<code>sysret</code></strong>, hay call gate. Khi user→kernel, CPU lấy stack ring 0 từ
 <strong><code>RSP0</code> trong TSS</strong>.</li>
 </ul>
 <div class="callout quote">
@@ -591,12 +591,12 @@ chính là lý do GDT <em>không thể bỏ hẳn</em> dù base/limit vô dụng
 mà không reload segment ⇒ vẫn dùng giá trị cũ.)</li>
 <li><strong>Ở long mode:</strong> CS/DS/SS/ES base bị ép = 0, limit bỏ qua. <strong>Nhưng FS/GS đặc biệt</strong>: base của chúng
 <strong>vẫn dùng được</strong> và lấy từ MSR <code>IA32_FS_BASE</code> / <code>IA32_GS_BASE</code> (chứ không từ descriptor). OS dùng GS base
-để trỏ tới per-CPU/per-thread data (<code>swapgs</code> khi vào kernel). → liên quan <a href="../bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>.</li>
+để trỏ tới per-CPU/per-thread data (<code>swapgs</code> khi vào kernel).</li>
 </ul>
 <h2 id="11-nạp-gdt-trong-thực-tế-vì-sao-phải-nhảy-xa">11. Nạp GDT trong thực tế — vì sao phải "nhảy xa"</h2>
 <p class="lede"><em>Nạp <code>lgdt</code> xong, CS vẫn trỏ descriptor cũ. CS là thanh ghi đặc biệt: KHÔNG <code>mov</code> thẳng được. Phải dùng
 một cú "far jump"/"far return" để CPU nạp lại CS từ selector mới.</em></p>
-<p>Quy trình chuẩn (khớp cavOS <code>gdt_reload</code>, xem <a href="../bai/bai_07_gdt_tss.html#gdt-reload">Bài 7 - GDT &amp; TSS, mục 3 "Nạp bảng và đổi CS"</a>):</p>
+<p>Quy trình chuẩn ở 64-bit (giả sử kernel code ở offset 0x28, kernel data ở 0x30):</p>
 <div class="code"><div class="code-bar">asm</div><pre><code>lgdt [gdtr]            ; 1. nạp địa chỉ + limit bảng
                       ; 2. reload CS bằng far return:
 push 0x28             ;    selector kernel code 64 (= offset 40)
@@ -659,15 +659,16 @@ mov ds, ax            ;    ds/es/fs/gs/ss</code></pre></div>
 </tr>
 </tbody>
 </table></div>
-<h2 id="liên-hệ-trong-vault">Liên hệ trong vault</h2>
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>Những bài đọc code GDT, TSS và selector của cavOS.</em></p>
 <ul>
-<li>Cách cavOS dựng &amp; dùng GDT (code cụ thể): <a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>.</li>
-<li>Vì sao long mode làm segmentation teo lại: <a href="long_mode.html">Long Mode</a>.</li>
-<li>Cơ chế thay thế segmentation để phân vùng/bảo vệ bộ nhớ: <a href="paging.html">Paging</a>.</li>
-<li>IDT tham chiếu selector GDT + dùng IST/RSP0: <a href="../bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>.</li>
-<li>syscall/sysret + GS base per-CPU: <a href="../bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>.</li>
+<li><a href="../bai/bai_07_gdt_tss.html">Bài 7 - GDT &amp; TSS</a>: GDT của cavOS (11 descriptor + TSS 16 byte), <code>gdt_reload</code>, TSS chỉ để giữ RSP0.</li>
+<li><a href="../bai/bai_09_idt_interrupts.html">Bài 9 - IDT &amp; Interrupts</a>: cổng ngắt tham chiếu selector kernel code.</li>
+<li><a href="../bai/bai_16_fast_syscalls.html">Bài 16 - Fast Syscalls</a>: thứ tự selector mà <code>syscall</code>/<code>sysret</code> đòi, GS base per-CPU.</li>
+<li>Liên quan: <a href="long_mode.html">Long Mode</a> (vì sao segmentation teo lại), <a href="paging.html">Paging</a> (thứ thay nó), <a href="x86_segmentation.html">x86 Segmentation</a>.</li>
 </ul>
 <h2 id="ánh-xạ-spec">Ánh xạ spec</h2>
+<p class="lede"><em>Chỗ tra trong Intel SDM khi cần từng bit của descriptor.</em></p>
 <ul>
 <li><a href="../tai_lieu_goc/intel_sdm.html">Intel SDM</a> Vol.3A:
 <ul>

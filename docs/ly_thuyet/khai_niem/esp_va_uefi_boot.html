@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ESP và cách UEFI tìm Limine · Học cavOS</title>
+<title>ESP và UEFI boot · Học cavOS</title>
 <link rel="stylesheet" href="../../assets/noir.css">
 </head>
 <body data-root="../../" data-page="ly_thuyet/khai_niem/esp_va_uefi_boot.html">
 <header class="top">
   <div class="top-inner">
     <div class="crumbs"><a href="../../index.html">Học cavOS</a><span class="sep">/</span><a href="../ly_thuyet.html">Lý thuyết</a><span class="sep">/</span>Khái niệm</div>
-    <h1>ESP và cách UEFI tìm Limine</h1>
+    <h1>ESP và UEFI boot</h1>
     <div class="facts"><span class="fact"><b>Tags</b> concept, boot, uefi, disk</span></div>
   </div>
 </header>
@@ -20,9 +20,8 @@
 <div class="callout quote">
 <p>Firmware UEFI không biết kernel là gì. Nó chỉ biết <strong>chạy một file <code>.efi</code> nằm trên một phân vùng FAT</strong>:
 hoặc file được ghi sẵn trong biến NVRAM <code>Boot####</code>, hoặc file ở đường dẫn dự phòng
-<code>\EFI\BOOT\BOOTX64.EFI</code>. Với cavOS, file đó là Limine; Limine tự đọc <code>limine.conf</code> và
-<code>kernel.bin</code> rồi mới nhảy vào kernel. Bố cục ảnh đĩa nói chung: <a href="cau_truc_os_img.html">Cấu trúc os.img</a>;
-phần Limine giao cho kernel: <a href="limine_protocol.html">Limine Protocol</a>.</p>
+<code>\EFI\BOOT\BOOTX64.EFI</code>. File đó thường là một bootloader (GRUB, systemd-boot, Limine...) hoặc chính kernel nếu nó là ứng dụng UEFI. Bố cục một ảnh
+đĩa boot được: <a href="cau_truc_os_img.html">Cấu trúc os.img</a>; phần bootloader giao cho kernel: <a href="limine_protocol.html">Boot Protocol &amp; Limine</a>.</p>
 </div>
 
 <h2 id="gpt-và-efi-system-partition">GPT và EFI System Partition</h2>
@@ -49,126 +48,26 @@ cờ thuộc tính, tên hiển thị, và một <em>device path</em> (đường
 Đây là <em>removable media boot path</em>, thường gọi là fallback path.</li>
 </ul>
 <p>Cài OS thật thì installer gọi <code>SetVariable</code> để thêm một <code>Boot####</code> trỏ thẳng tới file của nó
-(ví dụ <code>\EFI\ubuntu\shimx64.efi</code>). cavOS không có installer, nên nó dựa hoàn toàn vào fallback path.</p>
-<p>Đã kiểm thật: boot một bản overlay của <code>disk.img</code> trên OVMF (<code>OVMF_CODE_4M.fd</code> + bản chép của
-<code>OVMF_VARS_4M.fd</code>), rồi đọc lại kho biến NVRAM bằng một script Python nhỏ:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>BdsDxe: loading Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
-BdsDxe: starting Boot0002 "UEFI QEMU HARDDISK QM00013 " from PciRoot(0x0)/Pci(0x3,0x0)/Sata(0x0,0xFFFF,0x0)
-[serial] Installing serial...
-
-Boot0000   attr=0x109 "BootManagerMenuApp"            devpath[04/07 04/06]
+(ví dụ <code>\EFI\ubuntu\shimx64.efi</code>). Một OS chưa có installer (hobby kernel, ảnh đĩa chạy thử, USB live) dựa hoàn toàn vào fallback path: chỉ cần
+đặt bootloader đúng tên ở <code>\EFI\BOOT\</code>.</p>
+<p>Ví dụ kho biến của OVMF sau khi boot một ổ SATA không có <code>Boot####</code> riêng:</p>
+<div class="code"><div class="code-bar">text</div><pre><code>Boot0000   attr=0x109 "BootManagerMenuApp"            devpath[04/07 04/06]
 Boot0001   attr=0x101 "EFI Firmware Setup"            devpath[04/07 04/06]
 Boot0002   attr=0x1   "UEFI QEMU HARDDISK QM00013 "   devpath[02/01 01/01 03/12]
 Boot0003   attr=0x101 "EFI Internal Shell"            devpath[04/07 04/06]
-BootOrder  -&gt; Boot0000,Boot0001,Boot0002,Boot0003
-LimineLastBootedEntry  513ee0d0-6e43-cb05-b272-f146a2fcb88a  attr=0x07 size=8</code></pre></div>
+BootOrder  -&gt; Boot0000,Boot0001,Boot0002,Boot0003</code></pre></div>
 <ul>
-<li>OVMF tự tạo <code>Boot0002</code> cho ổ SATA. Device path của nó chỉ có ACPI (<code>02/01</code>) → PCI (<code>01/01</code>) →
-SATA (<code>03/12</code>), <strong>không có node file</strong> → boot manager dùng fallback path.</li>
-<li><code>Boot0000</code>/<code>0001</code>/<code>0003</code> có bit <code>0x100</code> (category app) nên không được boot tự động.
-<code>Boot0000</code> còn có bit <code>0x8</code> (hidden).</li>
-<li><code>LimineLastBootedEntry</code> là biến do chính Limine ghi (<code>gRT-&gt;SetVariable</code> trong <code>common/menu.c</code>).
-Xem thêm ở <a href="uefi_runtime_services.html">UEFI Runtime Services và biến</a>.</li>
+<li>OVMF tự tạo <code>Boot0002</code> cho ổ SATA. Device path chỉ có ACPI (<code>02/01</code>) → PCI (<code>01/01</code>) → SATA (<code>03/12</code>), <strong>không có node file</strong>,
+nên boot manager dùng fallback path.</li>
+<li>Các mục có bit <code>0x100</code> (category app) không được boot tự động; bit <code>0x8</code> là hidden.</li>
 </ul>
+<h2 id="esp-khong-chuan">ESP không đúng chuẩn vẫn có thể boot</h2>
+<p class="lede"><em>Spec đòi type GUID (hoặc type 0xEF trên MBR), nhưng nhiều firmware chỉ cần thấy một phân vùng FAT.</em></p>
+<p>Driver FAT của OVMF gắn vào mọi phân vùng FAT, không xét type. Nên một ảnh đĩa MBR với phân vùng FAT32 type <code>0x83</code> (Linux) vẫn boot được trong QEMU, dù theo
+spec nó không phải ESP. Firmware máy thật có thể khắt khe hơn. Muốn chắc: dùng GPT với type GUID của ESP, hoặc MBR với type <code>0xEF</code>.</p>
 
-<h2 id="trên-disk-img-của-cavos-có-gì">Trên disk.img của cavOS có gì</h2>
-<p class="lede"><em>Ảnh đĩa cavOS không phải GPT và phân vùng boot cũng không mang nhãn ESP. Nó vẫn boot được trên OVMF.</em></p>
-<p><code>tools/kernel/make_disk.sh</code> dựng ảnh bằng <code>parted ... mklabel msdos</code> (tức MBR), hai phân vùng, rồi
-<code>mkdosfs -F32</code> cho phân vùng 1, <code>mke2fs -L "cavOS"</code> cho phân vùng 2, <code>fatlabel ... LIMINE</code>.
-Phân vùng 1 được mount vào <code>/boot</code> của phân vùng 2 khi chép file, nên trong FAT các file nằm ở gốc:</p>
-<div class="code"><div class="code-bar">text</div><pre><code>$ fdisk -l disk.img
-Disk disk.img: 1.75 GiB, 1881310208 bytes, 3674434 sectors
-Disklabel type: dos
-Device     Boot  Start     End Sectors  Size Id Type
-disk.img1  *      2048  133120  131073   64M 83 Linux
-disk.img2       266240 3674111 3407872  1.6G 83 Linux
-
-$ xxd -s 512 -l 16 disk.img          # LBA 1: không có chữ ký "EFI PART"
-00000200: fc30 c0bf ff0a 0700 b9ff 0a07 0081 e9ff  .0..............
-
-$ mlabel -i disk.img@@1M -s ::
- Volume label is LIMINE
-
-$ mdir -i disk.img@@1M -/ -b ::
-::/limine/
-::/EFI/
-::/kernel.bin
-::/limine/limine-bios.sys
-::/limine/limine.conf
-::/EFI/BOOT/
-::/EFI/BOOT/BOOTX64.EFI
-::/EFI/BOOT/BOOTIA32.EFI</code></pre></div>
-<ul>
-<li>Phân vùng 1 có type <code>0x83</code> (Linux), không phải <code>0xEF</code>. Theo spec nó không phải ESP. OVMF vẫn boot được vì
-driver FAT của nó gắn vào mọi phân vùng FAT, không xét type. Firmware máy thật có thể khắt khe hơn; điều này chưa được thử.</li>
-<li><code>BOOTX64.EFI</code> trên đĩa trùng byte với <code>src/bootloader/limine/BOOTX64.EFI</code> (chuỗi version trong file là <code>Limine 10.8.5 (x86-64, UEFI)</code>;
-<code>src/bootloader/assert.sh</code> ghim <code>TARGET_VERSION="10.1.1"</code> và ghi số đó vào <code>.version</code>, nhưng clone đầu nhánh
-<code>v10.x-binary</code>, nên bản thật sự cài là <strong>10.8.5</strong>), <code>kernel.bin</code> trùng với <code>target/boot/kernel.bin</code> (kiểm bằng <code>cmp</code>).</li>
-<li><code>make qemu</code> của cavOS không truyền firmware UEFI nào cho QEMU, nên mặc định nó boot qua SeaBIOS (đường BIOS:
-MBR → <code>limine-bios.sys</code>). Đường UEFI chỉ chạy khi bạn tự thêm OVMF như ở trên.</li>
-</ul>
-<div class="code"><div class="code-bar">text</div><pre><code># /limine/limine.conf trên phân vùng FAT
-timeout: 0
-/cavOS
-    protocol: limine
-    kaslr: yes
-    kernel_path: boot():/kernel.bin</code></pre></div>
-<p><code>boot():</code> là phân vùng chứa <code>limine.conf</code>, tức phân vùng FAT <code>LIMINE</code>.</p>
-
-<h2 id="limine-đọc-kernel-thế-nào">Limine đọc kernel thế nào</h2>
+<h2 id="bootloader-doc-kernel">Một bootloader đọc kernel thế nào (ví dụ Limine)</h2>
 <p class="lede"><em>Limine là một ứng dụng UEFI, nhưng nó không nhờ firmware đọc file. Nó chỉ mượn firmware để đọc từng sector, còn FAT thì tự hiểu.</em></p>
-<figure class="diagram">
-<svg id="svg-esp-boot" role="img" aria-label="how UEFI finds Limine on the cavOS disk" style="max-width:1083px" width="100%" viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif">
-<defs>
-  <marker id="svg-esp-boot-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-  </marker>
-  <style>#svg-esp-boot .mono{font-family:'SF Mono',Consolas,monospace;} #svg-esp-boot .lbl{fill:#c2c0b6;} #svg-esp-boot .flow{stroke:#7d7b73;}</style>
-</defs>
-<text x="185" y="24" text-anchor="middle" class="lbl" font-size="10">boot path under OVMF</text>
-<text x="575" y="24" text-anchor="middle" class="lbl" font-size="10">disk.img (MBR, 3674434 sectors)</text>
-<!-- left: flow -->
-<rect x="20" y="40" width="330" height="56" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
-<text x="36" y="63" fill="#D3D1C7" font-size="11.5" font-weight="600">UEFI boot manager (BdsDxe)</text>
-<text x="36" y="82" fill="#B4B2A9" font-size="9" class="mono">BootOrder: 0000,0001,0002,0003</text>
-<line x1="185" y1="96" x2="185" y2="118" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
-<rect x="20" y="120" width="330" height="56" fill="#3C3489" stroke="#AFA9EC" stroke-width="1"/>
-<text x="36" y="143" fill="#CECBF6" font-size="11.5" font-weight="600">Boot0002 — QEMU HARDDISK</text>
-<text x="36" y="162" fill="#AFA9EC" font-size="9">device path stops at the disk, no file node</text>
-<line x1="185" y1="176" x2="185" y2="198" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
-<rect x="20" y="200" width="330" height="56" fill="#5C3F0E" stroke="#D8A54A" stroke-width="1"/>
-<text x="36" y="223" fill="#F0DBAE" font-size="11.5" font-weight="600">Removable-media fallback path</text>
-<text x="36" y="242" fill="#D8A54A" font-size="9" class="mono">\EFI\BOOT\BOOTX64.EFI</text>
-<line x1="185" y1="256" x2="185" y2="278" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
-<rect x="20" y="280" width="330" height="76" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
-<text x="36" y="303" fill="#B5D4F4" font-size="11.5" font-weight="600">Limine 10.8.5 (PE32+ UEFI app)</text>
-<text x="36" y="322" fill="#85B7EB" font-size="9">sectors via EFI_BLOCK_IO ReadBlocks</text>
-<text x="36" y="340" fill="#85B7EB" font-size="9">files via its own FAT32 driver</text>
-<line x1="185" y1="356" x2="185" y2="378" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
-<rect x="20" y="380" width="330" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
-<text x="36" y="403" fill="#C6E7CC" font-size="11.5" font-weight="600">ExitBootServices, then cavOS _start</text>
-<text x="36" y="422" fill="#8FC79A" font-size="9" class="mono">entry 0xffffffff8002a548</text>
-<!-- right: disk -->
-<rect x="410" y="40" width="330" height="40" fill="#444441" stroke="#B4B2A9" stroke-width="1"/>
-<text x="426" y="57" fill="#D3D1C7" font-size="11" font-weight="600" class="mono">sectors 0..2047</text>
-<text x="426" y="72" fill="#B4B2A9" font-size="9">MBR table + limine bios-install code</text>
-<rect x="410" y="80" width="330" height="200" fill="#0C447C" stroke="#85B7EB" stroke-width="1"/>
-<text x="426" y="100" fill="#B5D4F4" font-size="11" font-weight="600" class="mono">p1  2048..133120  FAT32</text>
-<text x="426" y="116" fill="#85B7EB" font-size="9">label LIMINE, MBR type 0x83, boot flag</text>
-<text x="426" y="146" fill="#85B7EB" font-size="9" class="mono">/kernel.bin</text>
-<text x="426" y="166" fill="#85B7EB" font-size="9" class="mono">/limine/limine.conf</text>
-<text x="426" y="186" fill="#85B7EB" font-size="9" class="mono">/limine/limine-bios.sys</text>
-<text x="426" y="206" fill="#85B7EB" font-size="9" class="mono">/EFI/BOOT/BOOTX64.EFI</text>
-<text x="426" y="226" fill="#85B7EB" font-size="9" class="mono">/EFI/BOOT/BOOTIA32.EFI</text>
-<text x="426" y="260" fill="#85B7EB" font-size="9">mounted at /boot of the root fs</text>
-<rect x="410" y="280" width="330" height="36" fill="#444441" stroke="#B4B2A9" stroke-width="1" stroke-dasharray="4 3"/>
-<text x="426" y="302" fill="#B4B2A9" font-size="9" class="mono">133121..266239  unpartitioned</text>
-<rect x="410" y="316" width="330" height="56" fill="#2C4E33" stroke="#8FC79A" stroke-width="1"/>
-<text x="426" y="339" fill="#C6E7CC" font-size="11" font-weight="600" class="mono">p2  266240..3674111  ext2</text>
-<text x="426" y="358" fill="#8FC79A" font-size="9">label cavOS, root filesystem /</text>
-<line x1="350" y1="228" x2="408" y2="228" class="flow" stroke-width="1.4" marker-end="url(#svg-esp-boot-arrow)"/>
-</svg>
-<figcaption>Bên trái là đường đi đã chạy thật trên OVMF; bên phải là bố cục <code>disk.img</code> đọc bằng <code>fdisk</code> và <code>mdir</code>.</figcaption></figure>
 <ol>
 <li>Firmware nạp <code>BOOTX64.EFI</code> (một file PE32+, xem <a href="pe_elf_va_abi.html">PE, ELF và quy ước gọi hàm</a>) vào RAM và gọi
 điểm vào với hai đối số: <code>ImageHandle</code> và con trỏ <code>EFI_SYSTEM_TABLE</code>.</li>
@@ -177,13 +76,23 @@ timeout: 0
 (<code>common/fs/fat32.s2.c</code>). Trong mã nguồn 10.8.5 không có chỗ nào dùng <code>EFI_SIMPLE_FILE_SYSTEM_PROTOCOL</code>.</li>
 <li>Limine tìm file cấu hình trên từng phân vùng theo thứ tự trong <code>common/lib/config.c</code> (<code>init_config_disk</code>, không phân biệt hoa thường):
 (chỉ bản UEFI) <code>limine.conf</code> nằm cùng thư mục với chính file EFI (ở đây là <code>/EFI/BOOT/limine.conf</code>), rồi
-<code>/boot/limine/limine.conf</code>, <code>/boot/limine.conf</code>, <code>/limine/limine.conf</code>, <code>/limine.conf</code>. cavOS trúng <code>/limine/limine.conf</code>.</li>
+<code>/boot/limine/limine.conf</code>, <code>/boot/limine.conf</code>, <code>/limine/limine.conf</code>, <code>/limine.conf</code>.</li>
 <li>Limine đọc <code>kernel.bin</code> theo <code>kernel_path</code>, nạp các segment ELF, dựng page table, lấy memory map lần cuối,
-gọi <code>ExitBootServices</code> (<code>efi_exit_boot_services()</code> trong <code>common/lib/misc.c</code>), rồi nhảy vào <code>_start</code>.</li>
+gọi <code>ExitBootServices</code> (<code>efi_exit_boot_services()</code> trong <code>common/lib/misc.c</code>), rồi nhảy vào điểm vào của kernel.</li>
 </ol>
 <p>Vì Limine tự làm phần đọc file, cùng một mã FAT chạy cho cả đường BIOS (đọc sector bằng <code>int 13h</code>) lẫn UEFI.</p>
 
+<h2 id="trong-khoa-hoc">Gặp ở đâu trong khoá học</h2>
+<p class="lede"><em>Đĩa thật của cavOS, đo bằng fdisk, mdir và kho biến NVRAM.</em></p>
+<ul>
+<li><a href="../bai/bai_01_boot_limine.html#disk-img">Bài 1 - Boot &amp; Limine, Đọc thêm</a>: bố cục <code>disk.img</code> của cavOS (MBR, FAT32 nhãn <code>LIMINE</code> + ext2), <code>limine.conf</code>,
+đường boot trên OVMF và biến <code>LimineLastBootedEntry</code>.</li>
+<li><a href="cau_truc_os_img.html">Cấu trúc os.img</a>: ảnh đĩa của các lab.</li>
+<li>Liên quan: <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>, <a href="secure_boot.html">Secure Boot</a>, <a href="uefi_runtime_services.html">UEFI Runtime Services và biến</a>.</li>
+</ul>
+
 <h2 id="spec">Spec</h2>
+<p class="lede"><em>Các chương của UEFI 2.11 và tài liệu Limine mà trang này dựa vào.</em></p>
 <ul>
 <li><a href="https://uefi.org/specs/UEFI/2.11/03_Boot_Manager.html">UEFI 2.11 §3 Boot Manager</a>: <code>Boot####</code>, <code>BootOrder</code>, <code>EFI_LOAD_OPTION</code>, removable media boot path</li>
 <li><a href="https://uefi.org/specs/UEFI/2.11/05_GUID_Partition_Table_Format.html">UEFI 2.11 §5 GPT Disk Layout</a>: GPT header, protective MBR, ESP type GUID</li>
@@ -191,9 +100,9 @@ gọi <code>ExitBootServices</code> (<code>efi_exit_boot_services()</code> trong
 <li><a href="https://github.com/limine-bootloader/limine/blob/v10.8.5/USAGE.md">Limine 10.8.5 USAGE.md</a>: cài lên ESP, chỗ đặt <code>limine.conf</code></li>
 <li><a href="https://wiki.osdev.org/UEFI">UEFI - OSDev Wiki</a></li>
 </ul>
-<p>Liên quan: <a href="limine_va_loader_tu_viet.html">Limine hay tự viết loader UEFI</a>, <a href="secure_boot.html">Secure Boot</a>, <a href="../bai/bai_01_boot_limine.html">Bài 1 - Boot &amp; Limine</a>.</p>
+
 <nav class="pager" aria-label="Pages"></nav>
-<footer>Học cavOS · ESP và cách UEFI tìm Limine</footer>
+<footer>Học cavOS · ESP và UEFI boot</footer>
 </main>
 </div>
 <script src="../../assets/site.js"></script>
