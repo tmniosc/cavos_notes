@@ -91,64 +91,64 @@ window.SITE = {
      "t": "Khái niệm (tra cứu)",
      "c": [
       {
-       "t": "Cấu trúc os.img",
-       "h": "ly_thuyet/khai_niem/cau_truc_os_img.html"
-      },
-      {
-       "t": "GDT",
-       "h": "ly_thuyet/khai_niem/gdt.html"
-      },
-      {
-       "t": "HHDM",
-       "h": "ly_thuyet/khai_niem/hhdm.html"
-      },
-      {
-       "t": "Higher-Half Kernel",
-       "h": "ly_thuyet/khai_niem/higher_half_kernel.html"
-      },
-      {
-       "t": "KASLR & PIE Kernel",
-       "h": "ly_thuyet/khai_niem/kaslr_pie_kernel.html"
-      },
-      {
-       "t": "Boot Protocol & Limine",
-       "h": "ly_thuyet/khai_niem/limine_protocol.html"
-      },
-      {
-       "t": "Long Mode",
-       "h": "ly_thuyet/khai_niem/long_mode.html"
-      },
-      {
        "t": "Real Mode và Protected Mode",
        "h": "ly_thuyet/khai_niem/real_mode_va_protected_mode.html"
-      },
-      {
-       "t": "Paging",
-       "h": "ly_thuyet/khai_niem/paging.html"
-      },
-      {
-       "t": "Request-Response Mechanism",
-       "h": "ly_thuyet/khai_niem/request_response_mechanism.html"
       },
       {
        "t": "x86 Segmentation",
        "h": "ly_thuyet/khai_niem/x86_segmentation.html"
       },
       {
+       "t": "GDT",
+       "h": "ly_thuyet/khai_niem/gdt.html"
+      },
+      {
+       "t": "Long Mode",
+       "h": "ly_thuyet/khai_niem/long_mode.html"
+      },
+      {
+       "t": "Paging",
+       "h": "ly_thuyet/khai_niem/paging.html"
+      },
+      {
+       "t": "Higher-Half Kernel",
+       "h": "ly_thuyet/khai_niem/higher_half_kernel.html"
+      },
+      {
+       "t": "HHDM",
+       "h": "ly_thuyet/khai_niem/hhdm.html"
+      },
+      {
+       "t": "KASLR & PIE Kernel",
+       "h": "ly_thuyet/khai_niem/kaslr_pie_kernel.html"
+      },
+      {
+       "t": "PE, ELF và quy ước gọi hàm",
+       "h": "ly_thuyet/khai_niem/pe_elf_va_abi.html"
+      },
+      {
        "t": "ESP và UEFI boot",
        "h": "ly_thuyet/khai_niem/esp_va_uefi_boot.html"
       },
       {
-       "t": "UEFI Runtime Services và biến",
-       "h": "ly_thuyet/khai_niem/uefi_runtime_services.html"
+       "t": "Cấu trúc os.img",
+       "h": "ly_thuyet/khai_niem/cau_truc_os_img.html"
       },
       {
        "t": "Secure Boot",
        "h": "ly_thuyet/khai_niem/secure_boot.html"
       },
       {
-       "t": "PE, ELF và quy ước gọi hàm",
-       "h": "ly_thuyet/khai_niem/pe_elf_va_abi.html"
+       "t": "UEFI Runtime Services và biến",
+       "h": "ly_thuyet/khai_niem/uefi_runtime_services.html"
+      },
+      {
+       "t": "Boot Protocol & Limine",
+       "h": "ly_thuyet/khai_niem/limine_protocol.html"
+      },
+      {
+       "t": "Request-Response Mechanism",
+       "h": "ly_thuyet/khai_niem/request_response_mechanism.html"
       },
       {
        "t": "Limine hay tự viết loader UEFI",
